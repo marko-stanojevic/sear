@@ -19,7 +19,7 @@ import (
 //	GET    /artifacts              – list artifacts
 //	GET    /artifacts/{id}         – download artifact file
 //	GET    /artifacts/{id}/meta    – get artifact metadata
-//	POST   /artifacts              – upload artifact (multipart or raw body)
+//	POST   /artifacts              – upload artifact (raw request body)
 //	DELETE /artifacts/{id}         – delete artifact
 func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/artifacts")
