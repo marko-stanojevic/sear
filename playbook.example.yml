@@ -1,7 +1,8 @@
 # Example sear playbook — multi-step deployment with reboot.
 #
-# Upload this file via POST /admin/playbooks (Admin API), then assign it to
-# a registered client via PUT /admin/clients/{id} {"playbook_id": "<id>"}.
+# Use this as a template for creating a playbook via the Admin API.
+# POST an equivalent JSON playbook to /admin/playbooks, then assign it to
+# a registered client via PUT /admin/clients/{id} with {"playbook_id": "<id>"}.
 
 name: "Install and configure nginx"
 
