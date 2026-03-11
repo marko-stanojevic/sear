@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -65,11 +64,7 @@ func runShell(ctx context.Context, step common.Step, env map[string]string, log 
 	var cmd *exec.Cmd
 	switch strings.ToLower(shell) {
 	case "bash", "sh":
-		if runtime.GOOS == "windows" {
-			cmd = exec.CommandContext(ctx, "bash", "-c", step.Run)
-		} else {
-			cmd = exec.CommandContext(ctx, "bash", "-c", step.Run)
-		}
+		cmd = exec.CommandContext(ctx, "bash", "-c", step.Run)
 	case "pwsh", "powershell":
 		cmd = exec.CommandContext(ctx, "pwsh", "-Command", step.Run)
 	default:

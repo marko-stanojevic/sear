@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -289,10 +290,7 @@ func (c *Client) loadState() error {
 }
 
 func (c *Client) saveState() error {
-	dir := c.cfg.StateFile
-	if idx := len(dir) - len("/state.json"); idx > 0 {
-		_ = os.MkdirAll(dir[:idx+1], 0o700)
-	}
+	_ = os.MkdirAll(filepath.Dir(c.cfg.StateFile), 0o700)
 	data, err := json.MarshalIndent(c.state, "", "  ")
 	if err != nil {
 		return err

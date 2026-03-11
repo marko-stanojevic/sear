@@ -88,9 +88,6 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filename := name
-		if !strings.Contains(filename, ".") {
-			filename = name
-		}
 		destPath := filepath.Join(artDir, filename)
 		f, err := os.Create(destPath)
 		if err != nil {
