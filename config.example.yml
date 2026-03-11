@@ -1,0 +1,24 @@
+# sear-daemon configuration file (config.yml)
+# Copy this file to config.yml and adjust values for your environment.
+
+# Address and port to listen on.
+listen_addr: ":8080"
+
+# Directory where the daemon stores its internal state (clients, deployments, etc.).
+data_dir: "/var/lib/sear/data"
+
+# Directory where uploaded artifacts are stored.
+artifacts_dir: "/var/lib/sear/artifacts"
+
+# Directory where forwarded client logs are stored.
+logs_dir: "/var/lib/sear/logs"
+
+# Optional TLS configuration.  Both cert and key must be set to enable TLS.
+# tls_cert_file: "/etc/sear/tls/server.crt"
+# tls_key_file:  "/etc/sear/tls/server.key"
+
+# JWT secret used to sign client tokens.  Leave empty to auto-generate on startup.
+# jwt_secret: ""
+
+# JWT token expiry in hours (default: 720 = 30 days).
+token_expiry_hours: 720
