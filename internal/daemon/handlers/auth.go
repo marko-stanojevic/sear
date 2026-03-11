@@ -354,6 +354,23 @@ func (e *Env) HandleGetLogs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "deployment_id is required")
 		return
 	}
+	// Load the deployment to ensure it exists and is owned by the caller.
+	dep, ok := e.Store.GetDeployment(depID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "deployment not found")
+		return
+	}
+	// Identify the caller's client and enforce ownership of the deployment.
+	clientID := r.Header.Get("X-Client-ID")
+	if clientID == "" {
+		writeError(w, http.StatusUnauthorized, "missing client identity")
+		return
+	}
+	if dep.ClientID != clientID {
+		// Do not reveal whether the deployment exists for other clients.
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
 	logs := e.Store.GetLogsForDeployment(depID)
 	writeJSON(w, http.StatusOK, logs)
 }
