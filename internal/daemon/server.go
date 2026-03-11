@@ -41,8 +41,8 @@ func NewServer(env *handlers.Env) http.Handler {
 	mux.Handle("/admin/clients/", adminMW(http.HandlerFunc(env.HandleAdminClients)))
 	mux.Handle("/admin/deployments", adminMW(http.HandlerFunc(env.HandleAdminDeployments)))
 	mux.Handle("/admin/deployments/", adminMW(http.HandlerFunc(env.HandleAdminDeployments)))
-	mux.Handle("/artifacts", adminMW(http.HandlerFunc(env.HandleArtifacts)))
-	mux.Handle("/artifacts/", adminMW(http.HandlerFunc(env.HandleArtifacts)))
+	mux.Handle("/artifacts", clientMW(http.HandlerFunc(env.HandleArtifacts)))
+	mux.Handle("/artifacts/", clientMW(http.HandlerFunc(env.HandleArtifacts)))
 	mux.Handle("/secrets", adminMW(http.HandlerFunc(env.HandleSecrets)))
 	mux.Handle("/secrets/", adminMW(http.HandlerFunc(env.HandleSecrets)))
 
