@@ -30,7 +30,7 @@ func NewServer(env *handlers.Env) http.Handler {
 	admin := env.RequireAdminAuth
 
 	mux.Handle("/status", admin(http.HandlerFunc(env.HandleStatus)))
-	mux.Handle("/status/ui", http.HandlerFunc(env.HandleStatusUI)) // public dashboard
+	mux.Handle("/status/ui", admin(http.HandlerFunc(env.HandleStatusUI)))
 
 	mux.Handle("/admin/playbooks", admin(http.HandlerFunc(env.HandleAdminPlaybooks)))
 	mux.Handle("/admin/playbooks/", admin(http.HandlerFunc(env.HandleAdminPlaybooks)))
