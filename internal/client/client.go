@@ -8,42 +8,48 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/marko-stanojevic/sear/internal/client/executor"
-	"github.com/marko-stanojevic/sear/internal/client/registration"
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/gorilla/websocket"
+	"github.com/sear-project/sear/internal/client/executor"
+	"github.com/sear-project/sear/internal/client/identity"
+	"github.com/sear-project/sear/internal/common"
 )
 
 // localState is persisted to disk so the client can resume after a reboot.
 type localState struct {
-	ClientID     string `json:"client_id"`
-	Token        string `json:"token"`
-	DeploymentID string `json:"deployment_id,omitempty"`
+	ClientID string `json:"client_id"`
+	Token    string `json:"token"`
 }
 
 // Client is the sear deployment client.
 type Client struct {
-	cfg       *common.ClientConfig
-	state     localState
-	logBuf    []common.LogEntry
-	logMu     sync.Mutex
+	cfg        *common.ClientConfig
+	state      localState
 	httpClient *http.Client
+
+	logMu  sync.Mutex
+	logBuf []common.LogEntry
 }
 
-// New creates a new Client using the given configuration.
+// New creates a new Client with sensible defaults applied.
 func New(cfg *common.ClientConfig) *Client {
-	if cfg.PollIntervalSeconds == 0 {
-		cfg.PollIntervalSeconds = 10
+	if cfg.ReconnectIntervalSeconds == 0 {
+		cfg.ReconnectIntervalSeconds = 10
 	}
 	if cfg.LogBatchSize == 0 {
 		cfg.LogBatchSize = 100
 	}
 	if cfg.StateFile == "" {
-		cfg.StateFile = "/var/lib/sear/state.json"
+		cfg.StateFile = defaultStateFile()
+	}
+	if cfg.WorkDir == "" {
+		cfg.WorkDir = defaultWorkDir()
 	}
 	return &Client{
 		cfg:        cfg,
@@ -51,44 +57,40 @@ func New(cfg *common.ClientConfig) *Client {
 	}
 }
 
-// Run starts the client loop.  It registers, then repeatedly polls /connect.
+// Run starts the client: registers if needed, then connects and reconnects
+// via WebSocket until ctx is cancelled.
 func (c *Client) Run(ctx context.Context) error {
 	if err := c.loadState(); err != nil {
 		log.Printf("warn: could not load local state: %v", err)
 	}
 
-	// Register / re-register if we have no token.
 	if c.state.Token == "" {
 		if err := c.register(ctx); err != nil {
 			return fmt.Errorf("registration: %w", err)
 		}
 	}
 
-	// Start log flusher.
-	go c.flushLogsLoop(ctx)
-
-	// Poll /connect.
-	tick := time.NewTicker(time.Duration(c.cfg.PollIntervalSeconds) * time.Second)
-	defer tick.Stop()
-	// Poll immediately on start.
-	if err := c.poll(ctx); err != nil {
-		log.Printf("poll: %v", err)
-	}
+	interval := time.Duration(c.cfg.ReconnectIntervalSeconds) * time.Second
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		log.Printf("connecting to %s", c.cfg.ServerURL)
+		if err := c.connect(ctx); err != nil {
+			log.Printf("connection lost: %v — retrying in %s", err, interval)
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-tick.C:
-			if err := c.poll(ctx); err != nil {
-				log.Printf("poll: %v", err)
-			}
+		case <-time.After(interval):
 		}
 	}
 }
 
-// register sends a registration request to the server.
+// ── Registration ─────────────────────────────────────────────────────────────
+
 func (c *Client) register(ctx context.Context) error {
-	pf := registration.Collect(c.cfg.Platform)
+	pf := identity.Collect(c.cfg.Platform)
 	req := common.RegistrationRequest{
 		Platform:           common.PlatformType(pf.Platform),
 		PlatformID:         pf.ID,
@@ -102,181 +104,207 @@ func (c *Client) register(ctx context.Context) error {
 	}
 	c.state.ClientID = resp.ClientID
 	c.state.Token = resp.Token
-	log.Printf("registered as %s", c.state.ClientID)
+	log.Printf("registered as client %s", c.state.ClientID)
 	return c.saveState()
 }
 
-// poll calls /api/v1/connect and acts on the response.
-func (c *Client) poll(ctx context.Context) error {
-	var resp common.ConnectResponse
-	if err := c.get(ctx, "/api/v1/connect", &resp, c.state.Token); err != nil {
-		return fmt.Errorf("connect: %w", err)
+// ── WebSocket connection ──────────────────────────────────────────────────────
+
+func (c *Client) connect(ctx context.Context) error {
+	wsURL := wsEndpoint(c.cfg.ServerURL, c.state.Token)
+	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
+	ws, _, err := dialer.DialContext(ctx, wsURL, nil)
+	if err != nil {
+		return fmt.Errorf("dial: %w", err)
 	}
+	defer ws.Close()
 
-	switch resp.Action {
-	case "wait":
-		// Nothing to do.
-	case "deploy":
-		if resp.Playbook == nil {
-			return fmt.Errorf("deploy action with no playbook")
-		}
-		c.state.DeploymentID = resp.DeploymentID
-		if err := c.saveState(); err != nil {
-			log.Printf("warn: save state: %v", err)
-		}
-		c.runPlaybook(ctx, &resp)
-	case "reboot":
-		log.Println("server requested reboot")
-		return c.reboot()
-	default:
-		log.Printf("unknown action: %q", resp.Action)
-	}
-	return nil
-}
+	log.Printf("WebSocket connected")
 
-// runPlaybook executes the playbook returned by the server.
-func (c *Client) runPlaybook(ctx context.Context, resp *common.ConnectResponse) {
-	pb := resp.Playbook
-	c.emit(common.LogLevelInfo, resp.DeploymentID, "", 0, fmt.Sprintf("starting playbook %q", pb.Name))
+	ws.SetPingHandler(func(string) error {
+		return ws.WriteControl(websocket.PongMessage, nil, time.Now().Add(5*time.Second))
+	})
 
-	// Build ordered job list.
-	jobs := orderedJobs(pb)
-
-	// Find resume position.
-	resumeJob := resp.ResumeJobName
-	resumeStep := resp.ResumeStepIndex
-	started := resumeJob == ""
-
-	for _, jobEntry := range jobs {
-		jobName := jobEntry.name
-		job := jobEntry.job
-		if !started {
-			if jobName != resumeJob {
-				continue
-			}
-			started = true
-		}
-
-		c.emit(common.LogLevelInfo, resp.DeploymentID, jobName, 0, fmt.Sprintf("starting job %q", jobName))
-		for i, step := range job.Steps {
-			startIdx := 0
-			if jobName == resumeJob {
-				startIdx = resumeStep
-			}
-			if i < startIdx {
-				continue
-			}
-			stepName := step.Name
-			if stepName == "" {
-				stepName = fmt.Sprintf("step-%d", i)
-			}
-			c.emit(common.LogLevelInfo, resp.DeploymentID, jobName, i, fmt.Sprintf("running step %q", stepName))
-
-			// Update server state.
-			_ = c.updateState(ctx, resp.DeploymentID, common.DeploymentStatusRunning, jobName, i, "")
-
-			logger := func(level common.LogLevel, msg string) {
-				c.emit(level, resp.DeploymentID, jobName, i, msg)
-			}
-			result := executor.RunStep(ctx, step, resp.Secrets, resp.ArtifactsBaseURL, c.state.Token, logger)
-
-			if result.NeedsReboot {
-				c.emit(common.LogLevelInfo, resp.DeploymentID, jobName, i, "step requested reboot; persisting state")
-				nextStep := i + 1
-				if nextStep >= len(job.Steps) {
-					nextStep = 0
-					// Advance to next job (simplified: mark this job as done).
-				}
-				_ = c.updateState(ctx, resp.DeploymentID, common.DeploymentStatusRebooting, jobName, nextStep, "")
-				_ = c.flushLogs(ctx)
-				if err := c.reboot(); err != nil {
-					log.Printf("reboot error: %v", err)
-				}
-				return
-			}
-			if result.Err != nil {
-				if !step.ContinueOnError {
-					c.emit(common.LogLevelError, resp.DeploymentID, jobName, i, "step failed: "+result.Err.Error())
-					_ = c.updateState(ctx, resp.DeploymentID, common.DeploymentStatusFailed, jobName, i, result.Err.Error())
-					_ = c.flushLogs(ctx)
-					return
-				}
-				c.emit(common.LogLevelWarn, resp.DeploymentID, jobName, i, "step failed (continue-on-error): "+result.Err.Error())
-			}
-		}
-	}
-
-	c.emit(common.LogLevelInfo, resp.DeploymentID, "", 0, "playbook completed successfully")
-	_ = c.updateState(ctx, resp.DeploymentID, common.DeploymentStatusDone, "", 0, "")
-	_ = c.flushLogs(ctx)
-}
-
-// updateState sends a state update to the server.
-func (c *Client) updateState(ctx context.Context, deploymentID string, status common.DeploymentStatus, job string, step int, errDetail string) error {
-	req := common.StateUpdateRequest{
-		DeploymentID:     deploymentID,
-		Status:           status,
-		CurrentJobName:   job,
-		CurrentStepIndex: step,
-		ErrorDetail:      errDetail,
-	}
-	var resp map[string]string
-	return c.post(ctx, "/api/v1/state", req, &resp, c.state.Token)
-}
-
-// ---- Logging ---------------------------------------------------------------
-
-func (c *Client) emit(level common.LogLevel, depID, jobName string, stepIdx int, msg string) {
-	entry := common.LogEntry{
-		DeploymentID: depID,
-		JobName:      jobName,
-		StepIndex:    stepIdx,
-		Level:        level,
-		Message:      msg,
-		Timestamp:    time.Now(),
-	}
-	c.logMu.Lock()
-	c.logBuf = append(c.logBuf, entry)
-	c.logMu.Unlock()
-	log.Printf("[%s] %s", level, msg)
-}
-
-func (c *Client) flushLogsLoop(ctx context.Context) {
-	tick := time.NewTicker(5 * time.Second)
-	defer tick.Stop()
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-			_ = c.flushLogs(ctx)
+		ws.SetReadDeadline(time.Now().Add(90 * time.Second))
+		_, data, err := ws.ReadMessage()
+		if err != nil {
+			return fmt.Errorf("read: %w", err)
+		}
+
+		var msg common.WSMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			log.Printf("warn: invalid WS message: %v", err)
+			continue
+		}
+
+		if msg.Type == common.WSMsgPlaybook {
+			raw, _ := json.Marshal(msg.Data)
+			var pd common.WSPlaybookData
+			if err := json.Unmarshal(raw, &pd); err != nil {
+				log.Printf("warn: invalid playbook message: %v", err)
+				continue
+			}
+			c.runPlaybook(ctx, ws, &pd)
 		}
 	}
 }
 
-func (c *Client) flushLogs(ctx context.Context) error {
-	c.logMu.Lock()
-	if len(c.logBuf) == 0 {
-		c.logMu.Unlock()
-		return nil
+// wsEndpoint builds the WebSocket URL, converting http(s) → ws(s) and
+// appending the JWT as a query parameter.
+func wsEndpoint(serverURL, token string) string {
+	u, err := url.Parse(serverURL)
+	if err != nil {
+		return serverURL
 	}
-	batch := c.logBuf
-	c.logBuf = nil
-	c.logMu.Unlock()
-
-	payload := common.LogBatch{Entries: batch}
-	var resp map[string]string
-	if err := c.post(ctx, "/api/v1/logs", payload, &resp, c.state.Token); err != nil {
-		// Put logs back.
-		c.logMu.Lock()
-		c.logBuf = append(batch, c.logBuf...)
-		c.logMu.Unlock()
-		return err
+	switch u.Scheme {
+	case "https":
+		u.Scheme = "wss"
+	default:
+		u.Scheme = "ws"
 	}
-	return nil
+	u.Path = strings.TrimRight(u.Path, "/") + "/api/v1/ws"
+	q := u.Query()
+	q.Set("token", token)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
-// ---- Local state -----------------------------------------------------------
+// ── Playbook execution ────────────────────────────────────────────────────────
+
+func (c *Client) runPlaybook(ctx context.Context, ws *websocket.Conn, pd *common.WSPlaybookData) {
+	pb := pd.Playbook
+	depID := pd.DeploymentID
+	log.Printf("starting playbook %q (deployment %s, resume step %d)", pb.Name, depID, pd.ResumeStepIndex)
+
+	flat := common.FlattenPlaybook(pb)
+
+	for _, fs := range flat {
+		if fs.GlobalIndex < pd.ResumeStepIndex {
+			continue // already completed before last reboot
+		}
+
+		stepName := fs.Name
+		if stepName == "" {
+			stepName = fmt.Sprintf("step-%d", fs.GlobalIndex)
+		}
+		log.Printf("[%s / %s] starting", fs.JobName, stepName)
+
+		c.wsSend(ws, common.WSMessage{
+			Type:      common.WSMsgStepStart,
+			Timestamp: time.Now(),
+			Data: common.WSStepData{
+				DeploymentID: depID,
+				JobName:      fs.JobName,
+				StepName:     stepName,
+				StepIndex:    fs.GlobalIndex,
+			},
+		})
+
+		logger := func(level common.LogLevel, msg string) {
+			log.Printf("[%s] %s", level, msg)
+			c.wsSend(ws, common.WSMessage{
+				Type:      common.WSMsgLog,
+				Timestamp: time.Now(),
+				Data: common.WSLogData{
+					DeploymentID: depID,
+					JobName:      fs.JobName,
+					StepIndex:    fs.GlobalIndex,
+					Level:        level,
+					Message:      msg,
+				},
+			})
+		}
+
+		result := executor.RunStep(ctx, fs.Step, pd.Secrets, pd.ArtifactsBaseURL, c.state.Token, logger)
+
+		if result.NeedsReboot {
+			resumeAt := fs.GlobalIndex + 1
+			logger(common.LogLevelInfo, fmt.Sprintf("step %q requested reboot (reason: %s); will resume at step %d",
+				stepName, result.RebootReason, resumeAt))
+			c.wsSend(ws, common.WSMessage{
+				Type:      common.WSMsgReboot,
+				Timestamp: time.Now(),
+				Data: common.WSRebootData{
+					DeploymentID:    depID,
+					ResumeStepIndex: resumeAt,
+					Reason:          result.RebootReason,
+				},
+			})
+			// Give the server a moment to persist the state before rebooting.
+			time.Sleep(500 * time.Millisecond)
+			if err := rebootOS(); err != nil {
+				log.Printf("error: reboot failed: %v", err)
+			}
+			return
+		}
+
+		if result.Err != nil {
+			if fs.ContinueOnError {
+				logger(common.LogLevelWarn, fmt.Sprintf("step %q failed (continue-on-error): %v", stepName, result.Err))
+				c.wsSend(ws, common.WSMessage{
+					Type:      common.WSMsgStepComplete,
+					Timestamp: time.Now(),
+					Data: common.WSStepData{
+						DeploymentID: depID,
+						JobName:      fs.JobName,
+						StepName:     stepName,
+						StepIndex:    fs.GlobalIndex,
+					},
+				})
+				continue
+			}
+			errMsg := fmt.Sprintf("step %q failed: %v", stepName, result.Err)
+			logger(common.LogLevelError, errMsg)
+			c.wsSend(ws, common.WSMessage{
+				Type:      common.WSMsgDeployFailed,
+				Timestamp: time.Now(),
+				Data: common.WSStepData{
+					DeploymentID: depID,
+					JobName:      fs.JobName,
+					StepName:     stepName,
+					StepIndex:    fs.GlobalIndex,
+					Error:        errMsg,
+				},
+			})
+			return
+		}
+
+		log.Printf("[%s / %s] completed", fs.JobName, stepName)
+		c.wsSend(ws, common.WSMessage{
+			Type:      common.WSMsgStepComplete,
+			Timestamp: time.Now(),
+			Data: common.WSStepData{
+				DeploymentID: depID,
+				JobName:      fs.JobName,
+				StepName:     stepName,
+				StepIndex:    fs.GlobalIndex,
+			},
+		})
+	}
+
+	log.Printf("playbook %q completed successfully", pb.Name)
+	c.wsSend(ws, common.WSMessage{
+		Type:      common.WSMsgDeployDone,
+		Timestamp: time.Now(),
+		Data:      common.WSStepData{DeploymentID: depID},
+	})
+}
+
+// wsSend marshals and sends a message, logging any error.
+func (c *Client) wsSend(ws *websocket.Conn, msg common.WSMessage) {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("warn: marshal WS message: %v", err)
+		return
+	}
+	ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	if err := ws.WriteMessage(websocket.TextMessage, data); err != nil {
+		log.Printf("warn: WS write: %v", err)
+	}
+}
+
+// ── Local state ───────────────────────────────────────────────────────────────
 
 func (c *Client) loadState() error {
 	data, err := os.ReadFile(c.cfg.StateFile)
@@ -298,7 +326,7 @@ func (c *Client) saveState() error {
 	return os.WriteFile(c.cfg.StateFile, data, 0o600)
 }
 
-// ---- HTTP helpers ----------------------------------------------------------
+// ── HTTP helpers (registration only) ─────────────────────────────────────────
 
 func (c *Client) post(ctx context.Context, path string, body, out any, token string) error {
 	b, err := json.Marshal(body)
@@ -325,68 +353,4 @@ func (c *Client) post(ctx context.Context, path string, body, out any, token str
 		return json.NewDecoder(resp.Body).Decode(out)
 	}
 	return nil
-}
-
-func (c *Client) get(ctx context.Context, path string, out any, token string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.cfg.ServerURL+path, nil)
-	if err != nil {
-		return err
-	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("HTTP %d from %s", resp.StatusCode, path)
-	}
-	if out != nil {
-		return json.NewDecoder(resp.Body).Decode(out)
-	}
-	return nil
-}
-
-// ---- Reboot ----------------------------------------------------------------
-
-func (c *Client) reboot() error {
-	return rebootOS()
-}
-
-// ---- Job ordering ----------------------------------------------------------
-
-type namedJob struct {
-	name string
-	job  common.Job
-}
-
-// orderedJobs returns jobs in a deterministic order.
-// Since Go maps are unordered, jobs are sorted by key name.
-func orderedJobs(pb *common.Playbook) []namedJob {
-	// Build alphabetically sorted list for deterministic execution.
-	// In practice, operators should use a single-job playbook or rely on
-	// job dependency ordering; a future enhancement could add "needs:" support.
-	keys := make([]string, 0, len(pb.Jobs))
-	for k := range pb.Jobs {
-		keys = append(keys, k)
-	}
-	// Sort for stability.
-	sortStrings(keys)
-	out := make([]namedJob, 0, len(keys))
-	for _, k := range keys {
-		out = append(out, namedJob{name: k, job: pb.Jobs[k]})
-	}
-	return out
-}
-
-// sortStrings performs an in-place insertion sort (avoids importing "sort" for
-// a small slice).
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j] < s[j-1]; j-- {
-			s[j], s[j-1] = s[j-1], s[j]
-		}
-	}
 }

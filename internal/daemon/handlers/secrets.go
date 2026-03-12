@@ -8,10 +8,10 @@ import (
 
 // HandleSecrets manages the server-side secrets store.
 //
-//	GET    /secrets              – list secret names (values are redacted)
-//	GET    /secrets/{name}       – get secret value
-//	PUT    /secrets/{name}       – set secret value
-//	DELETE /secrets/{name}       – delete secret
+//	GET    /secrets          – list secret names (values are never exposed in list)
+//	GET    /secrets/{name}   – get a specific secret value
+//	PUT    /secrets/{name}   – set or update a secret value
+//	DELETE /secrets/{name}   – delete a secret
 func (e *Env) HandleSecrets(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/secrets")
 	name = strings.TrimPrefix(name, "/")
@@ -19,7 +19,7 @@ func (e *Env) HandleSecrets(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if name == "" {
-			// List names only – never expose values via list.
+			// List names only — never expose values via the list endpoint.
 			writeJSON(w, http.StatusOK, e.Store.ListSecretNames())
 			return
 		}

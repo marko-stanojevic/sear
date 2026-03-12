@@ -1,12 +1,11 @@
-// sear-daemon is the server component of the Sear deployment framework.
+// Command sear-daemon is the sear deployment server.
 //
 // Usage:
 //
-//	sear-daemon [--config config.yml] [--secrets secrets.yml]
+//	sear-daemon -config config.yml -secrets secrets.yml
 package main
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"flag"
@@ -14,169 +13,136 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
+	"path/filepath"
+	"strings"
 
-	"github.com/marko-stanojevic/sear/internal/common"
-	"github.com/marko-stanojevic/sear/internal/daemon"
-	"github.com/marko-stanojevic/sear/internal/daemon/handlers"
-	"github.com/marko-stanojevic/sear/internal/daemon/store"
+	"github.com/sear-project/sear/internal/common"
+	daemon "github.com/sear-project/sear/internal/daemon"
+	"github.com/sear-project/sear/internal/daemon/handlers"
+	"github.com/sear-project/sear/internal/daemon/store"
 )
 
 func main() {
 	configPath := flag.String("config", "config.yml", "path to daemon config file")
-	secretsPath := flag.String("secrets", "secrets.yml", "path to secrets file")
+	secretsPath := flag.String("secrets", "secrets.yml", "path to daemon secrets file")
 	flag.Parse()
 
-	cfg, err := loadConfig(*configPath)
+	cfg, err := common.LoadDaemonConfig(*configPath)
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
-	sec, err := loadSecrets(*secretsPath)
+	applyConfigDefaults(cfg)
+
+	sec, err := common.LoadDaemonSecrets(*secretsPath)
 	if err != nil {
-		log.Fatalf("secrets: %v", err)
+		// secrets.yml is optional on first run — we'll auto-generate what we need.
+		log.Printf("note: could not load %s (%v); using generated credentials", *secretsPath, err)
+		sec = &common.DaemonSecrets{}
 	}
 
-	// ---- Directories -------------------------------------------------------
-	if cfg.DataDir == "" {
-		cfg.DataDir = "/var/lib/sear/data"
+	// ── JWT secret ───────────────────────────────────────────────────────────
+	if cfg.JWTSecret == "" {
+		cfg.JWTSecret = mustGenerateHex(32)
+		log.Printf("generated ephemeral JWT secret (set jwt_secret in config.yml to persist)")
 	}
-	if cfg.ArtifactsDir == "" {
-		cfg.ArtifactsDir = "/var/lib/sear/artifacts"
+
+	// ── Root password ────────────────────────────────────────────────────────
+	if sec.RootPassword == "" {
+		sec.RootPassword = mustGenerateHex(16)
+		printBox("GENERATED ADMIN PASSWORD", "root password: "+sec.RootPassword)
 	}
-	if cfg.LogsDir == "" {
-		cfg.LogsDir = "/var/lib/sear/logs"
-	}
-	for _, d := range []string{cfg.DataDir, cfg.ArtifactsDir, cfg.LogsDir} {
-		if err := os.MkdirAll(d, 0o700); err != nil {
-			log.Fatalf("mkdir %s: %v", d, err)
+
+	// ── Ensure directories ────────────────────────────────────────────────────
+	for _, dir := range []string{cfg.DataDir, cfg.ArtifactsDir, cfg.LogsDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			log.Fatalf("mkdir %s: %v", dir, err)
 		}
 	}
 
-	// ---- Storage -----------------------------------------------------------
-	st, err := store.New(cfg.DataDir)
+	// ── Store ─────────────────────────────────────────────────────────────────
+	st, err := store.New(cfg.DataDir, cfg.LogsDir)
 	if err != nil {
 		log.Fatalf("store: %v", err)
 	}
-	// Merge client secrets from secrets.yml into the store.
+	// Seed secrets from secrets.yml.
 	if len(sec.ClientSecrets) > 0 {
 		if err := st.MergeSecrets(sec.ClientSecrets); err != nil {
-			log.Printf("warn: could not merge client secrets: %v", err)
+			log.Fatalf("seeding secrets: %v", err)
 		}
 	}
 
-	// ---- JWT secret --------------------------------------------------------
-	jwtSecret := []byte(cfg.JWTSecret)
-	if len(jwtSecret) == 0 {
-		b := make([]byte, 32)
-		if _, err := rand.Read(b); err != nil {
-			log.Fatalf("generating jwt secret: %v", err)
-		}
-		jwtSecret = b
-	}
-
-	// ---- Root password -----------------------------------------------------
-	rootPass := sec.RootPassword
-	if rootPass == "" {
-		rootPass, err = randHex(16)
-		if err != nil {
-			log.Fatalf("generating root password: %v", err)
-		}
-		fmt.Printf("\n⚠  No root_password found in secrets.yml.\n")
-		fmt.Printf("   Generated root password: %s\n\n", rootPass)
-	}
-
-	// ---- Listen address ----------------------------------------------------
-	addr := cfg.ListenAddr
-	if addr == "" {
-		addr = ":8080"
-	}
-
-	serverURL := os.Getenv("SEAR_SERVER_URL")
-	if serverURL == "" {
-		serverURL = "http://localhost" + addr
-	}
-
-	// ---- Registration secrets ----------------------------------------------
-	regSecrets := sec.RegistrationSecrets
-	if len(regSecrets) == 0 {
-		generatedSecret, err := randHex(16)
-		if err != nil {
-			log.Fatalf("generating registration secret: %v", err)
-		}
-		regSecrets = map[string]string{"default": generatedSecret}
-		fmt.Printf("   Generated registration secret: %s\n", generatedSecret)
-		fmt.Printf("   Server URL: %s\n\n", serverURL)
-	}
-
-	// ---- Build handler env -------------------------------------------------
+	// ── Handler environment ───────────────────────────────────────────────────
+	hub := handlers.NewHub()
 	env := &handlers.Env{
 		Store:               st,
-		JWTSecret:           jwtSecret,
-		RootPassword:        rootPass,
+		JWTSecret:           []byte(cfg.JWTSecret),
+		RootPassword:        sec.RootPassword,
 		TokenExpiryHours:    cfg.TokenExpiryHours,
 		ArtifactsDir:        cfg.ArtifactsDir,
-		ServerURL:           serverURL,
-		RegistrationSecrets: regSecrets,
+		ServerURL:           serverURL(cfg),
+		RegistrationSecrets: sec.RegistrationSecrets,
+		Hub:                 hub,
 	}
 
-	// ---- HTTP server -------------------------------------------------------
+	// ── HTTP server ───────────────────────────────────────────────────────────
+	handler := daemon.NewServer(env)
 	srv := &http.Server{
-		Addr:         addr,
-		Handler:      daemon.NewServer(env),
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 60 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:    cfg.ListenAddr,
+		Handler: handler,
 	}
 
-	// Graceful shutdown on SIGINT/SIGTERM.
-	go func() {
-		ch := make(chan os.Signal, 1)
-		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-		<-ch
-		log.Println("shutting down...")
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(ctx)
-	}()
+	log.Printf("sear-daemon listening on %s", cfg.ListenAddr)
+	log.Printf("status UI: http://localhost%s/status/ui", cfg.ListenAddr)
 
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
-		log.Printf("sear-daemon listening on %s (TLS)", addr)
-		if err := srv.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile); err != nil && err != http.ErrServerClosed {
+		log.Printf("TLS enabled")
+		if err := srv.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile); err != nil {
 			log.Fatalf("server: %v", err)
 		}
 	} else {
-		log.Printf("sear-daemon listening on %s", addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil {
 			log.Fatalf("server: %v", err)
 		}
 	}
 }
 
-// loadConfig reads config.yml; returns defaults if the file does not exist.
-func loadConfig(path string) (*common.DaemonConfig, error) {
-	cfg, err := common.LoadDaemonConfig(path)
-	if os.IsNotExist(err) {
-		return &common.DaemonConfig{}, nil
+func applyConfigDefaults(cfg *common.DaemonConfig) {
+	if cfg.ListenAddr == "" {
+		cfg.ListenAddr = ":8080"
 	}
-	return cfg, err
+	if cfg.DataDir == "" {
+		cfg.DataDir = "sear-data"
+	}
+	if cfg.ArtifactsDir == "" {
+		cfg.ArtifactsDir = filepath.Join(cfg.DataDir, "artifacts")
+	}
+	if cfg.LogsDir == "" {
+		cfg.LogsDir = filepath.Join(cfg.DataDir, "logs")
+	}
+	if cfg.TokenExpiryHours == 0 {
+		cfg.TokenExpiryHours = 720 // 30 days
+	}
 }
 
-// loadSecrets reads secrets.yml; returns an empty struct if the file does
-// not exist (root password and registration secrets will be auto-generated).
-func loadSecrets(path string) (*common.DaemonSecrets, error) {
-	sec, err := common.LoadDaemonSecrets(path)
-	if os.IsNotExist(err) {
-		return &common.DaemonSecrets{}, nil
+func serverURL(cfg *common.DaemonConfig) string {
+	if cfg.TLSCertFile != "" {
+		return "https://localhost" + cfg.ListenAddr
 	}
-	return sec, err
+	return "http://localhost" + cfg.ListenAddr
 }
 
-func randHex(bytes int) (string, error) {
-	b := make([]byte, bytes)
+func mustGenerateHex(n int) string {
+	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		return "", err
+		log.Fatalf("rand: %v", err)
 	}
-	return hex.EncodeToString(b), nil
+	return hex.EncodeToString(b)
+}
+
+func printBox(title, content string) {
+	width := len(content) + 4
+	bar := strings.Repeat("─", width)
+	pad := strings.Repeat(" ", (width-len(title))/2)
+	fmt.Fprintf(os.Stderr, "\n┌%s┐\n│%s%s%s│\n│  %s  │\n└%s┘\n\n",
+		bar, pad, title, pad, content, bar)
 }

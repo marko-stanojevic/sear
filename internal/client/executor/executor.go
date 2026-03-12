@@ -13,27 +13,44 @@ import (
 	"strings"
 	"time"
 
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/sear-project/sear/internal/common"
 )
 
-// Logger is a function that the executor calls to emit log lines.
+// Logger is a function the executor calls to emit log lines.
 type Logger func(level common.LogLevel, msg string)
 
 // Result is returned after running a step.
 type Result struct {
-	Err       error
+	Err         error
 	NeedsReboot bool
+	RebootReason string
 }
 
 // RunStep executes a single playbook step.
-//
-//   - env contains all variables (secrets + step.Env) available as
-//     environment variables.
-//   - artifactsBaseURL is the server's /artifacts endpoint.
-func RunStep(ctx context.Context, step common.Step, env map[string]string, artifactsBaseURL, token string, log Logger) Result {
+//   - secrets contains the server-resolved secrets map (key→value).
+//   - artifactsBaseURL is the daemon's /artifacts endpoint.
+//   - token is the client JWT for authenticated artifact requests.
+func RunStep(
+	ctx context.Context,
+	step common.Step,
+	secrets map[string]string,
+	artifactsBaseURL, token string,
+	log Logger,
+) Result {
+	// Apply step-level timeout if configured.
+	if step.TimeoutMinutes > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(step.TimeoutMinutes)*time.Minute)
+		defer cancel()
+	}
+
 	switch {
 	case step.Uses == "reboot":
-		return Result{NeedsReboot: true}
+		reason := step.With["reason"]
+		if reason == "" {
+			reason = "playbook reboot step"
+		}
+		return Result{NeedsReboot: true, RebootReason: reason}
 
 	case step.Uses == "download-artifact":
 		return runDownloadArtifact(ctx, step, artifactsBaseURL, token, log)
@@ -42,80 +59,109 @@ func RunStep(ctx context.Context, step common.Step, env map[string]string, artif
 		return runUploadArtifact(ctx, step, artifactsBaseURL, token, log)
 
 	case step.Uses == "upload-logs":
-		// upload-logs is handled by the client itself; nothing extra here.
-		log(common.LogLevelInfo, "upload-logs: logs are streamed continuously")
+		// Logs are streamed continuously over WebSocket; this is a no-op.
+		log(common.LogLevelInfo, "upload-logs: logs are already streamed in real time")
 		return Result{}
 
 	case step.Run != "":
-		return runShell(ctx, step, env, log)
+		// Resolve ${{ secrets.NAME }} references in the step's env block.
+		resolvedEnv := common.ResolveEnvSecrets(step.Env, secrets)
+		return runShell(ctx, step, secrets, resolvedEnv, log)
 
 	default:
-		return Result{Err: fmt.Errorf("unknown step configuration: name=%q uses=%q", step.Name, step.Uses)}
+		return Result{Err: fmt.Errorf("unknown step: name=%q uses=%q", step.Name, step.Uses)}
 	}
 }
 
-// runShell executes a shell script step.
-func runShell(ctx context.Context, step common.Step, env map[string]string, log Logger) Result {
-	shell := step.Shell
+// ── Shell execution ───────────────────────────────────────────────────────────
+
+func runShell(ctx context.Context, step common.Step, secrets, stepEnv map[string]string, log Logger) Result {
+	shell := strings.ToLower(step.Shell)
 	if shell == "" {
 		shell = "bash"
 	}
 
 	var cmd *exec.Cmd
-	switch strings.ToLower(shell) {
-	case "bash", "sh":
-		cmd = exec.CommandContext(ctx, "bash", "-c", step.Run)
+	switch shell {
+	case "bash":
+		cmd = exec.CommandContext(ctx, "bash", "-euo", "pipefail", "-c", step.Run)
+	case "sh":
+		cmd = exec.CommandContext(ctx, "sh", "-e", "-c", step.Run)
 	case "pwsh", "powershell":
-		cmd = exec.CommandContext(ctx, "pwsh", "-Command", step.Run)
+		cmd = exec.CommandContext(ctx, "pwsh", "-NonInteractive", "-Command", step.Run)
+	case "cmd":
+		cmd = exec.CommandContext(ctx, "cmd.exe", "/C", step.Run)
+	case "python", "python3":
+		cmd = exec.CommandContext(ctx, "python3", "-c", step.Run)
 	default:
-		cmd = exec.CommandContext(ctx, "bash", "-c", step.Run)
+		cmd = exec.CommandContext(ctx, "bash", "-euo", "pipefail", "-c", step.Run)
 	}
 
-	// Build environment: inherit current env, then overlay secrets and step env.
-	cmdEnv := os.Environ()
-	for k, v := range env {
-		cmdEnv = append(cmdEnv, k+"="+v)
+	// Build environment: inherit the current process env, overlay secrets
+	// (so they're available as $VAR_NAME), then overlay step-specific env.
+	env := os.Environ()
+	for k, v := range secrets {
+		env = append(env, k+"="+v)
 	}
-	for k, v := range step.Env {
-		cmdEnv = append(cmdEnv, k+"="+v)
+	for k, v := range stepEnv {
+		env = append(env, k+"="+v)
 	}
-	cmd.Env = cmdEnv
+	cmd.Env = env
 
-	// Capture stdout/stderr and stream to logger.
-	pr, pw, _ := os.Pipe()
+	// Pipe stdout and stderr together and stream line-by-line to the logger.
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return Result{Err: fmt.Errorf("creating output pipe: %w", err)}
+	}
 	cmd.Stdout = pw
 	cmd.Stderr = pw
 
 	if err := cmd.Start(); err != nil {
+		pw.Close()
+		pr.Close()
 		return Result{Err: fmt.Errorf("starting shell: %w", err)}
 	}
 	pw.Close()
 
+	// Stream output to the logger.
 	go func() {
 		buf := make([]byte, 4096)
+		var leftover string
 		for {
 			n, err := pr.Read(buf)
 			if n > 0 {
-				log(common.LogLevelInfo, string(buf[:n]))
+				chunk := leftover + string(buf[:n])
+				lines := strings.Split(chunk, "\n")
+				for _, line := range lines[:len(lines)-1] {
+					log(common.LogLevelInfo, line)
+				}
+				leftover = lines[len(lines)-1]
 			}
 			if err != nil {
+				if leftover != "" {
+					log(common.LogLevelInfo, leftover)
+				}
 				break
 			}
 		}
 	}()
 
 	if err := cmd.Wait(); err != nil {
-		return Result{Err: fmt.Errorf("shell exited: %w", err)}
+		return Result{Err: fmt.Errorf("shell exited with error: %w", err)}
 	}
 	return Result{}
 }
 
-// runDownloadArtifact downloads an artifact from the server.
+// ── Artifact actions ──────────────────────────────────────────────────────────
+
 func runDownloadArtifact(ctx context.Context, step common.Step, artifactsBaseURL, token string, log Logger) Result {
-	name := step.With["name"]
+	name := step.With["artifact"]
+	if name == "" {
+		name = step.With["name"] // allow either key
+	}
 	dest := step.With["path"]
 	if name == "" {
-		return Result{Err: fmt.Errorf("download-artifact: 'name' is required")}
+		return Result{Err: fmt.Errorf("download-artifact: 'artifact' is required")}
 	}
 	if dest == "" {
 		dest = "."
@@ -125,12 +171,12 @@ func runDownloadArtifact(ctx context.Context, step common.Step, artifactsBaseURL
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return Result{Err: fmt.Errorf("download-artifact: build request: %w", err)}
+		return Result{Err: fmt.Errorf("download-artifact: %w", err)}
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	client := &http.Client{Timeout: 5 * time.Minute}
+	client := &http.Client{Timeout: 10 * time.Minute}
 	resp, err := client.Do(req)
 	if err != nil {
 		return Result{Err: fmt.Errorf("download-artifact: %w", err)}
@@ -149,19 +195,22 @@ func runDownloadArtifact(ctx context.Context, step common.Step, artifactsBaseURL
 		return Result{Err: fmt.Errorf("download-artifact: create %s: %w", outPath, err)}
 	}
 	defer f.Close()
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	written, err := io.Copy(f, resp.Body)
+	if err != nil {
 		return Result{Err: fmt.Errorf("download-artifact: write: %w", err)}
 	}
-	log(common.LogLevelInfo, fmt.Sprintf("artifact saved to %s", outPath))
+	log(common.LogLevelInfo, fmt.Sprintf("artifact saved to %s (%d bytes)", outPath, written))
 	return Result{}
 }
 
-// runUploadArtifact uploads a file to the server's /artifacts endpoint.
 func runUploadArtifact(ctx context.Context, step common.Step, artifactsBaseURL, token string, log Logger) Result {
-	name := step.With["name"]
+	name := step.With["artifact"]
+	if name == "" {
+		name = step.With["name"]
+	}
 	src := step.With["path"]
 	if name == "" || src == "" {
-		return Result{Err: fmt.Errorf("upload-artifact: 'name' and 'path' are required")}
+		return Result{Err: fmt.Errorf("upload-artifact: 'artifact' and 'path' are required")}
 	}
 	log(common.LogLevelInfo, fmt.Sprintf("uploading artifact %q from %s", name, src))
 
@@ -180,7 +229,7 @@ func runUploadArtifact(ctx context.Context, step common.Step, artifactsBaseURL, 
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	httpClient := &http.Client{Timeout: 5 * time.Minute}
+	httpClient := &http.Client{Timeout: 10 * time.Minute}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return Result{Err: fmt.Errorf("upload-artifact: %w", err)}

@@ -1,0 +1,18 @@
+# sear-daemon configuration
+# Copy to config.yml and adjust for your environment.
+
+listen_addr: ":8080"
+data_dir: "/var/lib/sear"
+artifacts_dir: "/var/lib/sear/artifacts"
+logs_dir: "/var/lib/sear/logs"
+
+# TLS — leave blank to use plain HTTP (fine for private networks).
+# tls_cert_file: "/etc/sear/tls.crt"
+# tls_key_file:  "/etc/sear/tls.key"
+
+# JWT signing secret — set a stable value so tokens survive daemon restarts.
+# If empty a new random secret is generated each startup (invalidates all tokens).
+jwt_secret: ""
+
+# JWT lifetime in hours (default 720 = 30 days).
+token_expiry_hours: 720

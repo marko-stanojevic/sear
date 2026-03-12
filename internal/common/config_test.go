@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/sear-project/sear/internal/common"
 )
 
 func TestLoadDaemonConfig(t *testing.T) {
@@ -35,8 +35,10 @@ func TestLoadDaemonSecrets(t *testing.T) {
 root_password: "s3cr3t"
 registration_secrets:
   prod: "abc123"
+  staging: "xyz789"
 client_secrets:
   DB_PASS: "hunter2"
+  API_KEY: "key-abc"
 `
 	path := writeTempFile(t, "secrets.yml", content)
 	sec, err := common.LoadDaemonSecrets(path)
@@ -59,7 +61,7 @@ func TestLoadClientConfig(t *testing.T) {
 server_url: "http://sear:8080"
 registration_secret: "reg-secret"
 platform: "baremetal"
-poll_interval_seconds: 5
+reconnect_interval_seconds: 5
 log_batch_size: 50
 `
 	path := writeTempFile(t, "client.yml", content)
@@ -70,17 +72,19 @@ log_batch_size: 50
 	if cfg.ServerURL != "http://sear:8080" {
 		t.Errorf("ServerURL = %q", cfg.ServerURL)
 	}
-	if cfg.PollIntervalSeconds != 5 {
-		t.Errorf("PollIntervalSeconds = %d; want 5", cfg.PollIntervalSeconds)
+	if cfg.ReconnectIntervalSeconds != 5 {
+		t.Errorf("ReconnectIntervalSeconds = %d; want 5", cfg.ReconnectIntervalSeconds)
 	}
 }
 
 func TestLoadPlaybook(t *testing.T) {
+	// Jobs are now a YAML sequence (ordered slice), not a map.
 	content := `
 name: test-playbook
+env:
+  DEPLOY_ENV: production
 jobs:
-  setup:
-    name: Setup
+  - name: setup
     steps:
       - name: Install
         run: echo hello
@@ -101,9 +105,15 @@ jobs:
 	if pb.Name != "test-playbook" {
 		t.Errorf("Name = %q; want test-playbook", pb.Name)
 	}
-	job, ok := pb.Jobs["setup"]
-	if !ok {
-		t.Fatal("job 'setup' not found")
+	if pb.Env["DEPLOY_ENV"] != "production" {
+		t.Errorf("Env[DEPLOY_ENV] = %q; want production", pb.Env["DEPLOY_ENV"])
+	}
+	if len(pb.Jobs) != 1 {
+		t.Fatalf("len(jobs) = %d; want 1", len(pb.Jobs))
+	}
+	job := pb.Jobs[0]
+	if job.Name != "setup" {
+		t.Errorf("job.Name = %q; want setup", job.Name)
 	}
 	if len(job.Steps) != 3 {
 		t.Errorf("len(steps) = %d; want 3", len(job.Steps))
@@ -113,6 +123,53 @@ jobs:
 	}
 	if job.Steps[2].With["name"] != "mybin" {
 		t.Errorf("step[2].With[name] = %q; want mybin", job.Steps[2].With["name"])
+	}
+}
+
+func TestFlattenPlaybook(t *testing.T) {
+	pb := &common.Playbook{
+		Name: "flat-test",
+		Jobs: []common.Job{
+			{Name: "j1", Steps: []common.Step{
+				{Name: "s1", Run: "echo 1"},
+				{Name: "s2", Run: "echo 2"},
+			}},
+			{Name: "j2", Steps: []common.Step{
+				{Name: "s3", Run: "echo 3"},
+			}},
+		},
+	}
+	flat := common.FlattenPlaybook(pb)
+	if len(flat) != 3 {
+		t.Fatalf("len(flat) = %d; want 3", len(flat))
+	}
+	if flat[0].GlobalIndex != 0 || flat[0].JobName != "j1" || flat[0].Name != "s1" {
+		t.Errorf("flat[0] = %+v", flat[0])
+	}
+	if flat[2].GlobalIndex != 2 || flat[2].JobName != "j2" || flat[2].Name != "s3" {
+		t.Errorf("flat[2] = %+v", flat[2])
+	}
+}
+
+func TestResolveSecrets(t *testing.T) {
+	secrets := map[string]string{
+		"DB_PASS": "hunter2",
+		"API_KEY": "abc-123",
+	}
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"no secrets here", "no secrets here"},
+		{"pass=${{ secrets.DB_PASS }}", "pass=hunter2"},
+		{"key=${{ secrets.API_KEY }} pass=${{ secrets.DB_PASS }}", "key=abc-123 pass=hunter2"},
+		{"${{ secrets.UNKNOWN }}", ""},
+	}
+	for _, tc := range tests {
+		got := common.ResolveSecrets(tc.input, secrets)
+		if got != tc.want {
+			t.Errorf("ResolveSecrets(%q) = %q; want %q", tc.input, got, tc.want)
+		}
 	}
 }
 

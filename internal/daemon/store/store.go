@@ -1,5 +1,8 @@
-// Package store provides a simple JSON-file-backed persistence layer for the
-// sear daemon.
+// Package store provides a JSON-file-backed persistence layer for the sear daemon.
+// Design notes:
+//   - All client/deployment/playbook/artifact/secret state lives in state.json.
+//   - Logs are stored in per-deployment files under logsDir/{deploymentID}.json
+//     so that a large deployment never inflates the main state snapshot.
 package store
 
 import (
@@ -10,68 +13,69 @@ import (
 	"sync"
 	"time"
 
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/sear-project/sear/internal/common"
 )
-
-// Store holds all persistent state for the daemon.
-type Store struct {
-	mu          sync.RWMutex
-	dir         string
-	clients     map[string]*common.Client
-	deployments map[string]*common.DeploymentState
-	playbooks   map[string]*PlaybookRecord
-	artifacts   map[string]*common.Artifact
-	secrets     map[string]string // client secrets (name→value)
-	logs        []*common.LogEntry
-}
 
 // PlaybookRecord wraps a Playbook with server-side metadata.
 type PlaybookRecord struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
 	Playbook    *common.Playbook `json:"playbook"`
 	CreatedAt   time.Time        `json:"created_at"`
 	UpdatedAt   time.Time        `json:"updated_at"`
 }
 
-// snapshot is serialised to disk.
+// Store holds all persistent state for the daemon.
+type Store struct {
+	mu          sync.RWMutex
+	stateFile   string
+	logsDir     string
+	clients     map[string]*common.Client
+	deployments map[string]*common.DeploymentState
+	playbooks   map[string]*PlaybookRecord
+	artifacts   map[string]*common.Artifact
+	secrets     map[string]string // client secrets (name→value)
+}
+
+// snapshot is the structure serialised to state.json.
+// Logs are intentionally excluded — they live in separate files.
 type snapshot struct {
-	Clients     map[string]*common.Client         `json:"clients"`
+	Clients     map[string]*common.Client          `json:"clients"`
 	Deployments map[string]*common.DeploymentState `json:"deployments"`
-	Playbooks   map[string]*PlaybookRecord          `json:"playbooks"`
-	Artifacts   map[string]*common.Artifact         `json:"artifacts"`
-	Secrets     map[string]string                   `json:"secrets"`
-	Logs        []*common.LogEntry                  `json:"logs"`
+	Playbooks   map[string]*PlaybookRecord         `json:"playbooks"`
+	Artifacts   map[string]*common.Artifact        `json:"artifacts"`
+	Secrets     map[string]string                  `json:"secrets"`
 }
 
 // New creates (or reopens) a store rooted at dir.
-func New(dir string) (*Store, error) {
+// Logs are stored under logsDir; if empty, dir/logs is used.
+func New(dir string, logsDir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("creating store dir: %w", err)
 	}
+	if logsDir == "" {
+		logsDir = filepath.Join(dir, "logs")
+	}
+	if err := os.MkdirAll(logsDir, 0o700); err != nil {
+		return nil, fmt.Errorf("creating logs dir: %w", err)
+	}
 	s := &Store{
-		dir:         dir,
+		stateFile:   filepath.Join(dir, "state.json"),
+		logsDir:     logsDir,
 		clients:     make(map[string]*common.Client),
 		deployments: make(map[string]*common.DeploymentState),
 		playbooks:   make(map[string]*PlaybookRecord),
 		artifacts:   make(map[string]*common.Artifact),
 		secrets:     make(map[string]string),
-		logs:        nil,
 	}
-	if err := s.load(); err != nil {
-		return nil, err
-	}
-	return s, nil
+	return s, s.load()
 }
 
-// ---- persistence -----------------------------------------------------------
-
-func (s *Store) snapshotPath() string { return filepath.Join(s.dir, "state.json") }
+// ── Persistence ───────────────────────────────────────────────────────────────
 
 func (s *Store) load() error {
-	path := s.snapshotPath()
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(s.stateFile)
 	if os.IsNotExist(err) {
 		return nil // first run
 	}
@@ -97,9 +101,6 @@ func (s *Store) load() error {
 	if snap.Secrets != nil {
 		s.secrets = snap.Secrets
 	}
-	if snap.Logs != nil {
-		s.logs = snap.Logs
-	}
 	return nil
 }
 
@@ -111,20 +112,19 @@ func (s *Store) save() error {
 		Playbooks:   s.playbooks,
 		Artifacts:   s.artifacts,
 		Secrets:     s.secrets,
-		Logs:        s.logs,
 	}
 	data, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshalling store: %w", err)
 	}
-	tmp := s.snapshotPath() + ".tmp"
+	tmp := s.stateFile + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("writing store tmp: %w", err)
 	}
-	return os.Rename(tmp, s.snapshotPath())
+	return os.Rename(tmp, s.stateFile)
 }
 
-// ---- Clients ---------------------------------------------------------------
+// ── Clients ───────────────────────────────────────────────────────────────────
 
 func (s *Store) SaveClient(c *common.Client) error {
 	s.mu.Lock()
@@ -157,7 +157,7 @@ func (s *Store) DeleteClient(id string) error {
 	return s.save()
 }
 
-// ---- Deployments -----------------------------------------------------------
+// ── Deployments ───────────────────────────────────────────────────────────────
 
 func (s *Store) SaveDeployment(d *common.DeploymentState) error {
 	s.mu.Lock()
@@ -173,8 +173,9 @@ func (s *Store) GetDeployment(id string) (*common.DeploymentState, bool) {
 	return d, ok
 }
 
-// GetDeploymentForClient returns the most recent deployment for a client.
-func (s *Store) GetDeploymentForClient(clientID string) (*common.DeploymentState, bool) {
+// GetActiveDeploymentForClient returns the most recent non-terminal deployment
+// for a client (running or rebooting), or any deployment if none is active.
+func (s *Store) GetActiveDeploymentForClient(clientID string) (*common.DeploymentState, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var latest *common.DeploymentState
@@ -199,7 +200,7 @@ func (s *Store) ListDeployments() []*common.DeploymentState {
 	return out
 }
 
-// ---- Playbooks -------------------------------------------------------------
+// ── Playbooks ─────────────────────────────────────────────────────────────────
 
 func (s *Store) SavePlaybook(p *PlaybookRecord) error {
 	s.mu.Lock()
@@ -232,7 +233,7 @@ func (s *Store) DeletePlaybook(id string) error {
 	return s.save()
 }
 
-// ---- Artifacts -------------------------------------------------------------
+// ── Artifacts ─────────────────────────────────────────────────────────────────
 
 func (s *Store) SaveArtifact(a *common.Artifact) error {
 	s.mu.Lock()
@@ -276,7 +277,7 @@ func (s *Store) DeleteArtifact(id string) error {
 	return s.save()
 }
 
-// ---- Secrets ---------------------------------------------------------------
+// ── Secrets ───────────────────────────────────────────────────────────────────
 
 func (s *Store) SetSecret(name, value string) error {
 	s.mu.Lock()
@@ -309,7 +310,8 @@ func (s *Store) DeleteSecret(name string) error {
 	return s.save()
 }
 
-// MergeSecrets bulk-imports secrets (e.g. from secrets.yml).
+// MergeSecrets bulk-imports secrets without overwriting existing entries.
+// Used on startup to seed values from secrets.yml.
 func (s *Store) MergeSecrets(m map[string]string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -319,7 +321,7 @@ func (s *Store) MergeSecrets(m map[string]string) error {
 	return s.save()
 }
 
-// AllSecrets returns a copy of all secrets; used when injecting into playbooks.
+// AllSecrets returns a copy of all secrets for injection into playbooks.
 func (s *Store) AllSecrets() map[string]string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -330,42 +332,72 @@ func (s *Store) AllSecrets() map[string]string {
 	return cp
 }
 
-// ---- Logs ------------------------------------------------------------------
+// ── Logs — per-deployment files ───────────────────────────────────────────────
 
-func (s *Store) AppendLogs(entries []*common.LogEntry) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.logs = append(s.logs, entries...)
-	return s.save()
+func (s *Store) logPath(deploymentID string) string {
+	return filepath.Join(s.logsDir, deploymentID+".json")
 }
 
-func (s *Store) GetLogsForDeployment(deploymentID string) []*common.LogEntry {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var out []*common.LogEntry
-	for _, l := range s.logs {
-		if l.DeploymentID == deploymentID {
-			out = append(out, l)
+// AppendLogs appends log entries to their respective per-deployment log files.
+// Multiple deployments in a single batch are handled correctly.
+func (s *Store) AppendLogs(entries []*common.LogEntry) error {
+	// Group by deployment ID.
+	byDep := make(map[string][]*common.LogEntry)
+	for _, e := range entries {
+		byDep[e.DeploymentID] = append(byDep[e.DeploymentID], e)
+	}
+	for depID, batch := range byDep {
+		if err := s.appendDepLogs(depID, batch); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+func (s *Store) appendDepLogs(depID string, entries []*common.LogEntry) error {
+	path := s.logPath(depID)
+	existing := s.readDepLogs(path)
+	existing = append(existing, entries...)
+	data, err := json.MarshalIndent(existing, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func (s *Store) readDepLogs(path string) []*common.LogEntry {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var out []*common.LogEntry
+	_ = json.Unmarshal(data, &out)
 	return out
 }
 
+// GetLogsForDeployment returns all log entries for a specific deployment.
+func (s *Store) GetLogsForDeployment(deploymentID string) []*common.LogEntry {
+	return s.readDepLogs(s.logPath(deploymentID))
+}
+
+// GetLogsForClient returns all log entries for every deployment of a client.
 func (s *Store) GetLogsForClient(clientID string) []*common.LogEntry {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	// Collect deployment IDs for the client.
-	depIDs := make(map[string]struct{})
+	depIDs := make([]string, 0)
 	for _, d := range s.deployments {
 		if d.ClientID == clientID {
-			depIDs[d.ID] = struct{}{}
+			depIDs = append(depIDs, d.ID)
 		}
 	}
+	s.mu.RUnlock()
+
 	var out []*common.LogEntry
-	for _, l := range s.logs {
-		if _, ok := depIDs[l.DeploymentID]; ok {
-			out = append(out, l)
-		}
+	for _, id := range depIDs {
+		out = append(out, s.readDepLogs(s.logPath(id))...)
 	}
 	return out
 }

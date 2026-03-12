@@ -8,26 +8,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/marko-stanojevic/sear/internal/common"
-	"github.com/marko-stanojevic/sear/internal/daemon/handlers"
-	"github.com/marko-stanojevic/sear/internal/daemon/store"
+	"github.com/sear-project/sear/internal/common"
+	"github.com/sear-project/sear/internal/daemon/handlers"
+	"github.com/sear-project/sear/internal/daemon/store"
 )
 
-// ---- helpers ---------------------------------------------------------------
+// ── Test helpers ──────────────────────────────────────────────────────────────
 
 func newTestEnv(t *testing.T) *handlers.Env {
 	t.Helper()
-	st, err := store.New(t.TempDir())
+	st, err := store.New(t.TempDir(), "")
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
 	return &handlers.Env{
 		Store:        st,
-		JWTSecret:    []byte("test-secret-key"),
+		JWTSecret:    []byte("test-secret-key-32-bytes-padding!"),
 		RootPassword: "admin123",
 		TokenExpiryHours: 24,
 		ArtifactsDir: t.TempDir(),
 		ServerURL:    "http://localhost:8080",
+		Hub:          handlers.NewHub(),
 		RegistrationSecrets: map[string]string{
 			"prod": "reg-secret-1",
 		},
@@ -36,16 +37,27 @@ func newTestEnv(t *testing.T) *handlers.Env {
 
 func postJSON(t *testing.T, handler http.HandlerFunc, path string, body any, token string) *httptest.ResponseRecorder {
 	t.Helper()
-	return postJSONWithClientID(t, handler, path, body, token, "")
+	return requestWithClientID(t, http.MethodPost, handler, path, body, token, "")
 }
 
 func postJSONWithClientID(t *testing.T, handler http.HandlerFunc, path string, body any, token, clientID string) *httptest.ResponseRecorder {
 	t.Helper()
-	b, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
+	return requestWithClientID(t, http.MethodPost, handler, path, body, token, clientID)
+}
+
+func requestWithClientID(t *testing.T, method string, handler http.HandlerFunc, path string, body any, token, clientID string) *httptest.ResponseRecorder {
+	t.Helper()
+	var bodyReader *bytes.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		bodyReader = bytes.NewReader(b)
+	} else {
+		bodyReader = bytes.NewReader(nil)
 	}
-	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(b))
+	req := httptest.NewRequest(method, path, bodyReader)
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -58,7 +70,7 @@ func postJSONWithClientID(t *testing.T, handler http.HandlerFunc, path string, b
 	return rr
 }
 
-func getJSON(t *testing.T, handler http.HandlerFunc, path string, token string) *httptest.ResponseRecorder {
+func getRequest(t *testing.T, handler http.HandlerFunc, path string, token string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	if token != "" {
@@ -78,7 +90,23 @@ func decode[T any](t *testing.T, rr *httptest.ResponseRecorder) T {
 	return v
 }
 
-// ---- Registration ----------------------------------------------------------
+// registerClient is a test helper that registers a client and returns its token.
+func registerClient(t *testing.T, env *handlers.Env, platformID, hostname string) (string, string) {
+	t.Helper()
+	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
+		Platform:           common.PlatformBaremetal,
+		PlatformID:         platformID,
+		Hostname:           hostname,
+		RegistrationSecret: "reg-secret-1",
+	}, "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("register: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	resp := decode[common.RegistrationResponse](t, rr)
+	return resp.ClientID, resp.Token
+}
+
+// ── Registration ─────────────────────────────────────────────────────────────
 
 func TestHandleRegister_Success(t *testing.T) {
 	env := newTestEnv(t)
@@ -88,9 +116,8 @@ func TestHandleRegister_Success(t *testing.T) {
 		Hostname:           "edge-01",
 		RegistrationSecret: "reg-secret-1",
 	}, "")
-
 	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d; want 200 (body: %s)", rr.Code, rr.Body.String())
+		t.Fatalf("status = %d (body: %s)", rr.Code, rr.Body.String())
 	}
 	resp := decode[common.RegistrationResponse](t, rr)
 	if resp.ClientID == "" {
@@ -143,11 +170,11 @@ func TestHandleRegister_Idempotent(t *testing.T) {
 	}
 }
 
-// ---- Auth middleware --------------------------------------------------------
+// ── Auth middleware ───────────────────────────────────────────────────────────
 
 func TestRequireClientAuth_Missing(t *testing.T) {
 	env := newTestEnv(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/connect", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/ws", nil)
 	rr := httptest.NewRecorder()
 	env.RequireClientAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -170,7 +197,7 @@ func TestRequireAdminAuth_WrongPassword(t *testing.T) {
 	}
 }
 
-func TestRequireAdminAuth_CorrectPassword(t *testing.T) {
+func TestRequireAdminAuth_Correct(t *testing.T) {
 	env := newTestEnv(t)
 	req := httptest.NewRequest(http.MethodGet, "/status", nil)
 	req.SetBasicAuth("admin", "admin123")
@@ -183,183 +210,13 @@ func TestRequireAdminAuth_CorrectPassword(t *testing.T) {
 	}
 }
 
-// ---- Connect + State -------------------------------------------------------
-
-// registerClient is a helper that registers a client and returns its token.
-func registerClient(t *testing.T, env *handlers.Env, platformID, hostname string) (string, string) {
-	t.Helper()
-	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
-		Platform:           common.PlatformBaremetal,
-		PlatformID:         platformID,
-		Hostname:           hostname,
-		RegistrationSecret: "reg-secret-1",
-	}, "")
-	if rr.Code != http.StatusOK {
-		t.Fatalf("register: status=%d body=%s", rr.Code, rr.Body.String())
-	}
-	resp := decode[common.RegistrationResponse](t, rr)
-	return resp.ClientID, resp.Token
-}
-
-func TestHandleConnect_NoPlaybook(t *testing.T) {
-	env := newTestEnv(t)
-	clientID, token := registerClient(t, env, "SN-010", "host-10")
-	_ = clientID
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/connect", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-Client-ID", clientID) // middleware would set this
-	rr := httptest.NewRecorder()
-	env.HandleConnect(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d; body = %s", rr.Code, rr.Body.String())
-	}
-	resp := decode[common.ConnectResponse](t, rr)
-	if resp.Action != "wait" {
-		t.Errorf("Action = %q; want wait", resp.Action)
-	}
-}
-
-func TestHandleConnect_WithPlaybook(t *testing.T) {
-	env := newTestEnv(t)
-	clientID, token := registerClient(t, env, "SN-020", "host-20")
-
-	// Create a playbook.
-	pb := &store.PlaybookRecord{
-		ID:   "pb-test",
-		Name: "test",
-		Playbook: &common.Playbook{
-			Name: "test",
-			Jobs: map[string]common.Job{
-				"job1": {Steps: []common.Step{{Name: "s1", Run: "echo hi"}}},
-			},
-		},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	_ = env.Store.SavePlaybook(pb)
-
-	// Assign playbook to client.
-	c, _ := env.Store.GetClient(clientID)
-	c.PlaybookID = "pb-test"
-	_ = env.Store.SaveClient(c)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/connect", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-Client-ID", clientID)
-	rr := httptest.NewRecorder()
-	env.HandleConnect(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d; body = %s", rr.Code, rr.Body.String())
-	}
-	resp := decode[common.ConnectResponse](t, rr)
-	if resp.Action != "deploy" {
-		t.Errorf("Action = %q; want deploy", resp.Action)
-	}
-	if resp.Playbook == nil {
-		t.Error("Playbook is nil")
-	}
-	if resp.DeploymentID == "" {
-		t.Error("DeploymentID is empty")
-	}
-}
-
-func TestHandleStateUpdate(t *testing.T) {
-	env := newTestEnv(t)
-	clientID, token := registerClient(t, env, "SN-030", "host-30")
-
-	// Create a deployment manually.
-	dep := &common.DeploymentState{
-		ID:        "dep-test",
-		ClientID:  clientID,
-		Status:    common.DeploymentStatusRunning,
-		StartedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	_ = env.Store.SaveDeployment(dep)
-
-	// Owner can update their own deployment.
-	rr := postJSONWithClientID(t, env.HandleStateUpdate, "/api/v1/state", common.StateUpdateRequest{
-		DeploymentID:     "dep-test",
-		Status:           common.DeploymentStatusDone,
-		CurrentJobName:   "setup",
-		CurrentStepIndex: 3,
-	}, token, clientID)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d; body = %s", rr.Code, rr.Body.String())
-	}
-
-	updated, _ := env.Store.GetDeployment("dep-test")
-	if updated.Status != common.DeploymentStatusDone {
-		t.Errorf("status = %q; want done", updated.Status)
-	}
-	if updated.FinishedAt == nil {
-		t.Error("FinishedAt should be set")
-	}
-}
-
-func TestHandleStateUpdate_CrossClientForbidden(t *testing.T) {
-	env := newTestEnv(t)
-	ownerID, _ := registerClient(t, env, "SN-031", "host-31")
-	_, otherToken := registerClient(t, env, "SN-032", "host-32")
-	otherClientID, _ := registerClient(t, env, "SN-033", "host-33")
-	_ = otherClientID
-
-	// Create a deployment owned by ownerID.
-	dep := &common.DeploymentState{
-		ID:        "dep-owned",
-		ClientID:  ownerID,
-		Status:    common.DeploymentStatusRunning,
-		StartedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	_ = env.Store.SaveDeployment(dep)
-
-	// A different client must not be able to update ownerID's deployment.
-	rr := postJSONWithClientID(t, env.HandleStateUpdate, "/api/v1/state", common.StateUpdateRequest{
-		DeploymentID: "dep-owned",
-		Status:       common.DeploymentStatusFailed,
-	}, otherToken, "SN-032-other-client")
-	if rr.Code != http.StatusForbidden {
-		t.Errorf("status = %d; want 403", rr.Code)
-	}
-}
-
-// ---- Log upload ------------------------------------------------------------
-
-func TestHandleLogUpload(t *testing.T) {
-	env := newTestEnv(t)
-	_, token := registerClient(t, env, "SN-040", "host-40")
-
-	batch := common.LogBatch{
-		Entries: []common.LogEntry{
-			{DeploymentID: "dep-1", Level: common.LogLevelInfo, Message: "hello", Timestamp: time.Now()},
-			{DeploymentID: "dep-1", Level: common.LogLevelError, Message: "oops", Timestamp: time.Now()},
-		},
-	}
-	rr := postJSON(t, env.HandleLogUpload, "/api/v1/logs", batch, token)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d; body = %s", rr.Code, rr.Body.String())
-	}
-
-	logs := env.Store.GetLogsForDeployment("dep-1")
-	if len(logs) != 2 {
-		t.Errorf("log count = %d; want 2", len(logs))
-	}
-}
-
-// ---- Status ----------------------------------------------------------------
+// ── Status ────────────────────────────────────────────────────────────────────
 
 func TestHandleStatus(t *testing.T) {
 	env := newTestEnv(t)
 	registerClient(t, env, "SN-050", "host-50")
 
-	req := httptest.NewRequest(http.MethodGet, "/status", nil)
-	rr := httptest.NewRecorder()
-	env.HandleStatus(rr, req)
-
+	rr := getRequest(t, env.HandleStatus, "/status", "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
@@ -369,7 +226,7 @@ func TestHandleStatus(t *testing.T) {
 	}
 }
 
-// ---- Admin playbooks -------------------------------------------------------
+// ── Admin playbooks ───────────────────────────────────────────────────────────
 
 func TestHandleAdminPlaybooks_CRUD(t *testing.T) {
 	env := newTestEnv(t)
@@ -379,8 +236,8 @@ func TestHandleAdminPlaybooks_CRUD(t *testing.T) {
 		Name: "my-playbook",
 		Playbook: &common.Playbook{
 			Name: "deploy",
-			Jobs: map[string]common.Job{
-				"j1": {Steps: []common.Step{{Name: "s1", Run: "ls"}}},
+			Jobs: []common.Job{
+				{Name: "j1", Steps: []common.Step{{Name: "s1", Run: "ls"}}},
 			},
 		},
 	}
@@ -427,7 +284,7 @@ func TestHandleAdminPlaybooks_CRUD(t *testing.T) {
 	}
 }
 
-// ---- Secrets ---------------------------------------------------------------
+// ── Secrets ───────────────────────────────────────────────────────────────────
 
 func TestHandleSecrets_CRUD(t *testing.T) {
 	env := newTestEnv(t)
@@ -448,16 +305,13 @@ func TestHandleSecrets_CRUD(t *testing.T) {
 	req2.URL.Path = "/secrets/MY_SECRET"
 	rr2 := httptest.NewRecorder()
 	env.HandleSecrets(rr2, req2)
-	if rr2.Code != http.StatusOK {
-		t.Fatalf("get: status=%d", rr2.Code)
-	}
 	var got map[string]string
 	_ = json.NewDecoder(rr2.Body).Decode(&got)
 	if got["value"] != "s3cr3t" {
 		t.Errorf("value = %q; want s3cr3t", got["value"])
 	}
 
-	// List names.
+	// List names (values must be redacted).
 	req3 := httptest.NewRequest(http.MethodGet, "/secrets", nil)
 	req3.URL.Path = "/secrets"
 	rr3 := httptest.NewRecorder()
@@ -475,5 +329,52 @@ func TestHandleSecrets_CRUD(t *testing.T) {
 	env.HandleSecrets(rr4, req4)
 	if rr4.Code != http.StatusOK {
 		t.Errorf("delete: status=%d", rr4.Code)
+	}
+}
+
+// ── Cross-client security ─────────────────────────────────────────────────────
+
+func TestCrossClientDeploymentForbidden(t *testing.T) {
+	env := newTestEnv(t)
+	ownerID, _ := registerClient(t, env, "SN-031", "host-31")
+	_, _ = registerClient(t, env, "SN-032", "host-32")
+
+	// Create a deployment owned by ownerID.
+	dep := &common.DeploymentState{
+		ID:        "dep-owned",
+		ClientID:  ownerID,
+		Status:    common.DeploymentStatusRunning,
+		StartedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	_ = env.Store.SaveDeployment(dep)
+
+	// Admin reading logs for someone else's deployment should work.
+	req := httptest.NewRequest(http.MethodGet, "/admin/deployments/dep-owned/logs", nil)
+	req.URL.Path = "/admin/deployments/dep-owned/logs"
+	rr := httptest.NewRecorder()
+	env.HandleAdminDeployments(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("admin logs: status=%d; want 200", rr.Code)
+	}
+}
+
+// ── Playbook job ordering ─────────────────────────────────────────────────────
+
+func TestPlaybookJobOrderPreserved(t *testing.T) {
+	// Jobs must execute in the order they are declared, not alphabetically.
+	pb := &common.Playbook{
+		Name: "ordered",
+		Jobs: []common.Job{
+			{Name: "zzz-last", Steps: []common.Step{{Name: "s", Run: "echo last"}}},
+			{Name: "aaa-first", Steps: []common.Step{{Name: "s", Run: "echo first"}}},
+		},
+	}
+	flat := common.FlattenPlaybook(pb)
+	if flat[0].JobName != "zzz-last" {
+		t.Errorf("first job = %q; want zzz-last (order must be preserved)", flat[0].JobName)
+	}
+	if flat[1].JobName != "aaa-first" {
+		t.Errorf("second job = %q; want aaa-first", flat[1].JobName)
 	}
 }

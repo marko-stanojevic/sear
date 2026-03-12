@@ -10,17 +10,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/sear-project/sear/internal/common"
 )
 
-// HandleArtifacts dispatches artifact CRUD + download/upload.
+// HandleArtifacts dispatches artifact CRUD and download/upload.
 //
 //	GET    /artifacts              – list artifacts
-//	GET    /artifacts/{id}         – download artifact file
-//	GET    /artifacts/{id}/meta    – get artifact metadata
-//	POST   /artifacts              – upload artifact (raw request body)
+//	GET    /artifacts/{id}         – download file (or look up by name if not UUID)
+//	GET    /artifacts/{id}/meta    – get metadata only
+//	POST   /artifacts?name=foo     – upload (raw request body)
 //	DELETE /artifacts/{id}         – delete artifact
+//
+// Uploading uses a raw request body rather than multipart to keep CLI usage
+// simple:  curl -T myapp http://daemon/artifacts?name=myapp
 func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/artifacts")
 	path = strings.TrimPrefix(path, "/")
@@ -46,10 +48,9 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, a)
 			return
 		}
-		// Download file.
+		// Download: try by ID first, then fall back to name lookup.
 		a, ok := e.Store.GetArtifact(id)
 		if !ok {
-			// Try lookup by name.
 			a, ok = e.Store.GetArtifactByName(id)
 			if !ok {
 				writeError(w, http.StatusNotFound, "artifact not found")
@@ -59,7 +60,7 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		filePath := filepath.Join(e.ArtifactsDir, a.ID, a.Filename)
 		f, err := os.Open(filePath)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "artifact file missing")
+			writeError(w, http.StatusInternalServerError, "artifact file missing on server")
 			return
 		}
 		defer f.Close()
@@ -74,21 +75,20 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		name := r.URL.Query().Get("name")
 		if name == "" {
-			writeError(w, http.StatusBadRequest, "name query parameter required")
+			writeError(w, http.StatusBadRequest, "'name' query parameter is required")
 			return
 		}
-		contentType := r.Header.Get("Content-Type")
-		if contentType == "" {
-			contentType = "application/octet-stream"
+		ct := r.Header.Get("Content-Type")
+		if ct == "" {
+			ct = "application/octet-stream"
 		}
 		artID := uuid.New().String()
 		artDir := filepath.Join(e.ArtifactsDir, artID)
 		if err := os.MkdirAll(artDir, 0o700); err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to create artifact dir")
+			writeError(w, http.StatusInternalServerError, "failed to create artifact directory")
 			return
 		}
-		filename := name
-		destPath := filepath.Join(artDir, filename)
+		destPath := filepath.Join(artDir, name)
 		f, err := os.Create(destPath)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to create artifact file")
@@ -103,9 +103,9 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		art := &common.Artifact{
 			ID:          artID,
 			Name:        name,
-			Filename:    filename,
+			Filename:    name,
 			Size:        size,
-			ContentType: contentType,
+			ContentType: ct,
 			UploadedAt:  time.Now(),
 		}
 		if err := e.Store.SaveArtifact(art); err != nil {
@@ -116,7 +116,7 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodDelete:
 		if id == "" {
-			writeError(w, http.StatusBadRequest, "artifact ID required")
+			writeError(w, http.StatusBadRequest, "artifact ID required in path")
 			return
 		}
 		a, ok := e.Store.GetArtifact(id)
@@ -124,8 +124,7 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "artifact not found")
 			return
 		}
-		artDir := filepath.Join(e.ArtifactsDir, a.ID)
-		_ = os.RemoveAll(artDir)
+		_ = os.RemoveAll(filepath.Join(e.ArtifactsDir, a.ID))
 		if err := e.Store.DeleteArtifact(id); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to delete artifact")
 			return
