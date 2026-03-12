@@ -13,6 +13,7 @@
 
 # Binaries for programs and plugins
 dist/*
+bin/*
 *.exe
 *.exe~
 *.dll
