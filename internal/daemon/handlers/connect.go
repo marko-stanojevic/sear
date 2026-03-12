@@ -321,6 +321,7 @@ const statusHTML = `<!DOCTYPE html>
   <div id="root"></div>
 </div>
 <script>
+function esc(s){const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
 const depByClient = {};
 async function load() {
   const r = await fetch('/status');
