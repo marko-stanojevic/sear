@@ -3,8 +3,8 @@ package client_test
 import (
 	"testing"
 
-	"github.com/sear-project/sear/internal/client"
-	"github.com/sear-project/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/client"
+	"github.com/marko-stanojevic/sear/internal/common"
 )
 
 func newTestClient(serverURL string) *client.Client {

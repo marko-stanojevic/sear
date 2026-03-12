@@ -12,7 +12,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/sear-project/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/common"
 )
 
 // ── JWT helpers ───────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/sear-project/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/common"
 )
 
 var wsUpgrader = websocket.Upgrader{

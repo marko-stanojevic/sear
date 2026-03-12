@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sear-project/sear/internal/daemon/handlers"
+	"github.com/marko-stanojevic/sear/internal/daemon/handlers"
 )
 
 // NewServer wires all HTTP routes and returns a ready-to-use http.Handler.

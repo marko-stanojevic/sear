@@ -6,7 +6,7 @@
 
 - **Module path**: `github.com/marko-stanojevic/sear`
 - **Language**: Go (no CGo dependencies)
-- **Key dependencies**: `gopkg.in/yaml.v3`, `github.com/golang-jwt/jwt/v5`, `github.com/google/uuid`
+- **Key dependencies**: `gopkg.in/yaml.v3`, `github.com/golang-jwt/jwt/v5`, `github.com/google/uuid`, `github.com/gorilla/websocket`
 
 ## Repository Layout
 
@@ -18,9 +18,15 @@ sear/
 ├── internal/
 │   ├── common/             # Shared types used by both daemon and client
 │   ├── daemon/
-│   │   ├── handlers/       # HTTP/gRPC request handlers for the daemon
+│   │   ├── handlers/       # HTTP and WebSocket handlers for the daemon
 │   │   └── store/          # Persistent storage layer
 │   └── client/             # Client-side logic and communication
+├── examples/
+│   ├── config.yml          # Example daemon config
+│   ├── secrets.yml         # Example daemon secrets
+│   ├── client.config.yml   # Example client config
+│   └── playbook.yml        # Example playbook
+├── .goreleaser.yml         # Release packaging config
 ├── go.mod
 ├── go.sum
 ├── .github/
@@ -39,8 +45,8 @@ go mod download
 Build both binaries:
 
 ```bash
-go build ./cmd/sear-daemon
-go build ./cmd/sear-client
+go build -o bin/sear-daemon ./cmd/sear-daemon
+go build -o bin/sear-client ./cmd/sear-client
 ```
 
 Or build everything at once:
@@ -49,18 +55,25 @@ Or build everything at once:
 go build ./...
 ```
 
+Run local examples:
+
+```bash
+go run ./cmd/sear-daemon -config examples/config.yml -secrets examples/secrets.yml
+go run ./cmd/sear-client -config examples/client.config.yml
+```
+
 ## Testing
 
 Run all tests:
 
 ```bash
-go test ./...
+go test ./... -v -count=1
 ```
 
 Run tests with verbose output and race detector:
 
 ```bash
-go test -race -v ./...
+go test ./... -race -count=1
 ```
 
 Run tests for a specific package:
@@ -83,13 +96,29 @@ If `golangci-lint` is installed, run:
 golangci-lint run ./...
 ```
 
+Tidy modules:
+
+```bash
+go mod tidy
+```
+
+## Release
+
+Local snapshot check:
+
+```bash
+go run github.com/goreleaser/goreleaser/v2@latest release --snapshot --clean --skip=validate --skip=publish
+```
+
+Release artifacts and matrix are configured in `.goreleaser.yml`.
+
 ## Code Conventions
 
 - Follow standard Go idioms and conventions (effective Go, standard library style).
 - Keep `internal/common` free of external dependencies — it holds only shared types.
 - The daemon (`cmd/sear-daemon`) is the long-running server process; the client (`cmd/sear-client`) is the short-lived CLI tool.
 - Workflow definitions use YAML (via `gopkg.in/yaml.v3`); model them after GitHub Actions syntax.
-- Authentication uses JWT (`github.com/golang-jwt/jwt/v5 v5.2.2` — use this minimum version or newer).
+- Authentication uses JWT (`github.com/golang-jwt/jwt/v5`).
 - Use `github.com/google/uuid` for generating unique IDs.
 - No CGo: keep the codebase portable and cross-compilable.
 
@@ -97,7 +126,9 @@ golangci-lint run ./...
 
 - **Workflows persist across reboots**: the storage layer (`internal/daemon/store`) is responsible for durable state.
 - **Client registration**: clients register with the daemon; the daemon assigns them identities (UUIDs) and tracks their state.
-- **Dashboard**: real-time monitoring is served by the daemon; keep handler logic in `internal/daemon/handlers`.
+- **Dashboard**: real-time monitoring is served at `/status/ui`; keep handler logic in `internal/daemon/handlers`.
+- **Auth split**: admin endpoints use HTTP Basic auth, client endpoints use JWT.
+- **Logs storage**: deployment logs are persisted per deployment in `logsDir`, not inside `state.json`.
 
 ## Trust These Instructions
 

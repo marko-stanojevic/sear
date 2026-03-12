@@ -20,10 +20,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sear-project/sear/internal/common"
-	daemon "github.com/sear-project/sear/internal/daemon"
-	"github.com/sear-project/sear/internal/daemon/handlers"
-	"github.com/sear-project/sear/internal/daemon/store"
+	"github.com/marko-stanojevic/sear/internal/common"
+	daemon "github.com/marko-stanojevic/sear/internal/daemon"
+	"github.com/marko-stanojevic/sear/internal/daemon/handlers"
+	"github.com/marko-stanojevic/sear/internal/daemon/store"
 )
 
 func main() {

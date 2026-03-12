@@ -13,8 +13,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/sear-project/sear/internal/client"
-	"github.com/sear-project/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/client"
+	"github.com/marko-stanojevic/sear/internal/common"
 )
 
 func main() {
