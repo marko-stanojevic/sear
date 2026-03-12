@@ -8,22 +8,35 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/marko-stanojevic/sear)](https://goreportcard.com/report/github.com/marko-stanojevic/sear)
 [![License](https://img.shields.io/github/license/marko-stanojevic/sear)](LICENSE)
 
-Sear is a portable client-server framework for bootstrapping edge and on-prem infrastructure with YAML workflows.
+Production-grade edge deployment automation in Go for on-prem, bare-metal, and distributed datacenter environments.
 
-The project has two binaries:
+Sear helps infrastructure teams roll out and manage repeatable deployments across remote nodes with reboot-safe execution, real-time visibility, and centralized control.
 
-- sear-daemon: central control plane (API, dashboard, artifact store, persistent state)
-- sear-client: node agent that registers, receives playbooks, executes steps, and resumes after reboot
+## Platform overview
 
-## Key capabilities
+| Component | Purpose | Core behavior |
+| --- | --- | --- |
+| sear-daemon | Central command plane | API, dashboard, artifact storage, and durable deployment state |
+| sear-client | Execution agent on each node | Registers with daemon, executes playbooks, streams logs, resumes after reboot |
+| Workflow engine | Standardized rollout model | Ordered jobs/steps, action-style operations, and secret injection |
+| Persistence layer | Operational continuity | Resume index and deployment status survive restarts/reboots |
 
-- Deterministic workflow execution using ordered jobs and steps.
-- Reboot-aware deployments: clients resume from the saved global step index.
+## Start here
+
+| For operators | For integration | For contributors |
+| --- | --- | --- |
+| [Download releases](https://github.com/marko-stanojevic/sear/releases) | [API endpoints](docs/api-endpoints.md) | [Contributing guide](CONTRIBUTING.MD) |
+| [Quick start](#quick-start) | [Playbook model](#playbook-model) | [Project docs](#documentation) |
+
+## Why teams choose sear
+
+- Deterministic rollout behavior with ordered jobs and steps.
+- Reboot-safe execution that resumes automatically from the last confirmed step.
 - Real-time deployment telemetry over WebSocket (step events and logs).
-- Artifact upload/download during workflow execution.
-- Secret injection into steps via environment variables and `${{ secrets.NAME }}` syntax.
-- Built-in status API and live status UI.
-- Portable Go implementation (no CGo required).
+- Integrated artifact distribution during workflow execution.
+- Secret-aware automation with environment injection and `${{ secrets.NAME }}` support.
+- Built-in operational visibility through status API and live UI dashboard.
+- Portable Go implementation with no CGo dependency.
 
 ## Quick start
 
