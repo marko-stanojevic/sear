@@ -52,6 +52,13 @@ func main() {
 		printBox("GENERATED ADMIN PASSWORD", "root password: "+sec.RootPassword)
 	}
 
+	// ── Registration secrets ──────────────────────────────────────────────────
+	if len(sec.RegistrationSecrets) == 0 {
+		secret := mustGenerateHex(16)
+		sec.RegistrationSecrets = map[string]string{"default": secret}
+		printBox("GENERATED REGISTRATION SECRET", "registration secret: "+secret)
+	}
+
 	// ── Ensure directories ────────────────────────────────────────────────────
 	for _, dir := range []string{cfg.DataDir, cfg.ArtifactsDir, cfg.LogsDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
