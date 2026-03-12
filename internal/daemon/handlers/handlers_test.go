@@ -22,13 +22,13 @@ func newTestEnv(t *testing.T) *handlers.Env {
 		t.Fatalf("store.New: %v", err)
 	}
 	return &handlers.Env{
-		Store:        st,
-		JWTSecret:    []byte("test-secret-key-32-bytes-padding!"),
-		RootPassword: "admin123",
+		Store:            st,
+		JWTSecret:        []byte("test-secret-key-32-bytes-padding!"),
+		RootPassword:     "admin123",
 		TokenExpiryHours: 24,
-		ArtifactsDir: t.TempDir(),
-		ServerURL:    "http://localhost:8080",
-		Hub:          handlers.NewHub(),
+		ArtifactsDir:     t.TempDir(),
+		ServerURL:        "http://localhost:8080",
+		Hub:              handlers.NewHub(),
 		RegistrationSecrets: map[string]string{
 			"prod": "reg-secret-1",
 		},
@@ -38,11 +38,6 @@ func newTestEnv(t *testing.T) *handlers.Env {
 func postJSON(t *testing.T, handler http.HandlerFunc, path string, body any, token string) *httptest.ResponseRecorder {
 	t.Helper()
 	return requestWithClientID(t, http.MethodPost, handler, path, body, token, "")
-}
-
-func postJSONWithClientID(t *testing.T, handler http.HandlerFunc, path string, body any, token, clientID string) *httptest.ResponseRecorder {
-	t.Helper()
-	return requestWithClientID(t, http.MethodPost, handler, path, body, token, clientID)
 }
 
 func requestWithClientID(t *testing.T, method string, handler http.HandlerFunc, path string, body any, token, clientID string) *httptest.ResponseRecorder {
