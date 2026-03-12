@@ -69,7 +69,16 @@ func New(dir string, logsDir string) (*Store, error) {
 		artifacts:   make(map[string]*common.Artifact),
 		secrets:     make(map[string]string),
 	}
-	return s, s.load()
+	if err := s.load(); err != nil {
+		return nil, err
+	}
+	// Create state.json on first run so it always exists.
+	if _, err := os.Stat(s.stateFile); os.IsNotExist(err) {
+		if err := s.save(); err != nil {
+			return nil, fmt.Errorf("initialising state file: %w", err)
+		}
+	}
+	return s, nil
 }
 
 // ── Persistence ───────────────────────────────────────────────────────────────

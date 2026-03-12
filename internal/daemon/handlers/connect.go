@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -317,6 +318,7 @@ const statusHTML = `<!DOCTYPE html>
   <div id="root"></div>
 </div>
 <script>
+function esc(s){const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
 const depByClient = {};
 async function load() {
   const r = await fetch('/status');
@@ -335,15 +337,15 @@ async function load() {
     return ` + "`" + `<div class="card">
       <div class="card-header">
         <div>
-          <div class="card-title">${c.hostname}</div>
-          <div class="card-sub">${c.platform} · ${c.platform_id||c.id.slice(0,8)}</div>
+          <div class="card-title">${esc(c.hostname)}</div>
+          <div class="card-sub">${esc(c.platform)} · ${esc(c.platform_id||c.id.slice(0,8))}</div>
         </div>
-        <span class="pill ${s}"><span class="dot"></span>${s}</span>
+        <span class="pill ${esc(s)}"><span class="dot"></span>${esc(s)}</span>
       </div>
-      ${dep?` + "`" + `<div class="detail">Playbook step: <span>#${dep.resume_step_index}</span></div>
-        ${dep.error_detail?'<div class="detail" style="color:#f85149">'+dep.error_detail+'</div>':''}` + "`" + `:''}
+      ${dep?` + "`" + `<div class="detail">Playbook step: <span>#${esc(dep.resume_step_index)}</span></div>
+        ${dep.error_detail?'<div class="detail" style="color:#f85149">'+esc(dep.error_detail)+'</div>':''}` + "`" + `:''}
       <div class="detail">Last seen: <span>${new Date(c.last_seen_at).toLocaleString()}</span></div>
-    </div>` + "`";
+    </div>` + "`" + `
   }).join('');
   document.getElementById('counts').textContent =
     'Clients: '+clients.length+' · Connected: '+conn+' · Deploying: '+active;
