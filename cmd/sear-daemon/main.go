@@ -96,11 +96,11 @@ func main() {
 
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
 		log.Printf("TLS enabled")
-		if err := srv.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile); err != nil {
+		if err := srv.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server: %v", err)
 		}
 	} else {
-		if err := srv.ListenAndServe(); err != nil {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server: %v", err)
 		}
 	}
