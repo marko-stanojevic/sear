@@ -1,0 +1,10 @@
+{
+    "recommendations": [
+        "golang.go",
+        "editorconfig.editorconfig",
+        "DavidAnson.vscode-markdownlint",
+        "github.vscode-github-actions",
+        "github.copilot",
+        "github.copilot-chat"
+    ]
+}
