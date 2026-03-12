@@ -374,10 +374,12 @@ async function doLogin(){
 document.getElementById('lp').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 const depByClient = {};
 async function load() {
-  const auth=authHeader();
-  if(!auth){showLogin('');return;}
-  const r = await fetch('/status',{headers:{Authorization:auth}});
-  if(r.status===401){sessionStorage.removeItem('sear_creds');showLogin('Session expired — please sign in again');return;}
+  const r = await fetch('/status');
+  if (r.status === 401) {
+    const root = document.getElementById('root');
+    root.innerHTML = '<div class="empty">Unauthorized. Reload the page to sign in.</div>';
+    return;
+  }
   const d = await r.json();
   const deps = {};
   (d.deployments||[]).forEach(dep => { deps[dep.client_id] = dep; });
