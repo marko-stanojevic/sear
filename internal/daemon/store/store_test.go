@@ -1,0 +1,297 @@
+package store_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/daemon/store"
+)
+
+func newTestStore(t *testing.T) *store.Store {
+	t.Helper()
+	s, err := store.New(t.TempDir())
+	if err != nil {
+		t.Fatalf("store.New: %v", err)
+	}
+	return s
+}
+
+// ---- Clients ---------------------------------------------------------------
+
+func TestClientCRUD(t *testing.T) {
+	s := newTestStore(t)
+
+	c := &common.Client{
+		ID:           "client-1",
+		Hostname:     "edge-01",
+		Platform:     common.PlatformBaremetal,
+		PlatformID:   "SN-12345",
+		Status:       common.ClientStatusRegistered,
+		RegisteredAt: time.Now(),
+		LastSeenAt:   time.Now(),
+	}
+	if err := s.SaveClient(c); err != nil {
+		t.Fatalf("SaveClient: %v", err)
+	}
+
+	got, ok := s.GetClient("client-1")
+	if !ok {
+		t.Fatal("GetClient: not found")
+	}
+	if got.Hostname != "edge-01" {
+		t.Errorf("Hostname = %q; want edge-01", got.Hostname)
+	}
+
+	list := s.ListClients()
+	if len(list) != 1 {
+		t.Errorf("ListClients len = %d; want 1", len(list))
+	}
+
+	if err := s.DeleteClient("client-1"); err != nil {
+		t.Fatalf("DeleteClient: %v", err)
+	}
+	_, ok = s.GetClient("client-1")
+	if ok {
+		t.Error("expected client to be deleted")
+	}
+}
+
+// ---- Deployments -----------------------------------------------------------
+
+func TestDeploymentCRUD(t *testing.T) {
+	s := newTestStore(t)
+
+	d := &common.DeploymentState{
+		ID:               "dep-1",
+		ClientID:         "client-1",
+		PlaybookID:       "pb-1",
+		Status:           common.DeploymentStatusRunning,
+		CurrentJobName:   "setup",
+		CurrentStepIndex: 2,
+		StartedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+	if err := s.SaveDeployment(d); err != nil {
+		t.Fatalf("SaveDeployment: %v", err)
+	}
+
+	got, ok := s.GetDeployment("dep-1")
+	if !ok {
+		t.Fatal("GetDeployment: not found")
+	}
+	if got.CurrentStepIndex != 2 {
+		t.Errorf("CurrentStepIndex = %d; want 2", got.CurrentStepIndex)
+	}
+
+	dep, ok := s.GetDeploymentForClient("client-1")
+	if !ok {
+		t.Fatal("GetDeploymentForClient: not found")
+	}
+	if dep.ID != "dep-1" {
+		t.Errorf("deployment ID = %q; want dep-1", dep.ID)
+	}
+
+	list := s.ListDeployments()
+	if len(list) != 1 {
+		t.Errorf("ListDeployments len = %d; want 1", len(list))
+	}
+}
+
+// ---- Playbooks -------------------------------------------------------------
+
+func TestPlaybookCRUD(t *testing.T) {
+	s := newTestStore(t)
+
+	pb := &store.PlaybookRecord{
+		ID:   "pb-1",
+		Name: "test",
+		Playbook: &common.Playbook{
+			Name: "test-playbook",
+			Jobs: map[string]common.Job{
+				"setup": {
+					Steps: []common.Step{
+						{Name: "Install", Run: "echo hi"},
+					},
+				},
+			},
+		},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := s.SavePlaybook(pb); err != nil {
+		t.Fatalf("SavePlaybook: %v", err)
+	}
+
+	got, ok := s.GetPlaybook("pb-1")
+	if !ok {
+		t.Fatal("GetPlaybook: not found")
+	}
+	if got.Playbook.Name != "test-playbook" {
+		t.Errorf("Playbook.Name = %q; want test-playbook", got.Playbook.Name)
+	}
+
+	list := s.ListPlaybooks()
+	if len(list) != 1 {
+		t.Errorf("ListPlaybooks len = %d; want 1", len(list))
+	}
+
+	if err := s.DeletePlaybook("pb-1"); err != nil {
+		t.Fatalf("DeletePlaybook: %v", err)
+	}
+	_, ok = s.GetPlaybook("pb-1")
+	if ok {
+		t.Error("expected playbook to be deleted")
+	}
+}
+
+// ---- Artifacts -------------------------------------------------------------
+
+func TestArtifactCRUD(t *testing.T) {
+	s := newTestStore(t)
+
+	a := &common.Artifact{
+		ID:         "art-1",
+		Name:       "myapp",
+		Filename:   "myapp.tar.gz",
+		Size:       1024,
+		UploadedAt: time.Now(),
+	}
+	if err := s.SaveArtifact(a); err != nil {
+		t.Fatalf("SaveArtifact: %v", err)
+	}
+
+	got, ok := s.GetArtifact("art-1")
+	if !ok {
+		t.Fatal("GetArtifact: not found")
+	}
+	if got.Filename != "myapp.tar.gz" {
+		t.Errorf("Filename = %q; want myapp.tar.gz", got.Filename)
+	}
+
+	byName, ok := s.GetArtifactByName("myapp")
+	if !ok {
+		t.Fatal("GetArtifactByName: not found")
+	}
+	if byName.ID != "art-1" {
+		t.Errorf("ID = %q; want art-1", byName.ID)
+	}
+
+	if err := s.DeleteArtifact("art-1"); err != nil {
+		t.Fatalf("DeleteArtifact: %v", err)
+	}
+}
+
+// ---- Secrets ---------------------------------------------------------------
+
+func TestSecrets(t *testing.T) {
+	s := newTestStore(t)
+
+	if err := s.SetSecret("DB_PASS", "hunter2"); err != nil {
+		t.Fatalf("SetSecret: %v", err)
+	}
+
+	val, ok := s.GetSecret("DB_PASS")
+	if !ok {
+		t.Fatal("GetSecret: not found")
+	}
+	if val != "hunter2" {
+		t.Errorf("value = %q; want hunter2", val)
+	}
+
+	names := s.ListSecretNames()
+	if len(names) != 1 || names[0] != "DB_PASS" {
+		t.Errorf("ListSecretNames = %v; want [DB_PASS]", names)
+	}
+
+	all := s.AllSecrets()
+	if all["DB_PASS"] != "hunter2" {
+		t.Errorf("AllSecrets[DB_PASS] = %q; want hunter2", all["DB_PASS"])
+	}
+
+	if err := s.DeleteSecret("DB_PASS"); err != nil {
+		t.Fatalf("DeleteSecret: %v", err)
+	}
+	_, ok = s.GetSecret("DB_PASS")
+	if ok {
+		t.Error("expected secret to be deleted")
+	}
+}
+
+func TestMergeSecrets(t *testing.T) {
+	s := newTestStore(t)
+	m := map[string]string{"A": "1", "B": "2"}
+	if err := s.MergeSecrets(m); err != nil {
+		t.Fatalf("MergeSecrets: %v", err)
+	}
+	if v, _ := s.GetSecret("A"); v != "1" {
+		t.Errorf("A = %q; want 1", v)
+	}
+}
+
+// ---- Logs ------------------------------------------------------------------
+
+func TestLogs(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now()
+
+	// Save a deployment so GetLogsForClient works.
+	_ = s.SaveDeployment(&common.DeploymentState{
+		ID:        "dep-1",
+		ClientID:  "client-1",
+		StartedAt: now,
+		UpdatedAt: now,
+	})
+
+	entries := []*common.LogEntry{
+		{DeploymentID: "dep-1", Level: common.LogLevelInfo, Message: "hello", Timestamp: now},
+		{DeploymentID: "dep-2", Level: common.LogLevelError, Message: "other", Timestamp: now},
+	}
+	if err := s.AppendLogs(entries); err != nil {
+		t.Fatalf("AppendLogs: %v", err)
+	}
+
+	dep1Logs := s.GetLogsForDeployment("dep-1")
+	if len(dep1Logs) != 1 {
+		t.Errorf("GetLogsForDeployment(dep-1) len = %d; want 1", len(dep1Logs))
+	}
+
+	clientLogs := s.GetLogsForClient("client-1")
+	if len(clientLogs) != 1 {
+		t.Errorf("GetLogsForClient(client-1) len = %d; want 1", len(clientLogs))
+	}
+}
+
+// ---- Persistence -----------------------------------------------------------
+
+func TestPersistence(t *testing.T) {
+	dir := t.TempDir()
+
+	s1, err := store.New(dir)
+	if err != nil {
+		t.Fatalf("store.New: %v", err)
+	}
+	_ = s1.SaveClient(&common.Client{
+		ID:       "c1",
+		Hostname: "host-1",
+		Status:   common.ClientStatusRegistered,
+	})
+	_ = s1.SetSecret("K", "V")
+
+	// Reopen the store and verify data was persisted.
+	s2, err := store.New(dir)
+	if err != nil {
+		t.Fatalf("store.New (reopen): %v", err)
+	}
+	c, ok := s2.GetClient("c1")
+	if !ok {
+		t.Fatal("client not found after reopen")
+	}
+	if c.Hostname != "host-1" {
+		t.Errorf("Hostname = %q after reopen; want host-1", c.Hostname)
+	}
+	v, ok := s2.GetSecret("K")
+	if !ok || v != "V" {
+		t.Errorf("secret after reopen: ok=%v val=%q", ok, v)
+	}
+}

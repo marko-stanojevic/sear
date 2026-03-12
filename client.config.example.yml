@@ -1,0 +1,24 @@
+# sear-client configuration file (config.yml)
+# Copy this file to config.yml on the client machine and adjust values.
+
+# URL of the sear-daemon server.
+server_url: "http://sear-daemon:8080"
+
+# Registration secret.  Must match one of the values in the daemon's
+# secrets.yml → registration_secrets map.
+registration_secret: "your-baremetal-secret-here"
+
+# Platform hint.  Set to "auto" to let the client detect the platform
+# automatically (checks for Azure IMDS, AWS instance-id, GCP metadata, or
+# falls back to "baremetal").
+# Valid values: auto | baremetal | azure | aws | gcp | custom
+platform: "auto"
+
+# Path where the client stores its own state for reboot resumption.
+state_file: "/var/lib/sear/state.json"
+
+# How often (in seconds) the client polls /api/v1/connect for new instructions.
+poll_interval_seconds: 10
+
+# Maximum number of log lines sent in a single /api/v1/logs request.
+log_batch_size: 100
