@@ -1,11 +1,8 @@
-// sear-client is the deployment client component of the Sear framework.
-//
-// It registers with the sear-daemon, polls for playbook instructions,
-// executes steps, and persists state across reboots.
+// Command sear-client is the sear deployment agent.
 //
 // Usage:
 //
-//	sear-client [--config config.yml]
+//	sear-client -config /etc/sear/client.config.yml
 package main
 
 import (
@@ -16,44 +13,33 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/marko-stanojevic/sear/internal/client"
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/sear-project/sear/internal/client"
+	"github.com/sear-project/sear/internal/common"
 )
 
 func main() {
-	configPath := flag.String("config", "config.yml", "path to client config file")
+	configPath := flag.String("config", "client.config.yml", "path to client config file")
 	flag.Parse()
 
-	cfg, err := loadConfig(*configPath)
+	cfg, err := common.LoadClientConfig(*configPath)
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
+
 	if cfg.ServerURL == "" {
-		log.Fatal("server_url must be set in config.yml")
+		log.Fatal("config: server_url is required")
+	}
+	if cfg.RegistrationSecret == "" {
+		log.Fatal("config: registration_secret is required")
 	}
 
-	c := client.New(cfg)
-
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	go func() {
-		ch := make(chan os.Signal, 1)
-		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-		<-ch
-		log.Println("shutting down client...")
-		cancel()
-	}()
-
+	c := client.New(cfg)
 	if err := c.Run(ctx); err != nil && err != context.Canceled {
 		log.Fatalf("client: %v", err)
 	}
-}
-
-func loadConfig(path string) (*common.ClientConfig, error) {
-	cfg, err := common.LoadClientConfig(path)
-	if os.IsNotExist(err) {
-		return &common.ClientConfig{}, nil
-	}
-	return cfg, err
+	log.Println("sear-client stopped")
+	os.Exit(0)
 }

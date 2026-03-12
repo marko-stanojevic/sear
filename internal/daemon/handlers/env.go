@@ -1,0 +1,141 @@
+// Package handlers implements all HTTP and WebSocket handlers for the sear daemon.
+package handlers
+
+import (
+	"encoding/json"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/sear-project/sear/internal/common"
+	"github.com/sear-project/sear/internal/daemon/store"
+)
+
+// Env bundles the dependencies shared by all handlers.
+type Env struct {
+	Store               *store.Store
+	JWTSecret           []byte
+	RootPassword        string
+	TokenExpiryHours    int
+	ArtifactsDir        string
+	ServerURL           string
+	RegistrationSecrets map[string]string // name→value from secrets.yml
+	Hub                 *Hub
+}
+
+// ── WebSocket Hub ─────────────────────────────────────────────────────────────
+
+// Hub manages all active WebSocket connections.
+type Hub struct {
+	mu    sync.RWMutex
+	conns map[string]*wsConn // clientID → connection
+}
+
+// wsConn wraps a single client WebSocket connection with an outbound queue.
+type wsConn struct {
+	clientID string
+	ws       *websocket.Conn
+	send     chan []byte
+	done     chan struct{}
+}
+
+// NewHub creates an empty Hub.
+func NewHub() *Hub {
+	return &Hub{conns: make(map[string]*wsConn)}
+}
+
+// register adds (or replaces) the connection for a client.
+func (h *Hub) register(conn *wsConn) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if old, ok := h.conns[conn.clientID]; ok {
+		close(old.done)
+		_ = old.ws.Close()
+	}
+	h.conns[conn.clientID] = conn
+}
+
+// unregister removes the connection for a client.
+func (h *Hub) unregister(clientID string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.conns, clientID)
+}
+
+// IsConnected reports whether a client has an open WebSocket connection.
+func (h *Hub) IsConnected(clientID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	_, ok := h.conns[clientID]
+	return ok
+}
+
+// Send queues a message for the named client. Returns false if not connected.
+func (h *Hub) Send(clientID string, msg common.WSMessage) bool {
+	h.mu.RLock()
+	conn, ok := h.conns[clientID]
+	h.mu.RUnlock()
+	if !ok {
+		return false
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return false
+	}
+	select {
+	case conn.send <- data:
+		return true
+	default:
+		return false
+	}
+}
+
+// newWSConn creates a wsConn and starts its write pump goroutine.
+func newWSConn(clientID string, ws *websocket.Conn) *wsConn {
+	c := &wsConn{
+		clientID: clientID,
+		ws:       ws,
+		send:     make(chan []byte, 64),
+		done:     make(chan struct{}),
+	}
+	go c.writePump()
+	return c
+}
+
+func (c *wsConn) writePump() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case data, ok := <-c.send:
+			c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if !ok {
+				c.ws.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			if err := c.ws.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+		case <-ticker.C:
+			c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+		case <-c.done:
+			return
+		}
+	}
+}
+
+// ── JSON / HTTP helpers ───────────────────────────────────────────────────────
+
+func writeJSON(w http.ResponseWriter, code int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, code int, msg string) {
+	writeJSON(w, code, map[string]string{"error": msg})
+}

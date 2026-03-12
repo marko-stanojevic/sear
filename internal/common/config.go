@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ---- Daemon config (config.yml) --------------------------------------------
+// ── Daemon config (config.yml) ────────────────────────────────────────────────
 
 // DaemonConfig is the main daemon configuration file.
 type DaemonConfig struct {
@@ -19,66 +19,76 @@ type DaemonConfig struct {
 	DataDir string `yaml:"data_dir"`
 
 	// ArtifactsDir is the directory where uploaded artifacts are stored.
+	// Defaults to DataDir/artifacts when empty.
 	ArtifactsDir string `yaml:"artifacts_dir"`
 
-	// LogsDir is the directory where client logs are stored.
+	// LogsDir is the directory where per-deployment log files are stored.
+	// Defaults to DataDir/logs when empty.
 	LogsDir string `yaml:"logs_dir"`
 
 	// TLSCertFile and TLSKeyFile enable TLS when both are set.
 	TLSCertFile string `yaml:"tls_cert_file"`
 	TLSKeyFile  string `yaml:"tls_key_file"`
 
-	// JWTSecret is used to sign client tokens.  If empty, a random secret is
-	// generated on startup.
+	// JWTSecret is used to sign client tokens.
+	// If empty, a random secret is generated on startup.
 	JWTSecret string `yaml:"jwt_secret"`
 
-	// TokenExpiry is the JWT token expiry in hours (default 720 = 30 days).
+	// TokenExpiryHours is the JWT token lifetime in hours (default 720 = 30 days).
 	TokenExpiryHours int `yaml:"token_expiry_hours"`
 }
 
-// ---- Daemon secrets (secrets.yml) ------------------------------------------
+// ── Daemon secrets (secrets.yml) ─────────────────────────────────────────────
 
 // DaemonSecrets holds sensitive configuration loaded from secrets.yml.
 type DaemonSecrets struct {
-	// RootPassword is used to authenticate admin API calls.
+	// RootPassword authenticates admin API calls.
 	// If empty, a random password is generated on startup and printed.
 	RootPassword string `yaml:"root_password"`
 
-	// RegistrationSecrets is a map of secret-name → secret-value.
-	// Clients must present one of these values during registration.
+	// RegistrationSecrets maps a friendly name to the pre-shared secret value.
+	// Clients must present one of these values during /api/v1/register.
+	// Using named entries lets operators manage secrets independently
+	// (e.g., rotate a single datacenter's PSK without touching others).
 	RegistrationSecrets map[string]string `yaml:"registration_secrets"`
 
-	// ClientSecrets are injected into playbooks as environment variables.
+	// ClientSecrets are named key/value pairs injected into playbooks via
+	// ${{ secrets.NAME }} syntax.
 	ClientSecrets map[string]string `yaml:"client_secrets"`
 }
 
-// ---- Client config (config.yml) --------------------------------------------
+// ── Client config (client.config.yml) ────────────────────────────────────────
 
-// ClientConfig is the configuration file used by the sear-client.
+// ClientConfig is the configuration file used by sear-client.
 type ClientConfig struct {
 	// ServerURL is the base URL of the sear-daemon (e.g. "http://sear:8080").
 	ServerURL string `yaml:"server_url"`
 
-	// RegistrationSecret must match one of the daemon's registration_secrets.
+	// RegistrationSecret must match one of the daemon's registration_secrets values.
 	RegistrationSecret string `yaml:"registration_secret"`
 
-	// Platform hint; when "auto" (default) the client auto-detects.
+	// Platform hint: baremetal | aws | azure | gcp | custom | auto (default).
+	// When "auto", the client detects the platform from the environment.
 	Platform string `yaml:"platform"`
 
-	// StateFile is the path where the client persists its own state so that
-	// it can resume after a reboot (default "/var/lib/sear/state.json").
+	// StateFile is where the client persists its token and resume position
+	// so that deployment can be resumed after a reboot.
+	// Default: /var/lib/sear/state.json (Linux), C:\ProgramData\sear\state.json (Windows).
 	StateFile string `yaml:"state_file"`
 
-	// PollIntervalSeconds is how often the client polls /api/v1/connect
-	// (default 10).
-	PollIntervalSeconds int `yaml:"poll_interval_seconds"`
+	// WorkDir is the directory where shell steps are executed.
+	WorkDir string `yaml:"work_dir"`
 
-	// LogBatchSize is the maximum number of log lines sent per request
-	// (default 100).
+	// ReconnectIntervalSeconds is how long the client waits before retrying
+	// a failed WebSocket connection (default 10).
+	ReconnectIntervalSeconds int `yaml:"reconnect_interval_seconds"`
+
+	// LogBatchSize is the maximum number of log lines buffered before a
+	// forced flush (default 100).
 	LogBatchSize int `yaml:"log_batch_size"`
 }
 
-// ---- Loader helpers --------------------------------------------------------
+// ── Generic YAML loader ───────────────────────────────────────────────────────
 
 // LoadDaemonConfig reads and unmarshals a DaemonConfig from path.
 func LoadDaemonConfig(path string) (*DaemonConfig, error) {

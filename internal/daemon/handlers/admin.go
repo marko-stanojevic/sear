@@ -7,44 +7,39 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/marko-stanojevic/sear/internal/common"
-	"github.com/marko-stanojevic/sear/internal/daemon/store"
+	"github.com/sear-project/sear/internal/common"
+	"github.com/sear-project/sear/internal/daemon/store"
 )
 
-// ---- /status ---------------------------------------------------------------
+// ── GET /status ───────────────────────────────────────────────────────────────
 
-// StatusResponse is the payload returned by GET /status.
+// StatusResponse is returned by GET /status (JSON) and GET /status/ui (rendered).
 type StatusResponse struct {
 	Clients     []*common.Client          `json:"clients"`
 	Deployments []*common.DeploymentState `json:"deployments"`
 }
 
-// HandleStatus processes GET /status.
-func (e *Env) HandleStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	writeJSON(w, http.StatusOK, StatusResponse{
-		Clients:     e.Store.ListClients(),
-		Deployments: e.Store.ListDeployments(),
-	})
-}
+// ── /admin/playbooks ──────────────────────────────────────────────────────────
 
-// ---- /admin/playbooks -------------------------------------------------------
-
-// HandleAdminPlaybooks dispatches CRUD operations on playbooks.
+// HandleAdminPlaybooks dispatches CRUD on playbooks.
 //
-//	GET    /admin/playbooks          – list all
-//	POST   /admin/playbooks          – create
-//	GET    /admin/playbooks/{id}     – get one
-//	PUT    /admin/playbooks/{id}     – update
-//	DELETE /admin/playbooks/{id}     – delete
+//	GET    /admin/playbooks              – list all
+//	POST   /admin/playbooks              – create
+//	GET    /admin/playbooks/{id}         – get one
+//	PUT    /admin/playbooks/{id}         – update
+//	DELETE /admin/playbooks/{id}         – delete
+//	POST   /admin/playbooks/{id}/assign  – assign to a client (pushes immediately
+//	                                       if client is connected via WebSocket)
 func (e *Env) HandleAdminPlaybooks(w http.ResponseWriter, r *http.Request) {
-	// Extract optional ID from path.
-	id := strings.TrimPrefix(r.URL.Path, "/admin/playbooks")
-	id = strings.TrimPrefix(id, "/")
+	// Strip prefix to isolate the path tail.
+	tail := strings.TrimPrefix(r.URL.Path, "/admin/playbooks")
+	tail = strings.TrimPrefix(tail, "/")
+	parts := strings.SplitN(tail, "/", 2)
+	id := parts[0]
+	sub := ""
+	if len(parts) == 2 {
+		sub = parts[1]
+	}
 
 	switch r.Method {
 	case http.MethodGet:
@@ -60,6 +55,10 @@ func (e *Env) HandleAdminPlaybooks(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, pb)
 
 	case http.MethodPost:
+		if id != "" && sub == "assign" {
+			e.assignPlaybook(w, r, id)
+			return
+		}
 		var rec store.PlaybookRecord
 		if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
@@ -67,6 +66,10 @@ func (e *Env) HandleAdminPlaybooks(w http.ResponseWriter, r *http.Request) {
 		}
 		if rec.Playbook == nil {
 			writeError(w, http.StatusBadRequest, "playbook field is required")
+			return
+		}
+		if len(rec.Playbook.Jobs) == 0 {
+			writeError(w, http.StatusBadRequest, "playbook must contain at least one job")
 			return
 		}
 		rec.ID = uuid.New().String()
@@ -118,17 +121,49 @@ func (e *Env) HandleAdminPlaybooks(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ---- /admin/clients --------------------------------------------------------
+// assignPlaybook assigns a playbook to a client and immediately pushes it
+// if the client is connected via WebSocket.
+func (e *Env) assignPlaybook(w http.ResponseWriter, r *http.Request, playbookID string) {
+	var body struct {
+		ClientID string `json:"client_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	client, ok := e.Store.GetClient(body.ClientID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "client not found")
+		return
+	}
+	if _, ok := e.Store.GetPlaybook(playbookID); !ok {
+		writeError(w, http.StatusNotFound, "playbook not found")
+		return
+	}
+	client.PlaybookID = playbookID
+	if err := e.Store.SaveClient(client); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save client")
+		return
+	}
+	// If the client is connected via WebSocket, push the playbook now.
+	if e.Hub.IsConnected(body.ClientID) {
+		e.pushPlaybookIfAssigned(body.ClientID)
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "assigned"})
+}
 
-// HandleAdminClients dispatches CRUD operations on clients.
+// ── /admin/clients ────────────────────────────────────────────────────────────
+
+// HandleAdminClients dispatches CRUD on clients.
 //
 //	GET    /admin/clients          – list all
 //	GET    /admin/clients/{id}     – get one
-//	PUT    /admin/clients/{id}     – update (e.g. assign playbook)
+//	PUT    /admin/clients/{id}     – update (e.g. assign playbook, set status)
 //	DELETE /admin/clients/{id}     – delete
 func (e *Env) HandleAdminClients(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/admin/clients")
-	id = strings.TrimPrefix(id, "/")
+	tail := strings.TrimPrefix(r.URL.Path, "/admin/clients")
+	tail = strings.TrimPrefix(tail, "/")
+	id := tail
 
 	switch r.Method {
 	case http.MethodGet:
@@ -189,8 +224,13 @@ func (e *Env) HandleAdminClients(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleAdminDeployments handles GET /admin/deployments and
-// GET /admin/deployments/{id}/logs.
+// ── /admin/deployments ────────────────────────────────────────────────────────
+
+// HandleAdminDeployments lists deployments and exposes per-deployment logs.
+//
+//	GET /admin/deployments              – list all
+//	GET /admin/deployments/{id}         – get one
+//	GET /admin/deployments/{id}/logs    – get logs for deployment
 func (e *Env) HandleAdminDeployments(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -206,8 +246,7 @@ func (e *Env) HandleAdminDeployments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 2 && parts[1] == "logs" {
-		logs := e.Store.GetLogsForDeployment(id)
-		writeJSON(w, http.StatusOK, logs)
+		writeJSON(w, http.StatusOK, e.Store.GetLogsForDeployment(id))
 		return
 	}
 	dep, ok := e.Store.GetDeployment(id)

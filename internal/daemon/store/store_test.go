@@ -1,23 +1,25 @@
 package store_test
 
 import (
+	"os"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/marko-stanojevic/sear/internal/common"
-	"github.com/marko-stanojevic/sear/internal/daemon/store"
+	"github.com/sear-project/sear/internal/common"
+	"github.com/sear-project/sear/internal/daemon/store"
 )
 
 func newTestStore(t *testing.T) *store.Store {
 	t.Helper()
-	s, err := store.New(t.TempDir())
+	s, err := store.New(t.TempDir(), "")
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
 	return s
 }
 
-// ---- Clients ---------------------------------------------------------------
+// ── Clients ───────────────────────────────────────────────────────────────────
 
 func TestClientCRUD(t *testing.T) {
 	s := newTestStore(t)
@@ -57,20 +59,19 @@ func TestClientCRUD(t *testing.T) {
 	}
 }
 
-// ---- Deployments -----------------------------------------------------------
+// ── Deployments ───────────────────────────────────────────────────────────────
 
 func TestDeploymentCRUD(t *testing.T) {
 	s := newTestStore(t)
 
 	d := &common.DeploymentState{
-		ID:               "dep-1",
-		ClientID:         "client-1",
-		PlaybookID:       "pb-1",
-		Status:           common.DeploymentStatusRunning,
-		CurrentJobName:   "setup",
-		CurrentStepIndex: 2,
-		StartedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		ID:              "dep-1",
+		ClientID:        "client-1",
+		PlaybookID:      "pb-1",
+		Status:          common.DeploymentStatusRunning,
+		ResumeStepIndex: 2,
+		StartedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 	if err := s.SaveDeployment(d); err != nil {
 		t.Fatalf("SaveDeployment: %v", err)
@@ -80,13 +81,13 @@ func TestDeploymentCRUD(t *testing.T) {
 	if !ok {
 		t.Fatal("GetDeployment: not found")
 	}
-	if got.CurrentStepIndex != 2 {
-		t.Errorf("CurrentStepIndex = %d; want 2", got.CurrentStepIndex)
+	if got.ResumeStepIndex != 2 {
+		t.Errorf("ResumeStepIndex = %d; want 2", got.ResumeStepIndex)
 	}
 
-	dep, ok := s.GetDeploymentForClient("client-1")
+	dep, ok := s.GetActiveDeploymentForClient("client-1")
 	if !ok {
-		t.Fatal("GetDeploymentForClient: not found")
+		t.Fatal("GetActiveDeploymentForClient: not found")
 	}
 	if dep.ID != "dep-1" {
 		t.Errorf("deployment ID = %q; want dep-1", dep.ID)
@@ -98,7 +99,7 @@ func TestDeploymentCRUD(t *testing.T) {
 	}
 }
 
-// ---- Playbooks -------------------------------------------------------------
+// ── Playbooks ─────────────────────────────────────────────────────────────────
 
 func TestPlaybookCRUD(t *testing.T) {
 	s := newTestStore(t)
@@ -108,12 +109,10 @@ func TestPlaybookCRUD(t *testing.T) {
 		Name: "test",
 		Playbook: &common.Playbook{
 			Name: "test-playbook",
-			Jobs: map[string]common.Job{
-				"setup": {
-					Steps: []common.Step{
-						{Name: "Install", Run: "echo hi"},
-					},
-				},
+			Jobs: []common.Job{
+				{Name: "setup", Steps: []common.Step{
+					{Name: "Install", Run: "echo hi"},
+				}},
 			},
 		},
 		CreatedAt: time.Now(),
@@ -130,6 +129,9 @@ func TestPlaybookCRUD(t *testing.T) {
 	if got.Playbook.Name != "test-playbook" {
 		t.Errorf("Playbook.Name = %q; want test-playbook", got.Playbook.Name)
 	}
+	if len(got.Playbook.Jobs) != 1 || got.Playbook.Jobs[0].Name != "setup" {
+		t.Errorf("unexpected jobs: %+v", got.Playbook.Jobs)
+	}
 
 	list := s.ListPlaybooks()
 	if len(list) != 1 {
@@ -145,7 +147,7 @@ func TestPlaybookCRUD(t *testing.T) {
 	}
 }
 
-// ---- Artifacts -------------------------------------------------------------
+// ── Artifacts ─────────────────────────────────────────────────────────────────
 
 func TestArtifactCRUD(t *testing.T) {
 	s := newTestStore(t)
@@ -182,7 +184,7 @@ func TestArtifactCRUD(t *testing.T) {
 	}
 }
 
-// ---- Secrets ---------------------------------------------------------------
+// ── Secrets ───────────────────────────────────────────────────────────────────
 
 func TestSecrets(t *testing.T) {
 	s := newTestStore(t)
@@ -229,13 +231,12 @@ func TestMergeSecrets(t *testing.T) {
 	}
 }
 
-// ---- Logs ------------------------------------------------------------------
+// ── Logs — per-deployment files ───────────────────────────────────────────────
 
 func TestLogs(t *testing.T) {
 	s := newTestStore(t)
 	now := time.Now()
 
-	// Save a deployment so GetLogsForClient works.
 	_ = s.SaveDeployment(&common.DeploymentState{
 		ID:        "dep-1",
 		ClientID:  "client-1",
@@ -262,12 +263,12 @@ func TestLogs(t *testing.T) {
 	}
 }
 
-// ---- Persistence -----------------------------------------------------------
+// ── Persistence ───────────────────────────────────────────────────────────────
 
 func TestPersistence(t *testing.T) {
 	dir := t.TempDir()
 
-	s1, err := store.New(dir)
+	s1, err := store.New(dir, "")
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
@@ -278,8 +279,8 @@ func TestPersistence(t *testing.T) {
 	})
 	_ = s1.SetSecret("K", "V")
 
-	// Reopen the store and verify data was persisted.
-	s2, err := store.New(dir)
+	// Reopen and verify.
+	s2, err := store.New(dir, "")
 	if err != nil {
 		t.Fatalf("store.New (reopen): %v", err)
 	}
@@ -293,5 +294,23 @@ func TestPersistence(t *testing.T) {
 	v, ok := s2.GetSecret("K")
 	if !ok || v != "V" {
 		t.Errorf("secret after reopen: ok=%v val=%q", ok, v)
+	}
+}
+
+func TestLogsNotInStateFile(t *testing.T) {
+	// Verify that logs are stored in separate files, not inflating state.json.
+	dir := t.TempDir()
+	s, _ := store.New(dir, "")
+	now := time.Now()
+	_ = s.AppendLogs([]*common.LogEntry{
+		{DeploymentID: "dep-x", Level: common.LogLevelInfo, Message: "sentinellogline", Timestamp: now},
+	})
+
+	data, err := os.ReadFile(dir + "/state.json")
+	if err != nil {
+		t.Fatalf("reading state.json: %v", err)
+	}
+	if strings.Contains(string(data), "sentinellogline") {
+		t.Error("state.json must not contain log entries")
 	}
 }

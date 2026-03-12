@@ -1,0 +1,96 @@
+# Example sear playbook
+# Jobs execute in the order listed (not alphabetically — list order is preserved).
+
+name: "Production App Deployment"
+
+# Playbook-level environment variables (available in all steps).
+env:
+  APP_VERSION: "3.1.0"
+  DEPLOY_ENV:  "production"
+
+jobs:
+  # ── Phase 1: OS preparation ────────────────────────────────────────────────
+  - name: "os-prep"
+    steps:
+      - name: "Install dependencies"
+        shell: bash
+        timeout-minutes: 15
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends nginx curl jq
+
+      - name: "Configure sysctl"
+        shell: bash
+        run: |
+          echo "vm.swappiness=10"          >> /etc/sysctl.d/99-sear.conf
+          echo "net.core.somaxconn=65535"  >> /etc/sysctl.d/99-sear.conf
+
+      - name: "Reboot to apply kernel settings"
+        uses: reboot
+        with:
+          reason: "Apply sysctl and kernel parameters"
+
+  # ── Phase 2: Application install (resumes here after reboot) ──────────────
+  - name: "app-install"
+    steps:
+      - name: "Download application binary"
+        uses: download-artifact
+        with:
+          artifact: "myapp-v3.1.0"
+          path: /opt/myapp
+
+      - name: "Install and configure app"
+        shell: bash
+        # Secrets are available as env vars AND via ${{ secrets.NAME }} syntax.
+        env:
+          DB_PASSWORD: "${{ secrets.DB_PASSWORD }}"
+          API_KEY:     "${{ secrets.API_KEY }}"
+        run: |
+          chmod +x /opt/myapp/myapp-v3.1.0
+          ln -sf /opt/myapp/myapp-v3.1.0 /usr/local/bin/myapp
+          cat > /etc/myapp/config.env <<EOF
+          DB_HOST=postgres.internal
+          DB_PASSWORD=${DB_PASSWORD}
+          API_KEY=${API_KEY}
+          DEPLOY_ENV=${DEPLOY_ENV}
+          EOF
+          systemctl enable --now myapp
+
+      - name: "Configure nginx reverse proxy"
+        shell: bash
+        continue-on-error: false
+        run: |
+          cp /opt/myapp/nginx.conf /etc/nginx/sites-available/myapp
+          ln -sf /etc/nginx/sites-available/myapp /etc/nginx/sites-enabled/myapp
+          nginx -t
+          systemctl reload nginx
+
+  # ── Phase 3: Verification ─────────────────────────────────────────────────
+  - name: "verify"
+    steps:
+      - name: "Health check"
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          for i in $(seq 1 12); do
+            if curl -sf http://localhost:8080/health; then
+              echo "Service healthy"
+              exit 0
+            fi
+            echo "Attempt $i/12 — waiting…"
+            sleep 5
+          done
+          echo "Health check timed out" >&2
+          exit 1
+
+      - name: "Run smoke tests"
+        shell: bash
+        continue-on-error: true
+        run: |
+          curl -sf http://localhost:8080/api/v1/status | jq .
+
+      - name: "Upload deployment report"
+        uses: upload-artifact
+        with:
+          artifact: "deploy-report-${APP_VERSION}"
+          path: /var/log/myapp/deploy.log

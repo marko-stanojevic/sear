@@ -1,4 +1,3 @@
-// Package handlers implements the HTTP request handlers for the sear daemon.
 package handlers
 
 import (
@@ -6,48 +5,22 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-
-	"github.com/marko-stanojevic/sear/internal/common"
-	"github.com/marko-stanojevic/sear/internal/daemon/store"
+	"github.com/sear-project/sear/internal/common"
 )
 
-// Env bundles the dependencies shared by all handlers.
-type Env struct {
-	Store            *store.Store
-	JWTSecret        []byte
-	RootPassword     string
-	TokenExpiryHours int
-	ArtifactsDir     string
-	ServerURL        string
-	// RegistrationSecrets maps secret-name → secret-value used during
-	// client registration.
-	RegistrationSecrets map[string]string
-}
-
-// ---- helpers ---------------------------------------------------------------
-
-func writeJSON(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, code int, msg string) {
-	writeJSON(w, code, map[string]string{"error": msg})
-}
+// ── JWT helpers ───────────────────────────────────────────────────────────────
 
 // issueToken signs a JWT for the given client ID.
 func (e *Env) issueToken(clientID string) (string, error) {
 	expiry := time.Duration(e.TokenExpiryHours) * time.Hour
 	if expiry == 0 {
-		expiry = 720 * time.Hour
+		expiry = 720 * time.Hour // 30 days default
 	}
 	claims := jwt.RegisteredClaims{
 		Subject:   clientID,
@@ -58,13 +31,23 @@ func (e *Env) issueToken(clientID string) (string, error) {
 	return tok.SignedString(e.JWTSecret)
 }
 
-// clientIDFromToken validates the Bearer token and returns the client ID.
+// clientIDFromToken validates the Bearer token in the request and returns
+// the embedded client ID.
 func (e *Env) clientIDFromToken(r *http.Request) (string, error) {
 	auth := r.Header.Get("Authorization")
 	if !strings.HasPrefix(auth, "Bearer ") {
-		return "", fmt.Errorf("missing bearer token")
+		// Also accept token as query parameter (for WebSocket clients that
+		// cannot set headers during the handshake).
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			return "", fmt.Errorf("missing bearer token")
+		}
+		return e.parseToken(token)
 	}
-	raw := strings.TrimPrefix(auth, "Bearer ")
+	return e.parseToken(strings.TrimPrefix(auth, "Bearer "))
+}
+
+func (e *Env) parseToken(raw string) (string, error) {
 	tok, err := jwt.ParseWithClaims(raw, &jwt.RegisteredClaims{},
 		func(_ *jwt.Token) (any, error) { return e.JWTSecret, nil },
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
@@ -79,8 +62,10 @@ func (e *Env) clientIDFromToken(r *http.Request) (string, error) {
 	return claims.Subject, nil
 }
 
-// requireClientAuth is middleware that validates the client JWT and sets the
-// "X-Client-ID" header for downstream handlers.
+// ── Middleware ────────────────────────────────────────────────────────────────
+
+// RequireClientAuth validates the client JWT and sets X-Client-ID for
+// downstream handlers. Also refreshes the client's last-seen timestamp.
 func (e *Env) RequireClientAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientID, err := e.clientIDFromToken(r)
@@ -88,7 +73,6 @@ func (e *Env) RequireClientAuth(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
-		// Refresh last-seen timestamp.
 		if c, ok := e.Store.GetClient(clientID); ok {
 			c.LastSeenAt = time.Now()
 			if c.Status == common.ClientStatusOffline {
@@ -101,8 +85,8 @@ func (e *Env) RequireClientAuth(next http.Handler) http.Handler {
 	})
 }
 
-// RequireAdminAuth is middleware that validates the root password via
-// Basic Auth (user "admin", password = root password).
+// RequireAdminAuth enforces HTTP Basic auth with username "admin" and the
+// configured root password.
 func (e *Env) RequireAdminAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
@@ -117,25 +101,19 @@ func (e *Env) RequireAdminAuth(next http.Handler) http.Handler {
 	})
 }
 
-// GenerateSecret produces a cryptographically random hex string.
-func GenerateSecret(bytes int) (string, error) {
-	b := make([]byte, bytes)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}
-
-// ---- Registration ----------------------------------------------------------
+// ── Registration ─────────────────────────────────────────────────────────────
 
 // HandleRegister processes POST /api/v1/register.
+// Clients authenticate with a pre-shared registration secret.
+// Re-registration of the same PlatformID is idempotent — the existing client
+// record is reused and a fresh JWT is issued.
 func (e *Env) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	var req common.RegistrationRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
@@ -143,12 +121,16 @@ func (e *Env) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "platform_id and hostname are required")
 		return
 	}
-	// Validate registration secret.
+
+	// Validate registration secret using constant-time comparison to prevent
+	// timing-based enumeration of valid secrets.
 	if !e.validRegistrationSecret(req.RegistrationSecret) {
 		writeError(w, http.StatusUnauthorized, "invalid registration secret")
 		return
 	}
-	// Re-use existing client record if the same platform_id re-registers.
+
+	// Reuse existing client record when the same platform_id re-registers
+	// (e.g., after an OS re-image that cleared the client state file).
 	var client *common.Client
 	for _, c := range e.Store.ListClients() {
 		if c.PlatformID == req.PlatformID {
@@ -196,198 +178,18 @@ func (e *Env) validRegistrationSecret(s string) bool {
 	return false
 }
 
-// ---- Connect ---------------------------------------------------------------
+// ── Utility ───────────────────────────────────────────────────────────────────
 
-// HandleConnect processes GET /api/v1/connect.
-// The client polls this endpoint; the server returns the next action.
-func (e *Env) HandleConnect(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
+// GenerateSecret produces a cryptographically random hex string.
+func GenerateSecret(numBytes int) (string, error) {
+	b := make([]byte, numBytes)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
 	}
-	clientID := r.Header.Get("X-Client-ID")
-	client, ok := e.Store.GetClient(clientID)
-	if !ok {
-		writeError(w, http.StatusNotFound, "client not found")
-		return
-	}
-	client.Status = common.ClientStatusConnected
-	client.LastSeenAt = time.Now()
-	_ = e.Store.SaveClient(client)
-
-	dep, hasDep := e.Store.GetDeploymentForClient(clientID)
-	if !hasDep || dep.Status == common.DeploymentStatusDone || dep.Status == common.DeploymentStatusFailed {
-		// Check whether a playbook is assigned to this client.
-		if client.PlaybookID == "" {
-			writeJSON(w, http.StatusOK, common.ConnectResponse{Action: "wait"})
-			return
-		}
-		// Start a new deployment.
-		pb, ok := e.Store.GetPlaybook(client.PlaybookID)
-		if !ok {
-			writeJSON(w, http.StatusOK, common.ConnectResponse{Action: "wait"})
-			return
-		}
-		dep = &common.DeploymentState{
-			ID:               uuid.New().String(),
-			ClientID:         clientID,
-			PlaybookID:       client.PlaybookID,
-			Status:           common.DeploymentStatusPending,
-			CurrentJobName:   "",
-			CurrentStepIndex: 0,
-			StartedAt:        time.Now(),
-			UpdatedAt:        time.Now(),
-		}
-		if err := e.Store.SaveDeployment(dep); err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to create deployment")
-			return
-		}
-		client.Status = common.ClientStatusDeploying
-		_ = e.Store.SaveClient(client)
-		writeJSON(w, http.StatusOK, e.buildDeployResponse(dep, pb))
-		return
-	}
-
-	// Active or rebooting deployment: resume.
-	if dep.Status == common.DeploymentStatusRebooting || dep.Status == common.DeploymentStatusRunning || dep.Status == common.DeploymentStatusPending {
-		pb, ok := e.Store.GetPlaybook(dep.PlaybookID)
-		if !ok {
-			writeJSON(w, http.StatusOK, common.ConnectResponse{Action: "wait"})
-			return
-		}
-		client.Status = common.ClientStatusDeploying
-		_ = e.Store.SaveClient(client)
-		writeJSON(w, http.StatusOK, e.buildDeployResponse(dep, pb))
-		return
-	}
-
-	writeJSON(w, http.StatusOK, common.ConnectResponse{Action: "wait"})
+	return hex.EncodeToString(b), nil
 }
 
-func (e *Env) buildDeployResponse(dep *common.DeploymentState, pb *store.PlaybookRecord) common.ConnectResponse {
-	return common.ConnectResponse{
-		Action:           "deploy",
-		DeploymentID:     dep.ID,
-		PlaybookID:       dep.PlaybookID,
-		Playbook:         pb.Playbook,
-		ResumeJobName:    dep.CurrentJobName,
-		ResumeStepIndex:  dep.CurrentStepIndex,
-		Secrets:          e.Store.AllSecrets(),
-		ArtifactsBaseURL: e.ServerURL + "/artifacts",
-	}
+func decodeJSON(r *http.Request, v any) error {
+	return json.NewDecoder(r.Body).Decode(v)
 }
 
-// ---- State -----------------------------------------------------------------
-
-// HandleStateUpdate processes POST /api/v1/state.
-func (e *Env) HandleStateUpdate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	var req common.StateUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
-		return
-	}
-	dep, ok := e.Store.GetDeployment(req.DeploymentID)
-	if !ok {
-		writeError(w, http.StatusNotFound, "deployment not found")
-		return
-	}
-	// Verify the authenticated client owns this deployment.
-	clientID := r.Header.Get("X-Client-ID")
-	if dep.ClientID != clientID {
-		// Do not reveal whether the deployment exists for other clients.
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
-	}
-	dep.Status = req.Status
-	dep.CurrentJobName = req.CurrentJobName
-	dep.CurrentStepIndex = req.CurrentStepIndex
-	dep.ErrorDetail = req.ErrorDetail
-	dep.UpdatedAt = time.Now()
-	if req.Status == common.DeploymentStatusDone || req.Status == common.DeploymentStatusFailed {
-		now := time.Now()
-		dep.FinishedAt = &now
-		// Update client status.
-		if c, ok := e.Store.GetClient(dep.ClientID); ok {
-			if req.Status == common.DeploymentStatusDone {
-				c.Status = common.ClientStatusDone
-			} else {
-				c.Status = common.ClientStatusFailed
-			}
-			_ = e.Store.SaveClient(c)
-		}
-	}
-	if err := e.Store.SaveDeployment(dep); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to save deployment")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// ---- Logs ------------------------------------------------------------------
-
-// HandleLogUpload processes POST /api/v1/logs.
-func (e *Env) HandleLogUpload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	var batch common.LogBatch
-	if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
-		return
-	}
-	ptrs := make([]*common.LogEntry, len(batch.Entries))
-	for i := range batch.Entries {
-		entry := &batch.Entries[i]
-		if entry.DeploymentID == "" {
-			writeError(w, http.StatusBadRequest, "deployment_id is required for each log entry")
-			return
-		}
-		if _, ok := e.Store.GetDeployment(entry.DeploymentID); !ok {
-			writeError(w, http.StatusNotFound, "deployment not found")
-			return
-		}
-		ptrs[i] = entry
-	}
-	if err := e.Store.AppendLogs(ptrs); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to store logs")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// HandleGetLogs processes GET /api/v1/logs?deployment_id=...
-func (e *Env) HandleGetLogs(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	depID := r.URL.Query().Get("deployment_id")
-	if depID == "" {
-		writeError(w, http.StatusBadRequest, "deployment_id is required")
-		return
-	}
-	// Load the deployment to ensure it exists and is owned by the caller.
-	dep, ok := e.Store.GetDeployment(depID)
-	if !ok {
-		writeError(w, http.StatusNotFound, "deployment not found")
-		return
-	}
-	// Identify the caller's client and enforce ownership of the deployment.
-	clientID := r.Header.Get("X-Client-ID")
-	if clientID == "" {
-		writeError(w, http.StatusUnauthorized, "missing client identity")
-		return
-	}
-	if dep.ClientID != clientID {
-		// Do not reveal whether the deployment exists for other clients.
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
-	}
-	logs := e.Store.GetLogsForDeployment(depID)
-	writeJSON(w, http.StatusOK, logs)
-}

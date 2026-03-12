@@ -1,0 +1,22 @@
+# sear-client configuration
+# Copy to /etc/sear/client.config.yml (Linux) or C:\ProgramData\sear\client.config.yml (Windows).
+
+# URL of the sear-daemon. Use wss:// if TLS is enabled.
+server_url: "http://sear-daemon:8080"
+
+# Must match one of the daemon's registration_secrets values.
+registration_secret: "replace-with-a-strong-random-value"
+
+# Platform hint. Use "auto" to let the client detect the environment.
+# Options: auto | baremetal | aws | azure | gcp | custom
+platform: "auto"
+
+# Where the client persists its token and resume position across reboots.
+# Defaults: /var/lib/sear/state.json (Linux/macOS), C:\ProgramData\sear\state.json (Windows)
+# state_file: "/var/lib/sear/state.json"
+
+# How long to wait before retrying a failed WebSocket connection (seconds).
+reconnect_interval_seconds: 10
+
+# Maximum number of log lines buffered before a forced flush.
+log_batch_size: 100
