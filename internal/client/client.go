@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,6 +20,10 @@ import (
 	"github.com/marko-stanojevic/sear/internal/client/identity"
 	"github.com/marko-stanojevic/sear/internal/common"
 )
+
+// errTokenRejected is returned by connect when the server responds with 401,
+// signalling that the caller should re-register immediately without sleeping.
+var errTokenRejected = errors.New("token rejected by server")
 
 // localState is persisted to disk so the client can resume after a reboot.
 type localState struct {
@@ -75,6 +80,10 @@ func (c *Client) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
+			if errors.Is(err, errTokenRejected) {
+				// Token was cleared; re-register immediately without sleeping.
+				continue
+			}
 			log.Printf("connection lost: %v — retrying in %s", err, interval)
 		}
 		select {
@@ -118,7 +127,7 @@ func (c *Client) connect(ctx context.Context) error {
 			c.state.Token = ""
 			c.state.ClientID = ""
 			_ = c.saveState()
-			return nil
+			return errTokenRejected
 		}
 		return fmt.Errorf("dial: %w", err)
 	}
