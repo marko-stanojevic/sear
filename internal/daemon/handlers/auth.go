@@ -335,8 +335,16 @@ func (e *Env) HandleLogUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	ptrs := make([]*common.LogEntry, len(batch.Entries))
 	for i := range batch.Entries {
-		e := batch.Entries[i]
-		ptrs[i] = &e
+		entry := &batch.Entries[i]
+		if entry.DeploymentID == "" {
+			writeError(w, http.StatusBadRequest, "deployment_id is required for each log entry")
+			return
+		}
+		if _, ok := e.Store.GetDeployment(entry.DeploymentID); !ok {
+			writeError(w, http.StatusNotFound, "deployment not found")
+			return
+		}
+		ptrs[i] = entry
 	}
 	if err := e.Store.AppendLogs(ptrs); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to store logs")
