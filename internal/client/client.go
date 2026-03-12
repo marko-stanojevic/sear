@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -32,9 +31,6 @@ type Client struct {
 	cfg        *common.ClientConfig
 	state      localState
 	httpClient *http.Client
-
-	logMu  sync.Mutex
-	logBuf []common.LogEntry
 }
 
 // New creates a new Client with sensible defaults applied.
@@ -126,7 +122,9 @@ func (c *Client) connect(ctx context.Context) error {
 	})
 
 	for {
-		ws.SetReadDeadline(time.Now().Add(90 * time.Second))
+		if err := ws.SetReadDeadline(time.Now().Add(90 * time.Second)); err != nil {
+			return fmt.Errorf("set read deadline: %w", err)
+		}
 		_, data, err := ws.ReadMessage()
 		if err != nil {
 			return fmt.Errorf("read: %w", err)
@@ -298,7 +296,10 @@ func (c *Client) wsSend(ws *websocket.Conn, msg common.WSMessage) {
 		log.Printf("warn: marshal WS message: %v", err)
 		return
 	}
-	ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	if err := ws.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		log.Printf("warn: WS set write deadline: %v", err)
+		return
+	}
 	if err := ws.WriteMessage(websocket.TextMessage, data); err != nil {
 		log.Printf("warn: WS write: %v", err)
 	}

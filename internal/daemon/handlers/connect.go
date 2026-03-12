@@ -60,10 +60,11 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 	e.pushPlaybookIfAssigned(clientID)
 
 	// Read loop.
-	ws.SetReadDeadline(time.Now().Add(90 * time.Second))
+	if err := ws.SetReadDeadline(time.Now().Add(90 * time.Second)); err != nil {
+		return
+	}
 	ws.SetPongHandler(func(string) error {
-		ws.SetReadDeadline(time.Now().Add(90 * time.Second))
-		return nil
+		return ws.SetReadDeadline(time.Now().Add(90 * time.Second))
 	})
 
 	for {
@@ -71,7 +72,9 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
-		ws.SetReadDeadline(time.Now().Add(90 * time.Second))
+		if err := ws.SetReadDeadline(time.Now().Add(90 * time.Second)); err != nil {
+			return
+		}
 		e.handleWSMessage(clientID, data)
 	}
 }
