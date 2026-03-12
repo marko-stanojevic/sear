@@ -44,8 +44,12 @@ runs:
       if: inputs.release-type == 'debug'
       shell: bash
       run: |
+        set -euo pipefail
         mkdir -p dist/debug
-        go build -v -o dist/debug/arpmap ./cmd/...
+        for binary in sear-daemon sear-client; do
+          echo "Building dist/debug/${binary}..."
+          go build -v -o "dist/debug/${binary}" "./cmd/${binary}"
+        done
 
     - name: Cross-compile (release)
       if: inputs.release-type == 'release'
@@ -53,19 +57,22 @@ runs:
       env:
         VERSION: ${{ steps.version.outputs.semVer }}
       run: |
-        set -e
+        set -euo pipefail
         mkdir -p dist
+        binaries=("sear-daemon" "sear-client")
         platforms=("linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows/amd64")
         for platform in "${platforms[@]}"; do
           GOOS="${platform%%/*}"
           GOARCH="${platform##*/}"
-          output="dist/arpmap-${VERSION}-${GOOS}-${GOARCH}"
-          [[ "$GOOS" == "windows" ]] && output="${output}.exe"
-          echo "Building ${output}…"
-          GOOS=$GOOS GOARCH=$GOARCH go build \
-            -ldflags="-s -w -X main.version=${VERSION}" \
-            -o "${output}" \
-            ./cmd/...
+          for binary in "${binaries[@]}"; do
+            output="dist/${binary}-${VERSION}-${GOOS}-${GOARCH}"
+            [[ "$GOOS" == "windows" ]] && output="${output}.exe"
+            echo "Building ${output}..."
+            GOOS=$GOOS GOARCH=$GOARCH go build \
+              -ldflags="-s -w" \
+              -o "${output}" \
+              "./cmd/${binary}"
+          done
         done
 
     - name: Upload artifacts
