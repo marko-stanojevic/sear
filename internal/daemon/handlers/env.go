@@ -109,16 +109,22 @@ func (c *wsConn) writePump() {
 	for {
 		select {
 		case data, ok := <-c.send:
-			c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				return
+			}
 			if !ok {
-				c.ws.WriteMessage(websocket.CloseMessage, []byte{})
+				if err := c.ws.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+					return
+				}
 				return
 			}
 			if err := c.ws.WriteMessage(websocket.TextMessage, data); err != nil {
 				return
 			}
 		case <-ticker.C:
-			c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				return
+			}
 			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}

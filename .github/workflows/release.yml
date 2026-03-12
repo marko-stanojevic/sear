@@ -1,0 +1,145 @@
+name: Release
+run-name: "${{ github.event.repository.name }} | Release | ${{ github.run_id }}"
+permissions: read-all
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Release binaries
+        id: release
+        uses: ./.github/actions/go-release
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push release tag
+        id: tag
+        shell: bash
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          else
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+            echo "created=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check if GitHub release exists
+        id: release-check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "GitHub release for $TAG already exists."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "GitHub release for $TAG does not exist yet."
+          fi
+
+      - name: Generate release notes
+        id: notes
+        if: steps.release-check.outputs.exists == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          PREVIOUS_TAG="$(git tag --sort=-v:refname | grep -vx "$TAG" | head -n1 || true)"
+
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            echo "Generating notes from $PREVIOUS_TAG to $TAG"
+            NOTES_JSON="$(gh api --method POST "/repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+              -f tag_name="$TAG" \
+              -f target_commitish="${GITHUB_SHA}" \
+              -f previous_tag_name="$PREVIOUS_TAG")"
+          else
+            echo "Generating notes for $TAG without previous tag"
+            NOTES_JSON="$(gh api --method POST "/repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+              -f tag_name="$TAG" \
+              -f target_commitish="${GITHUB_SHA}")"
+          fi
+
+          RELEASE_NAME="$(printf '%s' "$NOTES_JSON" | jq -r '.name // empty')"
+          RELEASE_BODY="$(printf '%s' "$NOTES_JSON" | jq -r '.body // ""')"
+
+          if [[ -z "$RELEASE_NAME" ]]; then
+            RELEASE_NAME="$TAG"
+          fi
+
+          echo "previous_tag=${PREVIOUS_TAG}" >> "$GITHUB_OUTPUT"
+          {
+            echo "release_name<<EOF"
+            echo "$RELEASE_NAME"
+            echo "EOF"
+            echo "release_body<<EOF"
+            echo "$RELEASE_BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        if: steps.release-check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: ${{ steps.notes.outputs.release_name }}
+          body: ${{ steps.notes.outputs.release_body }}
+          generate_release_notes: false
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.deb
+            dist/checksums.txt
+
+      - name: Release summary
+        if: always()
+        shell: bash
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          TAG_CREATED: ${{ steps.tag.outputs.created }}
+          RELEASE_EXISTS: ${{ steps.release-check.outputs.exists }}
+          PREVIOUS_TAG: ${{ steps.notes.outputs.previous_tag }}
+        run: |
+          {
+            echo "### Release summary"
+            echo "- Tag: ${TAG}"
+            if [[ -n "${PREVIOUS_TAG}" ]]; then
+              echo "- Previous tag: ${PREVIOUS_TAG}"
+            else
+              echo "- Previous tag: none"
+            fi
+            if [[ "${TAG_CREATED}" == "true" ]]; then
+              echo "- Tag created in this run: yes"
+            else
+              echo "- Tag created in this run: no (already existed)"
+            fi
+
+            if [[ "${RELEASE_EXISTS}" == "false" ]]; then
+              echo "- GitHub release created in this run: yes"
+            else
+              echo "- GitHub release created in this run: no (already existed)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

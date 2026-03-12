@@ -69,7 +69,17 @@ func New(dir string, logsDir string) (*Store, error) {
 		artifacts:   make(map[string]*common.Artifact),
 		secrets:     make(map[string]string),
 	}
-	return s, s.load()
+	if err := s.load(); err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(s.stateFile); os.IsNotExist(err) {
+		if err := s.save(); err != nil {
+			return nil, fmt.Errorf("initializing store: %w", err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("checking store state file: %w", err)
+	}
+	return s, nil
 }
 
 // ── Persistence ───────────────────────────────────────────────────────────────

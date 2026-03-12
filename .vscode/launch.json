@@ -1,0 +1,38 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "sear-daemon (examples)",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/sear-daemon",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "-config",
+                "examples/config.yml",
+                "-secrets",
+                "examples/secrets.yml"
+            ]
+        },
+        {
+            "name": "sear-client (examples)",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/sear-client",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "-config",
+                "examples/client.config.yml"
+            ]
+        },
+        {
+            "name": "Test current package",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${fileDirname}"
+        }
+    ]
+}
