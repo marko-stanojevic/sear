@@ -19,20 +19,20 @@ type StatusResponse struct {
 	Deployments []*common.DeploymentState `json:"deployments"`
 }
 
-// ── /admin/playbooks ──────────────────────────────────────────────────────────
+// ── /playbooks ────────────────────────────────────────────────────────────────────
 
-// HandleAdminPlaybooks dispatches CRUD on playbooks.
+// HandleRootPlaybooks dispatches CRUD on playbooks.
 //
-//	GET    /admin/playbooks              – list all
-//	POST   /admin/playbooks              – create
-//	GET    /admin/playbooks/{id}         – get one
-//	PUT    /admin/playbooks/{id}         – update
-//	DELETE /admin/playbooks/{id}         – delete
-//	POST   /admin/playbooks/{id}/assign  – assign to a client (pushes immediately
-//	                                       if client is connected via WebSocket)
-func (e *Env) HandleAdminPlaybooks(w http.ResponseWriter, r *http.Request) {
+//	GET    /playbooks              – list all
+//	POST   /playbooks              – create
+//	GET    /playbooks/{id}         – get one
+//	PUT    /playbooks/{id}         – update
+//	DELETE /playbooks/{id}         – delete
+//	POST   /playbooks/{id}/assign  – assign to a client (pushes immediately
+//	                                 if client is connected via WebSocket)
+func (e *Env) HandleRootPlaybooks(w http.ResponseWriter, r *http.Request) {
 	// Strip prefix to isolate the path tail.
-	tail := strings.TrimPrefix(r.URL.Path, "/admin/playbooks")
+	tail := strings.TrimPrefix(r.URL.Path, "/playbooks")
 	tail = strings.TrimPrefix(tail, "/")
 	parts := strings.SplitN(tail, "/", 2)
 	id := parts[0]
@@ -152,16 +152,16 @@ func (e *Env) assignPlaybook(w http.ResponseWriter, r *http.Request, playbookID 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "assigned"})
 }
 
-// ── /admin/clients ────────────────────────────────────────────────────────────
+// ── /clients ──────────────────────────────────────────────────────────────────────
 
-// HandleAdminClients dispatches CRUD on clients.
+// HandleRootClients dispatches CRUD on clients.
 //
-//	GET    /admin/clients          – list all
-//	GET    /admin/clients/{id}     – get one
-//	PUT    /admin/clients/{id}     – update (e.g. assign playbook, set status)
-//	DELETE /admin/clients/{id}     – delete
-func (e *Env) HandleAdminClients(w http.ResponseWriter, r *http.Request) {
-	tail := strings.TrimPrefix(r.URL.Path, "/admin/clients")
+//	GET    /clients          – list all
+//	GET    /clients/{id}     – get one
+//	PUT    /clients/{id}     – update (e.g. assign playbook, set status)
+//	DELETE /clients/{id}     – delete
+func (e *Env) HandleRootClients(w http.ResponseWriter, r *http.Request) {
+	tail := strings.TrimPrefix(r.URL.Path, "/clients")
 	tail = strings.TrimPrefix(tail, "/")
 	id := tail
 
@@ -224,19 +224,19 @@ func (e *Env) HandleAdminClients(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ── /admin/deployments ────────────────────────────────────────────────────────
+// ── /deployments ──────────────────────────────────────────────────────────────────
 
-// HandleAdminDeployments lists deployments and exposes per-deployment logs.
+// HandleRootDeployments lists deployments and exposes per-deployment logs.
 //
-//	GET /admin/deployments              – list all
-//	GET /admin/deployments/{id}         – get one
-//	GET /admin/deployments/{id}/logs    – get logs for deployment
-func (e *Env) HandleAdminDeployments(w http.ResponseWriter, r *http.Request) {
+//	GET /deployments              – list all
+//	GET /deployments/{id}         – get one
+//	GET /deployments/{id}/logs    – get logs for deployment
+func (e *Env) HandleRootDeployments(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	path := strings.TrimPrefix(r.URL.Path, "/admin/deployments")
+	path := strings.TrimPrefix(r.URL.Path, "/deployments")
 	path = strings.TrimPrefix(path, "/")
 	parts := strings.SplitN(path, "/", 2)
 	id := parts[0]

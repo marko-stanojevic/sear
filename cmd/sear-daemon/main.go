@@ -53,14 +53,14 @@ func main() {
 	// ── Root password ────────────────────────────────────────────────────────
 	if sec.RootPassword == "" {
 		sec.RootPassword = mustGenerateHex(16)
-		printBox("GENERATED ADMIN PASSWORD", "root password: "+sec.RootPassword)
+		printBox("GENERATED ROOT PASSWORD", sec.RootPassword)
 	}
 
 	// ── Registration secrets ──────────────────────────────────────────────────
 	if len(sec.RegistrationSecrets) == 0 {
 		secret := mustGenerateHex(16)
 		sec.RegistrationSecrets = map[string]string{"default": secret}
-		printBox("GENERATED REGISTRATION SECRET", "registration secret: "+secret)
+		printBox("GENERATED REGISTRATION SECRET", secret)
 	}
 
 	// ── Ensure directories ────────────────────────────────────────────────────

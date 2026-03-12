@@ -6,8 +6,8 @@ This document describes the HTTP and WebSocket endpoints exposed by sear-daemon.
 
 - Public endpoints: no auth required
 - Client endpoints: JWT bearer token
-- Admin endpoints: HTTP Basic auth (`admin` + root password)
-- Artifacts endpoints: accepts either client JWT or admin Basic auth
+- Root endpoints: HTTP Basic auth (`root` + root password)
+- Artifacts endpoints: accepts either client JWT or root Basic auth
 
 ## Public endpoints
 
@@ -23,9 +23,9 @@ This document describes the HTTP and WebSocket endpoints exposed by sear-daemon.
   - Upgrades to WebSocket for client control/log stream
   - Auth via bearer token or `?token=` query parameter
 
-## Admin endpoints
+## Root endpoints
 
-All admin endpoints require HTTP Basic auth.
+All root endpoints require HTTP Basic auth.
 
 ### Status
 
@@ -37,48 +37,48 @@ All admin endpoints require HTTP Basic auth.
 
 ### Playbooks
 
-- `GET /admin/playbooks`
+- `GET /playbooks`
   - List all playbooks
 
-- `POST /admin/playbooks`
+- `POST /playbooks`
   - Create playbook
 
-- `GET /admin/playbooks/{id}`
+- `GET /playbooks/{id}`
   - Get a playbook
 
-- `PUT /admin/playbooks/{id}`
+- `PUT /playbooks/{id}`
   - Update playbook
 
-- `DELETE /admin/playbooks/{id}`
+- `DELETE /playbooks/{id}`
   - Delete playbook
 
-- `POST /admin/playbooks/{id}/assign`
+- `POST /playbooks/{id}/assign`
   - Assign playbook to a client
   - If client is connected, deployment is pushed immediately
 
 ### Clients
 
-- `GET /admin/clients`
+- `GET /clients`
   - List clients
 
-- `GET /admin/clients/{id}`
+- `GET /clients/{id}`
   - Get client
 
-- `PUT /admin/clients/{id}`
+- `PUT /clients/{id}`
   - Update client fields such as `playbook_id` or `status`
 
-- `DELETE /admin/clients/{id}`
+- `DELETE /clients/{id}`
   - Delete client
 
 ### Deployments
 
-- `GET /admin/deployments`
+- `GET /deployments`
   - List deployments
 
-- `GET /admin/deployments/{id}`
+- `GET /deployments/{id}`
   - Get deployment details
 
-- `GET /admin/deployments/{id}/logs`
+- `GET /deployments/{id}/logs`
   - Get deployment log entries
 
 ### Secrets
@@ -97,7 +97,7 @@ All admin endpoints require HTTP Basic auth.
 
 ## Artifacts endpoints
 
-These endpoints accept either client JWT auth or admin Basic auth.
+These endpoints accept either client JWT auth or root Basic auth.
 
 - `GET /artifacts`
   - List artifact metadata

@@ -8,14 +8,6 @@ import (
 	"os/exec"
 )
 
-func defaultStateFile() string {
-	return "/var/lib/sear/state.json"
-}
-
-func defaultWorkDir() string {
-	return "/var/lib/sear/work"
-}
-
 func rebootOS() error {
 	// Prefer systemctl so systemd has a chance to stop services cleanly.
 	if path, err := exec.LookPath("systemctl"); err == nil {

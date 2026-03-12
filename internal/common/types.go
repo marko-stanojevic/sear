@@ -162,7 +162,11 @@ type Client struct {
 	ID           string            `json:"id"`
 	Hostname     string            `json:"hostname"`
 	Platform     PlatformType      `json:"platform"`
+	OS           string            `json:"os,omitempty"`
+	OSType       string            `json:"os_type,omitempty"`
+	OSDescription string           `json:"os_description,omitempty"`
 	PlatformID   string            `json:"platform_id"`
+	IPAddress    string            `json:"ip_address,omitempty"`
 	Metadata     map[string]string `json:"metadata,omitempty"`
 	Status       ClientStatus      `json:"status"`
 	PlaybookID   string            `json:"playbook_id,omitempty"`

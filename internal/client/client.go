@@ -60,19 +60,21 @@ func (c *Client) Run(ctx context.Context) error {
 		log.Printf("warn: could not load local state: %v", err)
 	}
 
-	if c.state.Token == "" {
-		if err := c.register(ctx); err != nil {
-			return fmt.Errorf("registration: %w", err)
-		}
-	}
-
 	interval := time.Duration(c.cfg.ReconnectIntervalSeconds) * time.Second
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if c.state.Token == "" {
+			if err := c.register(ctx); err != nil {
+				return fmt.Errorf("registration: %w", err)
+			}
+		}
 		log.Printf("connecting to %s", c.cfg.ServerURL)
 		if err := c.connect(ctx); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			log.Printf("connection lost: %v — retrying in %s", err, interval)
 		}
 		select {
@@ -109,8 +111,15 @@ func (c *Client) register(ctx context.Context) error {
 func (c *Client) connect(ctx context.Context) error {
 	wsURL := wsEndpoint(c.cfg.ServerURL, c.state.Token)
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
-	ws, _, err := dialer.DialContext(ctx, wsURL, nil)
+	ws, resp, err := dialer.DialContext(ctx, wsURL, nil)
 	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
+			log.Printf("token rejected by server, will re-register")
+			c.state.Token = ""
+			c.state.ClientID = ""
+			_ = c.saveState()
+			return nil
+		}
 		return fmt.Errorf("dial: %w", err)
 	}
 	defer ws.Close()
@@ -121,12 +130,27 @@ func (c *Client) connect(ctx context.Context) error {
 		return ws.WriteControl(websocket.PongMessage, nil, time.Now().Add(5*time.Second))
 	})
 
+	// Unblock ReadMessage when the context is cancelled.
+	go func() {
+		<-ctx.Done()
+		// Force any blocking read/write operations to return immediately.
+		_ = ws.SetReadDeadline(time.Now())
+		_ = ws.SetWriteDeadline(time.Now())
+		_ = ws.Close()
+	}()
+
 	for {
 		if err := ws.SetReadDeadline(time.Now().Add(90 * time.Second)); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return fmt.Errorf("set read deadline: %w", err)
 		}
 		_, data, err := ws.ReadMessage()
 		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return fmt.Errorf("read: %w", err)
 		}
 
@@ -354,4 +378,25 @@ func (c *Client) post(ctx context.Context, path string, body, out any, token str
 		return json.NewDecoder(resp.Body).Decode(out)
 	}
 	return nil
+}
+
+// ── Portable default paths ────────────────────────────────────────────────────
+
+// searDir returns the .sear directory next to the running executable.
+// Falls back to .sear in the current working directory if the executable
+// path cannot be determined.
+func searDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ".sear"
+	}
+	return filepath.Join(filepath.Dir(exe), ".sear")
+}
+
+func defaultStateFile() string {
+	return filepath.Join(searDir(), "state.json")
+}
+
+func defaultWorkDir() string {
+	return filepath.Join(searDir(), "work")
 }

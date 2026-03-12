@@ -2,7 +2,9 @@
 package daemon
 
 import (
+	"bufio"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -26,37 +28,37 @@ func NewServer(env *handlers.Env) http.Handler {
 	// GET  /api/v1/ws        — WebSocket; JWT via ?token= query param
 	mux.Handle("/api/v1/ws", http.HandlerFunc(env.HandleWS))
 
-	// ── Admin API (HTTP Basic auth) ───────────────────────────────────────────
-	admin := env.RequireAdminAuth
+	// ── Root API (HTTP Basic auth) ───────────────────────────────────────────
+	root := env.RequireRootAuth
 
-	mux.Handle("/status", admin(http.HandlerFunc(env.HandleStatus)))
-	mux.Handle("/status/ui", admin(http.HandlerFunc(env.HandleStatusUI)))
+	mux.Handle("/status", root(http.HandlerFunc(env.HandleStatus)))
+	mux.Handle("/status/ui", root(http.HandlerFunc(env.HandleStatusUI)))
 
-	mux.Handle("/admin/playbooks", admin(http.HandlerFunc(env.HandleAdminPlaybooks)))
-	mux.Handle("/admin/playbooks/", admin(http.HandlerFunc(env.HandleAdminPlaybooks)))
+	mux.Handle("/playbooks", root(http.HandlerFunc(env.HandleRootPlaybooks)))
+	mux.Handle("/playbooks/", root(http.HandlerFunc(env.HandleRootPlaybooks)))
 
-	mux.Handle("/admin/clients", admin(http.HandlerFunc(env.HandleAdminClients)))
-	mux.Handle("/admin/clients/", admin(http.HandlerFunc(env.HandleAdminClients)))
+	mux.Handle("/clients", root(http.HandlerFunc(env.HandleRootClients)))
+	mux.Handle("/clients/", root(http.HandlerFunc(env.HandleRootClients)))
 
-	mux.Handle("/admin/deployments", admin(http.HandlerFunc(env.HandleAdminDeployments)))
-	mux.Handle("/admin/deployments/", admin(http.HandlerFunc(env.HandleAdminDeployments)))
+	mux.Handle("/deployments", root(http.HandlerFunc(env.HandleRootDeployments)))
+	mux.Handle("/deployments/", root(http.HandlerFunc(env.HandleRootDeployments)))
 
-	// Artifacts are accessible by both clients (JWT) and admins (Basic auth).
+	// Artifacts are accessible by both clients (JWT) and root (Basic auth).
 	// We use a dual-auth wrapper that accepts either credential type.
 	mux.Handle("/artifacts", dualAuth(env, http.HandlerFunc(env.HandleArtifacts)))
 	mux.Handle("/artifacts/", dualAuth(env, http.HandlerFunc(env.HandleArtifacts)))
 
-	mux.Handle("/secrets", admin(http.HandlerFunc(env.HandleSecrets)))
-	mux.Handle("/secrets/", admin(http.HandlerFunc(env.HandleSecrets)))
+	mux.Handle("/secrets", root(http.HandlerFunc(env.HandleSecrets)))
+	mux.Handle("/secrets/", root(http.HandlerFunc(env.HandleSecrets)))
 
 	return logging(cors(mux))
 }
 
 // dualAuth accepts requests authenticated with either a client JWT Bearer
-// token or admin HTTP Basic credentials.
+// token or root HTTP Basic credentials.
 func dualAuth(env *handlers.Env, next http.Handler) http.Handler {
 	clientMW := env.RequireClientAuth(next)
-	adminMW := env.RequireAdminAuth(next)
+	adminMW := env.RequireRootAuth(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, _, ok := r.BasicAuth(); ok {
 			adminMW.ServeHTTP(w, r)
@@ -98,4 +100,26 @@ type loggingResponseWriter struct {
 func (l *loggingResponseWriter) WriteHeader(code int) {
 	l.status = code
 	l.ResponseWriter.WriteHeader(code)
+}
+
+func (l *loggingResponseWriter) Flush() {
+	if flusher, ok := l.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (l *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := l.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	return hijacker.Hijack()
+}
+
+func (l *loggingResponseWriter) Push(target string, opts *http.PushOptions) error {
+	pusher, ok := l.ResponseWriter.(http.Pusher)
+	if !ok {
+		return http.ErrNotSupported
+	}
+	return pusher.Push(target, opts)
 }
