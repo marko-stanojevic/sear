@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"flag"
@@ -13,8 +14,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/sear-project/sear/internal/common"
 	daemon "github.com/sear-project/sear/internal/daemon"
@@ -94,12 +98,26 @@ func main() {
 	// ── HTTP server ───────────────────────────────────────────────────────────
 	handler := daemon.NewServer(env)
 	srv := &http.Server{
-		Addr:    cfg.ListenAddr,
-		Handler: handler,
+		Addr:         cfg.ListenAddr,
+		Handler:      handler,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	log.Printf("sear-daemon listening on %s", cfg.ListenAddr)
 	log.Printf("status UI: http://localhost%s/status/ui", cfg.ListenAddr)
+
+	// Graceful shutdown on SIGINT/SIGTERM.
+	go func() {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+		<-ch
+		log.Println("shutting down...")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	}()
 
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
 		log.Printf("TLS enabled")
