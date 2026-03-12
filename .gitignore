@@ -44,3 +44,4 @@ go.work.sum
 # .vscode/
 bin/sear-client
 bin/sear-daemon
+bin/
