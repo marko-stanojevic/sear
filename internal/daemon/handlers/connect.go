@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -343,7 +344,7 @@ async function load() {
       ${dep?` + "`" + `<div class="detail">Playbook step: <span>#${dep.resume_step_index}</span></div>
         ${dep.error_detail?'<div class="detail" style="color:#f85149">'+dep.error_detail+'</div>':''}` + "`" + `:''}
       <div class="detail">Last seen: <span>${new Date(c.last_seen_at).toLocaleString()}</span></div>
-    </div>` + "`";
+    </div>` + "`" + `;
   }).join('');
   document.getElementById('counts').textContent =
     'Clients: '+clients.length+' · Connected: '+conn+' · Deploying: '+active;
