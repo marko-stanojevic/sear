@@ -51,6 +51,7 @@ func (h *Hub) register(conn *wsConn) {
 	defer h.mu.Unlock()
 	if old, ok := h.conns[conn.clientID]; ok {
 		close(old.done)
+		_ = old.ws.Close()
 	}
 	h.conns[conn.clientID] = conn
 }
