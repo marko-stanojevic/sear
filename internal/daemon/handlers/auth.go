@@ -295,6 +295,13 @@ func (e *Env) HandleStateUpdate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "deployment not found")
 		return
 	}
+	// Verify the authenticated client owns this deployment.
+	clientID := r.Header.Get("X-Client-ID")
+	if dep.ClientID != clientID {
+		// Do not reveal whether the deployment exists for other clients.
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
 	dep.Status = req.Status
 	dep.CurrentJobName = req.CurrentJobName
 	dep.CurrentStepIndex = req.CurrentStepIndex

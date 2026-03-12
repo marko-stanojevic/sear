@@ -36,6 +36,11 @@ func newTestEnv(t *testing.T) *handlers.Env {
 
 func postJSON(t *testing.T, handler http.HandlerFunc, path string, body any, token string) *httptest.ResponseRecorder {
 	t.Helper()
+	return postJSONWithClientID(t, handler, path, body, token, "")
+}
+
+func postJSONWithClientID(t *testing.T, handler http.HandlerFunc, path string, body any, token, clientID string) *httptest.ResponseRecorder {
+	t.Helper()
 	b, err := json.Marshal(body)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -44,6 +49,9 @@ func postJSON(t *testing.T, handler http.HandlerFunc, path string, body any, tok
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if clientID != "" {
+		req.Header.Set("X-Client-ID", clientID)
 	}
 	rr := httptest.NewRecorder()
 	handler(rr, req)
@@ -272,12 +280,13 @@ func TestHandleStateUpdate(t *testing.T) {
 	}
 	_ = env.Store.SaveDeployment(dep)
 
-	rr := postJSON(t, env.HandleStateUpdate, "/api/v1/state", common.StateUpdateRequest{
+	// Owner can update their own deployment.
+	rr := postJSONWithClientID(t, env.HandleStateUpdate, "/api/v1/state", common.StateUpdateRequest{
 		DeploymentID:     "dep-test",
 		Status:           common.DeploymentStatusDone,
 		CurrentJobName:   "setup",
 		CurrentStepIndex: 3,
-	}, token)
+	}, token, clientID)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d; body = %s", rr.Code, rr.Body.String())
 	}
@@ -288,6 +297,33 @@ func TestHandleStateUpdate(t *testing.T) {
 	}
 	if updated.FinishedAt == nil {
 		t.Error("FinishedAt should be set")
+	}
+}
+
+func TestHandleStateUpdate_CrossClientForbidden(t *testing.T) {
+	env := newTestEnv(t)
+	ownerID, _ := registerClient(t, env, "SN-031", "host-31")
+	_, otherToken := registerClient(t, env, "SN-032", "host-32")
+	otherClientID, _ := registerClient(t, env, "SN-033", "host-33")
+	_ = otherClientID
+
+	// Create a deployment owned by ownerID.
+	dep := &common.DeploymentState{
+		ID:        "dep-owned",
+		ClientID:  ownerID,
+		Status:    common.DeploymentStatusRunning,
+		StartedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	_ = env.Store.SaveDeployment(dep)
+
+	// A different client must not be able to update ownerID's deployment.
+	rr := postJSONWithClientID(t, env.HandleStateUpdate, "/api/v1/state", common.StateUpdateRequest{
+		DeploymentID: "dep-owned",
+		Status:       common.DeploymentStatusFailed,
+	}, otherToken, "SN-032-other-client")
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("status = %d; want 403", rr.Code)
 	}
 }
 
