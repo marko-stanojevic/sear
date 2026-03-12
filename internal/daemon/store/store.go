@@ -1,5 +1,5 @@
 // Package store provides a simple JSON-file-backed persistence layer for the
-// sear daemon.  All public methods are safe for concurrent use.
+// sear daemon.
 package store
 
 import (
