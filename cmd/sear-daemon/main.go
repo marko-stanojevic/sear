@@ -29,7 +29,6 @@ import (
 func main() {
 	configPath := flag.String("config", "config.yml", "path to daemon config file")
 	secretsPath := flag.String("secrets", "secrets.yml", "path to daemon secrets file")
-	debug := flag.Bool("debug", false, "enable verbose websocket and request logging")
 	flag.Parse()
 
 	cfg, err := common.LoadDaemonConfig(*configPath)
@@ -54,14 +53,14 @@ func main() {
 	// ── Root password ────────────────────────────────────────────────────────
 	if sec.RootPassword == "" {
 		sec.RootPassword = mustGenerateHex(16)
-		printBox("GENERATED ADMIN PASSWORD", "root password: "+sec.RootPassword)
+		printBox("GENERATED ROOT PASSWORD", sec.RootPassword)
 	}
 
 	// ── Registration secrets ──────────────────────────────────────────────────
 	if len(sec.RegistrationSecrets) == 0 {
 		secret := mustGenerateHex(16)
 		sec.RegistrationSecrets = map[string]string{"default": secret}
-		printBox("GENERATED REGISTRATION SECRET", "registration secret: "+secret)
+		printBox("GENERATED REGISTRATION SECRET", secret)
 	}
 
 	// ── Ensure directories ────────────────────────────────────────────────────
@@ -94,7 +93,6 @@ func main() {
 		ServerURL:           serverURL(cfg),
 		RegistrationSecrets: sec.RegistrationSecrets,
 		Hub:                 hub,
-		Debug:               *debug,
 	}
 
 	// ── HTTP server ───────────────────────────────────────────────────────────

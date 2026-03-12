@@ -127,7 +127,7 @@ Release artifacts and matrix are configured in `.goreleaser.yml`.
 - **Workflows persist across reboots**: the storage layer (`internal/daemon/store`) is responsible for durable state.
 - **Client registration**: clients register with the daemon; the daemon assigns them identities (UUIDs) and tracks their state.
 - **Dashboard**: real-time monitoring is served at `/status/ui`; keep handler logic in `internal/daemon/handlers`.
-- **Auth split**: admin endpoints use HTTP Basic auth, client endpoints use JWT.
+- **Auth split**: root endpoints use HTTP Basic auth, client endpoints use JWT.
 - **Logs storage**: deployment logs are persisted per deployment in `logsDir`, not inside `state.json`.
 
 ## Trust These Instructions

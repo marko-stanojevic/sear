@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -39,10 +38,11 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn := newWSConn(clientID, ws, e.Debug)
+	conn := newWSConn(clientID, ws)
 	e.Hub.register(conn)
 
 	client.Status = common.ClientStatusConnected
+	client.IPAddress = requestIP(r)
 	client.LastSeenAt = time.Now()
 	_ = e.Store.SaveClient(client)
 
@@ -65,9 +65,6 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ws.SetPongHandler(func(string) error {
-		if e.Debug {
-			log.Printf("websocket heartbeat: received pong from client %s", clientID)
-		}
 		return ws.SetReadDeadline(time.Now().Add(90 * time.Second))
 	})
 
@@ -266,6 +263,9 @@ func (e *Env) HandleStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	writeJSON(w, http.StatusOK, StatusResponse{
 		Clients:     e.Store.ListClients(),
 		Deployments: e.Store.ListDeployments(),
@@ -275,6 +275,9 @@ func (e *Env) HandleStatus(w http.ResponseWriter, r *http.Request) {
 // HandleStatusUI returns a live HTML dashboard.
 func (e *Env) HandleStatusUI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	fmt.Fprint(w, statusHTML)
 }
 
@@ -310,9 +313,30 @@ const statusHTML = `<!DOCTYPE html>
   button{background:#21262d;border:1px solid #30363d;color:#e6edf3;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:.85rem}
   button:hover{background:#30363d}
   .empty{text-align:center;color:#8b949e;padding:60px 20px}
+  #login-overlay{display:none;position:fixed;inset:0;background:#0d1117cc;backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:100}
+  #login-overlay.show{display:flex}
+  #login-box{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:32px;min-width:320px}
+  #login-box h2{font-size:1.1rem;margin-bottom:20px;color:#e6edf3}
+  #login-box label{display:block;font-size:.8rem;color:#8b949e;margin-bottom:4px}
+  #login-box input{width:100%;background:#0d1117;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:.9rem;margin-bottom:14px;outline:none}
+  #login-box input:focus{border-color:#58a6ff}
+  #login-error{color:#f85149;font-size:.8rem;margin-bottom:10px;min-height:1em}
+  #login-box button{width:100%;background:#238636;border:none;color:#fff;padding:9px;border-radius:6px;font-size:.9rem;cursor:pointer}
+  #login-box button:hover{background:#2ea043}
 </style>
 </head>
 <body>
+<div id="login-overlay">
+  <div id="login-box">
+    <h2>🔒 Sear Root Login</h2>
+    <label>Username</label>
+    <input id="lu" type="text" value="root" readonly>
+    <label>Password</label>
+    <input id="lp" type="password" autocomplete="current-password" placeholder="root password">
+    <div id="login-error"></div>
+    <button onclick="doLogin()">Sign in</button>
+  </div>
+</div>
 <header>
   <h1>⚡ Sear Daemon</h1>
   <span class="badge">LIVE</span>
@@ -321,14 +345,39 @@ const statusHTML = `<!DOCTYPE html>
   <div class="meta">
     <span id="counts">Loading…</span>
     <button onclick="load()">↻ Refresh</button>
+    <button onclick="logout()" style="margin-left:auto">Sign out</button>
   </div>
   <div id="root"></div>
 </div>
 <script>
 function esc(s){const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
+function authHeader(){const c=sessionStorage.getItem('sear_creds');return c?'Basic '+c:null;}
+function showLogin(msg){
+  document.getElementById('login-error').textContent=msg||'';
+  document.getElementById('lp').value='';
+  document.getElementById('login-overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('lp').focus(),50);
+}
+function hideLogin(){document.getElementById('login-overlay').classList.remove('show');}
+function logout(){sessionStorage.removeItem('sear_creds');showLogin('');}
+async function doLogin(){
+  const u=document.getElementById('lu').value;
+  const p=document.getElementById('lp').value;
+  if(!p){document.getElementById('login-error').textContent='Password required';return;}
+  const creds=btoa(u+':'+p);
+  const r=await fetch('/status',{headers:{Authorization:'Basic '+creds}});
+  if(r.status===401){document.getElementById('login-error').textContent='Invalid password';return;}
+  sessionStorage.setItem('sear_creds',creds);
+  hideLogin();
+  load();
+}
+document.getElementById('lp').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 const depByClient = {};
 async function load() {
-  const r = await fetch('/status');
+  const auth=authHeader();
+  if(!auth){showLogin('');return;}
+  const r = await fetch('/status',{headers:{Authorization:auth}});
+  if(r.status===401){sessionStorage.removeItem('sear_creds');showLogin('Session expired — please sign in again');return;}
   const d = await r.json();
   const deps = {};
   (d.deployments||[]).forEach(dep => { deps[dep.client_id] = dep; });
@@ -348,8 +397,11 @@ async function load() {
 	  return '<div class="card">' +
 	    '<div class="card-header">' +
 	      '<div>' +
-	        '<div class="card-title">' + c.hostname + '</div>' +
-	        '<div class="card-sub">' + c.platform + ' · ' + (c.platform_id || c.id.slice(0,8)) + '</div>' +
+	        '<div class="card-title">' + esc(c.hostname || c.id) + '</div>' +
+	        '<div class="card-sub">Type: ' + esc(c.os_type || c.os || (c.metadata && (c.metadata.os_type || c.metadata.os)) || '-') + '</div>' +
+	        '<div class="card-sub">Description: ' + esc(c.os_description || (c.metadata && c.metadata.os_description) || '-') + '</div>' +
+	        '<div class="card-sub">Platform: ' + esc(c.platform || '-') + ' · Platform ID: ' + esc(c.platform_id || c.id.slice(0,8)) + '</div>' +
+	        '<div class="card-sub">IP: ' + esc(c.ip_address || '-') + '</div>' +
 	      '</div>' +
 	      '<span class="pill ' + s + '"><span class="dot"></span>' + s + '</span>' +
 	    '</div>' +

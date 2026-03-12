@@ -12,7 +12,7 @@ logs_dir: "/var/lib/sear/logs"
 
 # JWT signing secret — set a stable value so tokens survive daemon restarts.
 # If empty a new random secret is generated each startup (invalidates all tokens).
-jwt_secret: ""
+jwt_secret: "dev-local-jwt-secret-change-in-production"
 
 # JWT lifetime in hours (default 720 = 30 days).
 token_expiry_hours: 720

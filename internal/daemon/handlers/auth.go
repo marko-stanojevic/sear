@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -86,16 +87,16 @@ func (e *Env) RequireClientAuth(next http.Handler) http.Handler {
 	})
 }
 
-// RequireAdminAuth enforces HTTP Basic auth with username "admin" and the
+// RequireRootAuth enforces HTTP Basic auth with username "root" and the
 // configured root password.
-func (e *Env) RequireAdminAuth(next http.Handler) http.Handler {
+func (e *Env) RequireRootAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
 		if !ok ||
-			subtle.ConstantTimeCompare([]byte(user), []byte("admin")) != 1 ||
+			subtle.ConstantTimeCompare([]byte(user), []byte("root")) != 1 ||
 			subtle.ConstantTimeCompare([]byte(pass), []byte(e.RootPassword)) != 1 {
-			w.Header().Set("WWW-Authenticate", `Basic realm="sear-admin"`)
-			writeError(w, http.StatusUnauthorized, "invalid admin credentials")
+			w.Header().Set("WWW-Authenticate", `Basic realm="sear-root"`)
+			writeError(w, http.StatusUnauthorized, "invalid root credentials")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -147,7 +148,14 @@ func (e *Env) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	client.Hostname = req.Hostname
 	client.Platform = req.Platform
+	client.OS = req.Metadata["os"]
+	client.OSType = req.Metadata["os_type"]
+	if client.OSType == "" {
+		client.OSType = client.OS
+	}
+	client.OSDescription = req.Metadata["os_description"]
 	client.PlatformID = req.PlatformID
+	client.IPAddress = requestIP(r)
 	client.Metadata = req.Metadata
 	client.Status = common.ClientStatusRegistered
 	client.LastSeenAt = time.Now()
@@ -177,6 +185,31 @@ func (e *Env) validRegistrationSecret(s string) bool {
 		}
 	}
 	return false
+}
+
+// requestIP extracts the best-effort client IP from forwarded headers or
+// RemoteAddr.
+func requestIP(r *http.Request) string {
+	xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
+	if xff != "" {
+		parts := strings.Split(xff, ",")
+		if len(parts) > 0 {
+			ip := strings.TrimSpace(parts[0])
+			if ip != "" {
+				return ip
+			}
+		}
+	}
+
+	if xri := strings.TrimSpace(r.Header.Get("X-Real-IP")); xri != "" {
+		return xri
+	}
+
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil {
+		return host
+	}
+	return strings.TrimSpace(r.RemoteAddr)
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────

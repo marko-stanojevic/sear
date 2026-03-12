@@ -74,7 +74,7 @@ If `root_password` or `registration_secrets` are missing, the daemon generates t
 
 - URL: `http://localhost:8080/status/ui`
 - Auth: HTTP Basic
-- Username: `admin`
+- Username: `root`
 - Password: value from `root_password` in secrets file (or generated password printed at startup)
 
 ## Configuration

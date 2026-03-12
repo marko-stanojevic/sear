@@ -19,7 +19,6 @@ import (
 
 func main() {
 	configPath := flag.String("config", "client.config.yml", "path to client config file")
-	debug := flag.Bool("debug", false, "enable verbose websocket heartbeat logging")
 	flag.Parse()
 
 	cfg, err := common.LoadClientConfig(*configPath)
@@ -37,7 +36,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	c := client.New(cfg, *debug)
+	c := client.New(cfg)
 	if err := c.Run(ctx); err != nil && err != context.Canceled {
 		log.Fatalf("client: %v", err)
 	}

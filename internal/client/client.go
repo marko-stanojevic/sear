@@ -31,11 +31,10 @@ type Client struct {
 	cfg        *common.ClientConfig
 	state      localState
 	httpClient *http.Client
-	debug      bool
 }
 
 // New creates a new Client with sensible defaults applied.
-func New(cfg *common.ClientConfig, debug bool) *Client {
+func New(cfg *common.ClientConfig) *Client {
 	if cfg.ReconnectIntervalSeconds == 0 {
 		cfg.ReconnectIntervalSeconds = 10
 	}
@@ -51,7 +50,6 @@ func New(cfg *common.ClientConfig, debug bool) *Client {
 	return &Client{
 		cfg:        cfg,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
-		debug:      debug,
 	}
 }
 
@@ -74,6 +72,9 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 		log.Printf("connecting to %s", c.cfg.ServerURL)
 		if err := c.connect(ctx); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			log.Printf("connection lost: %v — retrying in %s", err, interval)
 		}
 		select {
@@ -126,20 +127,30 @@ func (c *Client) connect(ctx context.Context) error {
 	log.Printf("WebSocket connected")
 
 	ws.SetPingHandler(func(string) error {
-		c.debugf("websocket heartbeat: received ping from server")
-		if err := ws.WriteControl(websocket.PongMessage, nil, time.Now().Add(5*time.Second)); err != nil {
-			return err
-		}
-		c.debugf("websocket heartbeat: sent pong to server")
-		return nil
+		return ws.WriteControl(websocket.PongMessage, nil, time.Now().Add(5*time.Second))
 	})
+
+	// Unblock ReadMessage when the context is cancelled.
+	go func() {
+		<-ctx.Done()
+		// Force any blocking read/write operations to return immediately.
+		_ = ws.SetReadDeadline(time.Now())
+		_ = ws.SetWriteDeadline(time.Now())
+		_ = ws.Close()
+	}()
 
 	for {
 		if err := ws.SetReadDeadline(time.Now().Add(90 * time.Second)); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return fmt.Errorf("set read deadline: %w", err)
 		}
 		_, data, err := ws.ReadMessage()
 		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return fmt.Errorf("read: %w", err)
 		}
 
@@ -367,13 +378,6 @@ func (c *Client) post(ctx context.Context, path string, body, out any, token str
 		return json.NewDecoder(resp.Body).Decode(out)
 	}
 	return nil
-}
-
-func (c *Client) debugf(format string, args ...any) {
-	if !c.debug {
-		return
-	}
-	log.Printf(format, args...)
 }
 
 // ── Portable default paths ────────────────────────────────────────────────────

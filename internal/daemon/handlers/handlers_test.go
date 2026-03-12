@@ -165,6 +165,82 @@ func TestHandleRegister_Idempotent(t *testing.T) {
 	}
 }
 
+func TestHandleRegister_CapturesClientIP(t *testing.T) {
+	env := newTestEnv(t)
+
+	body, err := json.Marshal(common.RegistrationRequest{
+		Platform:           common.PlatformBaremetal,
+		PlatformID:         "SN-004",
+		Hostname:           "edge-04",
+		RegistrationSecret: "reg-secret-1",
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-For", "203.0.113.10, 10.0.0.1")
+	rr := httptest.NewRecorder()
+
+	env.HandleRegister(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	resp := decode[common.RegistrationResponse](t, rr)
+	client, ok := env.Store.GetClient(resp.ClientID)
+	if !ok {
+		t.Fatalf("client %q not found", resp.ClientID)
+	}
+	if client.IPAddress != "203.0.113.10" {
+		t.Errorf("ip_address = %q; want %q", client.IPAddress, "203.0.113.10")
+	}
+}
+
+func TestHandleRegister_CapturesClientOS(t *testing.T) {
+	env := newTestEnv(t)
+
+	body, err := json.Marshal(common.RegistrationRequest{
+		Platform:           common.PlatformBaremetal,
+		PlatformID:         "SN-005",
+		Hostname:           "edge-05",
+		RegistrationSecret: "reg-secret-1",
+		Metadata: map[string]string{
+			"os":             "linux",
+			"os_type":        "linux",
+			"os_description": "Debian GNU/Linux 12 (bookworm)",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	env.HandleRegister(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	resp := decode[common.RegistrationResponse](t, rr)
+	client, ok := env.Store.GetClient(resp.ClientID)
+	if !ok {
+		t.Fatalf("client %q not found", resp.ClientID)
+	}
+	if client.OS != "linux" {
+		t.Errorf("os = %q; want %q", client.OS, "linux")
+	}
+	if client.OSType != "linux" {
+		t.Errorf("os_type = %q; want %q", client.OSType, "linux")
+	}
+	if client.OSDescription != "Debian GNU/Linux 12 (bookworm)" {
+		t.Errorf("os_description = %q; want %q", client.OSDescription, "Debian GNU/Linux 12 (bookworm)")
+	}
+}
+
 // ── Auth middleware ───────────────────────────────────────────────────────────
 
 func TestRequireClientAuth_Missing(t *testing.T) {
@@ -179,12 +255,12 @@ func TestRequireClientAuth_Missing(t *testing.T) {
 	}
 }
 
-func TestRequireAdminAuth_WrongPassword(t *testing.T) {
+func TestRequireRootAuth_WrongPassword(t *testing.T) {
 	env := newTestEnv(t)
 	req := httptest.NewRequest(http.MethodGet, "/status", nil)
-	req.SetBasicAuth("admin", "wrong")
+	req.SetBasicAuth("root", "wrong")
 	rr := httptest.NewRecorder()
-	env.RequireAdminAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	env.RequireRootAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})).ServeHTTP(rr, req)
 	if rr.Code != http.StatusUnauthorized {
@@ -192,12 +268,12 @@ func TestRequireAdminAuth_WrongPassword(t *testing.T) {
 	}
 }
 
-func TestRequireAdminAuth_Correct(t *testing.T) {
+func TestRequireRootAuth_Correct(t *testing.T) {
 	env := newTestEnv(t)
 	req := httptest.NewRequest(http.MethodGet, "/status", nil)
-	req.SetBasicAuth("admin", "admin123")
+	req.SetBasicAuth("root", "admin123")
 	rr := httptest.NewRecorder()
-	env.RequireAdminAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	env.RequireRootAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})).ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -221,9 +297,9 @@ func TestHandleStatus(t *testing.T) {
 	}
 }
 
-// ── Admin playbooks ───────────────────────────────────────────────────────────
+// ── Root playbooks ───────────────────────────────────────────────────────────────────
 
-func TestHandleAdminPlaybooks_CRUD(t *testing.T) {
+func TestHandleRootPlaybooks_CRUD(t *testing.T) {
 	env := newTestEnv(t)
 
 	// Create.
@@ -237,10 +313,10 @@ func TestHandleAdminPlaybooks_CRUD(t *testing.T) {
 		},
 	}
 	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/admin/playbooks", bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPost, "/playbooks", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
-	env.HandleAdminPlaybooks(rr, req)
+	env.HandleRootPlaybooks(rr, req)
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("create: status=%d body=%s", rr.Code, rr.Body.String())
 	}
@@ -251,9 +327,9 @@ func TestHandleAdminPlaybooks_CRUD(t *testing.T) {
 	}
 
 	// List.
-	req2 := httptest.NewRequest(http.MethodGet, "/admin/playbooks", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/playbooks", nil)
 	rr2 := httptest.NewRecorder()
-	env.HandleAdminPlaybooks(rr2, req2)
+	env.HandleRootPlaybooks(rr2, req2)
 	var list []*store.PlaybookRecord
 	_ = json.NewDecoder(rr2.Body).Decode(&list)
 	if len(list) != 1 {
@@ -261,19 +337,19 @@ func TestHandleAdminPlaybooks_CRUD(t *testing.T) {
 	}
 
 	// Get by ID.
-	req3 := httptest.NewRequest(http.MethodGet, "/admin/playbooks/"+created.ID, nil)
-	req3.URL.Path = "/admin/playbooks/" + created.ID
+	req3 := httptest.NewRequest(http.MethodGet, "/playbooks/"+created.ID, nil)
+	req3.URL.Path = "/playbooks/" + created.ID
 	rr3 := httptest.NewRecorder()
-	env.HandleAdminPlaybooks(rr3, req3)
+	env.HandleRootPlaybooks(rr3, req3)
 	if rr3.Code != http.StatusOK {
 		t.Errorf("get: status=%d", rr3.Code)
 	}
 
 	// Delete.
-	req4 := httptest.NewRequest(http.MethodDelete, "/admin/playbooks/"+created.ID, nil)
-	req4.URL.Path = "/admin/playbooks/" + created.ID
+	req4 := httptest.NewRequest(http.MethodDelete, "/playbooks/"+created.ID, nil)
+	req4.URL.Path = "/playbooks/" + created.ID
 	rr4 := httptest.NewRecorder()
-	env.HandleAdminPlaybooks(rr4, req4)
+	env.HandleRootPlaybooks(rr4, req4)
 	if rr4.Code != http.StatusOK {
 		t.Errorf("delete: status=%d", rr4.Code)
 	}
@@ -344,13 +420,13 @@ func TestCrossClientDeploymentForbidden(t *testing.T) {
 	}
 	_ = env.Store.SaveDeployment(dep)
 
-	// Admin reading logs for someone else's deployment should work.
-	req := httptest.NewRequest(http.MethodGet, "/admin/deployments/dep-owned/logs", nil)
-	req.URL.Path = "/admin/deployments/dep-owned/logs"
+	// Root reading logs for someone else's deployment should work.
+	req := httptest.NewRequest(http.MethodGet, "/deployments/dep-owned/logs", nil)
+	req.URL.Path = "/deployments/dep-owned/logs"
 	rr := httptest.NewRecorder()
-	env.HandleAdminDeployments(rr, req)
+	env.HandleRootDeployments(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Errorf("admin logs: status=%d; want 200", rr.Code)
+		t.Errorf("root logs: status=%d; want 200", rr.Code)
 	}
 }
 

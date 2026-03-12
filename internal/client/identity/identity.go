@@ -35,8 +35,12 @@ func Collect(platformHint string) PlatformInfo {
 		hostname = "unknown"
 	}
 	meta := map[string]string{
-		"os":   runtime.GOOS,
-		"arch": runtime.GOARCH,
+		"os":      runtime.GOOS,
+		"os_type": runtime.GOOS,
+		"arch":    runtime.GOARCH,
+	}
+	if desc := osDescription(); desc != "" {
+		meta["os_description"] = desc
 	}
 
 	platform := strings.ToLower(platformHint)
@@ -296,4 +300,44 @@ func readFile(path string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(data))
+}
+
+func osDescription() string {
+	if runtime.GOOS != "linux" {
+		return runtime.GOOS
+	}
+
+	vals := parseOSRelease("/etc/os-release")
+	if pretty := vals["PRETTY_NAME"]; pretty != "" {
+		return pretty
+	}
+	name := vals["NAME"]
+	version := vals["VERSION"]
+	if name != "" && version != "" {
+		return strings.TrimSpace(name + " " + version)
+	}
+	if name != "" {
+		return name
+	}
+	return "linux"
+}
+
+func parseOSRelease(path string) map[string]string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return map[string]string{}
+	}
+	vals := map[string]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		vals[k] = strings.Trim(v, "\"'")
+	}
+	return vals
 }

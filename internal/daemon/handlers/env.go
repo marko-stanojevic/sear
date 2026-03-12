@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -23,7 +22,6 @@ type Env struct {
 	ServerURL           string
 	RegistrationSecrets map[string]string // name→value from secrets.yml
 	Hub                 *Hub
-	Debug               bool
 }
 
 // ── WebSocket Hub ─────────────────────────────────────────────────────────────
@@ -40,7 +38,6 @@ type wsConn struct {
 	ws       *websocket.Conn
 	send     chan []byte
 	done     chan struct{}
-	debug    bool
 }
 
 // NewHub creates an empty Hub.
@@ -95,13 +92,12 @@ func (h *Hub) Send(clientID string, msg common.WSMessage) bool {
 }
 
 // newWSConn creates a wsConn and starts its write pump goroutine.
-func newWSConn(clientID string, ws *websocket.Conn, debug bool) *wsConn {
+func newWSConn(clientID string, ws *websocket.Conn) *wsConn {
 	c := &wsConn{
 		clientID: clientID,
 		ws:       ws,
 		send:     make(chan []byte, 64),
 		done:     make(chan struct{}),
-		debug:    debug,
 	}
 	go c.writePump()
 	return c
@@ -132,18 +128,10 @@ func (c *wsConn) writePump() {
 			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
-			c.debugf("websocket heartbeat: sent ping to client %s", c.clientID)
 		case <-c.done:
 			return
 		}
 	}
-}
-
-func (c *wsConn) debugf(format string, args ...any) {
-	if !c.debug {
-		return
-	}
-	log.Printf(format, args...)
 }
 
 // ── JSON / HTTP helpers ───────────────────────────────────────────────────────
