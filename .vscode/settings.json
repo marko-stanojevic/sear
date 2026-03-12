@@ -24,6 +24,8 @@
         "type": "gutter"
     },
 
+    "json.schemaDownload.enable": false,
+
     "files.exclude": {
         "**/.DS_Store": true,
         "**/dist": true

@@ -1,4 +1,4 @@
-FROM golang:1.24-bookworm
+FROM golang:1.26.1-bookworm
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive
