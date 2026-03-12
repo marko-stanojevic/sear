@@ -140,9 +140,22 @@ func mustGenerateHex(n int) string {
 }
 
 func printBox(title, content string) {
-	width := len(content) + 4
+	maxLen := len(content)
+	if len(title) > maxLen {
+		maxLen = len(title)
+	}
+	width := maxLen + 4
 	bar := strings.Repeat("─", width)
-	pad := strings.Repeat(" ", (width-len(title))/2)
+
+	titlePadTotal := width - len(title)
+	if titlePadTotal < 0 {
+		titlePadTotal = 0
+	}
+	leftPad := titlePadTotal / 2
+	rightPad := titlePadTotal - leftPad
+	leftPadStr := strings.Repeat(" ", leftPad)
+	rightPadStr := strings.Repeat(" ", rightPad)
+
 	fmt.Fprintf(os.Stderr, "\n┌%s┐\n│%s%s%s│\n│  %s  │\n└%s┘\n\n",
-		bar, pad, title, pad, content, bar)
+		bar, leftPadStr, title, rightPadStr, content, bar)
 }
