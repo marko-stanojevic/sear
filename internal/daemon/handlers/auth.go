@@ -105,8 +105,10 @@ func (e *Env) RequireClientAuth(next http.Handler) http.Handler {
 // Basic Auth (user "admin", password = root password).
 func (e *Env) RequireAdminAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, pass, ok := r.BasicAuth()
-		if !ok || subtle.ConstantTimeCompare([]byte(pass), []byte(e.RootPassword)) != 1 {
+		user, pass, ok := r.BasicAuth()
+		if !ok ||
+			subtle.ConstantTimeCompare([]byte(user), []byte("admin")) != 1 ||
+			subtle.ConstantTimeCompare([]byte(pass), []byte(e.RootPassword)) != 1 {
 			w.Header().Set("WWW-Authenticate", `Basic realm="sear-admin"`)
 			writeError(w, http.StatusUnauthorized, "invalid admin credentials")
 			return
