@@ -2,10 +2,13 @@
 package daemon
 
 import (
+	"bufio"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/marko-stanojevic/sear/internal/daemon/handlers"
 )
 
@@ -49,7 +52,7 @@ func NewServer(env *handlers.Env) http.Handler {
 	mux.Handle("/secrets", admin(http.HandlerFunc(env.HandleSecrets)))
 	mux.Handle("/secrets/", admin(http.HandlerFunc(env.HandleSecrets)))
 
-	return logging(cors(mux))
+	return logging(cors(mux), env.Debug)
 }
 
 // dualAuth accepts requests authenticated with either a client JWT Bearer
@@ -81,11 +84,14 @@ func cors(next http.Handler) http.Handler {
 }
 
 // logging logs every request with method, path, status, and duration.
-func logging(next http.Handler) http.Handler {
+func logging(next http.Handler, debug bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		lrw := &loggingResponseWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(lrw, r)
+		if !debug && websocket.IsWebSocketUpgrade(r) && lrw.status < http.StatusBadRequest {
+			return
+		}
 		log.Printf("%s %s %d %s", r.Method, r.URL.Path, lrw.status, time.Since(start))
 	})
 }
@@ -98,4 +104,26 @@ type loggingResponseWriter struct {
 func (l *loggingResponseWriter) WriteHeader(code int) {
 	l.status = code
 	l.ResponseWriter.WriteHeader(code)
+}
+
+func (l *loggingResponseWriter) Flush() {
+	if flusher, ok := l.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (l *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := l.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	return hijacker.Hijack()
+}
+
+func (l *loggingResponseWriter) Push(target string, opts *http.PushOptions) error {
+	pusher, ok := l.ResponseWriter.(http.Pusher)
+	if !ok {
+		return http.ErrNotSupported
+	}
+	return pusher.Push(target, opts)
 }

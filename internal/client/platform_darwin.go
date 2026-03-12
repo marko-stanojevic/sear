@@ -8,14 +8,6 @@ import (
 	"os/exec"
 )
 
-func defaultStateFile() string {
-	return "/var/lib/sear/state.json"
-}
-
-func defaultWorkDir() string {
-	return "/var/lib/sear/work"
-}
-
 func rebootOS() error {
 	if path, err := exec.LookPath("shutdown"); err == nil {
 		cmd := exec.Command(path, "-r", "now")

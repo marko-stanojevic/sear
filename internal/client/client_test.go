@@ -13,7 +13,7 @@ func newTestClient(serverURL string) *client.Client {
 		RegistrationSecret: "test-secret",
 		Platform:           "baremetal",
 	}
-	return client.New(cfg)
+	return client.New(cfg, false)
 }
 
 func TestNew_Defaults(t *testing.T) {
@@ -25,7 +25,7 @@ func TestClientDefaults(t *testing.T) {
 	cfg := &common.ClientConfig{
 		ServerURL: "http://sear:8080",
 	}
-	_ = client.New(cfg)
+	_ = client.New(cfg, false)
 	if cfg.ReconnectIntervalSeconds == 0 {
 		t.Error("ReconnectIntervalSeconds should be defaulted")
 	}

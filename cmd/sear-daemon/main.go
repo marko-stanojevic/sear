@@ -29,6 +29,7 @@ import (
 func main() {
 	configPath := flag.String("config", "config.yml", "path to daemon config file")
 	secretsPath := flag.String("secrets", "secrets.yml", "path to daemon secrets file")
+	debug := flag.Bool("debug", false, "enable verbose websocket and request logging")
 	flag.Parse()
 
 	cfg, err := common.LoadDaemonConfig(*configPath)
@@ -93,6 +94,7 @@ func main() {
 		ServerURL:           serverURL(cfg),
 		RegistrationSecrets: sec.RegistrationSecrets,
 		Hub:                 hub,
+		Debug:               *debug,
 	}
 
 	// ── HTTP server ───────────────────────────────────────────────────────────

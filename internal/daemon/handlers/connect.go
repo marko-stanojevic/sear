@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -38,7 +39,7 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn := newWSConn(clientID, ws)
+	conn := newWSConn(clientID, ws, e.Debug)
 	e.Hub.register(conn)
 
 	client.Status = common.ClientStatusConnected
@@ -64,6 +65,9 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ws.SetPongHandler(func(string) error {
+		if e.Debug {
+			log.Printf("websocket heartbeat: received pong from client %s", clientID)
+		}
 		return ws.SetReadDeadline(time.Now().Add(90 * time.Second))
 	})
 

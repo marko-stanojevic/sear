@@ -31,10 +31,11 @@ type Client struct {
 	cfg        *common.ClientConfig
 	state      localState
 	httpClient *http.Client
+	debug      bool
 }
 
 // New creates a new Client with sensible defaults applied.
-func New(cfg *common.ClientConfig) *Client {
+func New(cfg *common.ClientConfig, debug bool) *Client {
 	if cfg.ReconnectIntervalSeconds == 0 {
 		cfg.ReconnectIntervalSeconds = 10
 	}
@@ -50,6 +51,7 @@ func New(cfg *common.ClientConfig) *Client {
 	return &Client{
 		cfg:        cfg,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
+		debug:      debug,
 	}
 }
 
@@ -60,16 +62,15 @@ func (c *Client) Run(ctx context.Context) error {
 		log.Printf("warn: could not load local state: %v", err)
 	}
 
-	if c.state.Token == "" {
-		if err := c.register(ctx); err != nil {
-			return fmt.Errorf("registration: %w", err)
-		}
-	}
-
 	interval := time.Duration(c.cfg.ReconnectIntervalSeconds) * time.Second
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		if c.state.Token == "" {
+			if err := c.register(ctx); err != nil {
+				return fmt.Errorf("registration: %w", err)
+			}
 		}
 		log.Printf("connecting to %s", c.cfg.ServerURL)
 		if err := c.connect(ctx); err != nil {
@@ -109,8 +110,15 @@ func (c *Client) register(ctx context.Context) error {
 func (c *Client) connect(ctx context.Context) error {
 	wsURL := wsEndpoint(c.cfg.ServerURL, c.state.Token)
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
-	ws, _, err := dialer.DialContext(ctx, wsURL, nil)
+	ws, resp, err := dialer.DialContext(ctx, wsURL, nil)
 	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
+			log.Printf("token rejected by server, will re-register")
+			c.state.Token = ""
+			c.state.ClientID = ""
+			_ = c.saveState()
+			return nil
+		}
 		return fmt.Errorf("dial: %w", err)
 	}
 	defer ws.Close()
@@ -118,7 +126,12 @@ func (c *Client) connect(ctx context.Context) error {
 	log.Printf("WebSocket connected")
 
 	ws.SetPingHandler(func(string) error {
-		return ws.WriteControl(websocket.PongMessage, nil, time.Now().Add(5*time.Second))
+		c.debugf("websocket heartbeat: received ping from server")
+		if err := ws.WriteControl(websocket.PongMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+			return err
+		}
+		c.debugf("websocket heartbeat: sent pong to server")
+		return nil
 	})
 
 	for {
@@ -354,4 +367,32 @@ func (c *Client) post(ctx context.Context, path string, body, out any, token str
 		return json.NewDecoder(resp.Body).Decode(out)
 	}
 	return nil
+}
+
+func (c *Client) debugf(format string, args ...any) {
+	if !c.debug {
+		return
+	}
+	log.Printf(format, args...)
+}
+
+// ── Portable default paths ────────────────────────────────────────────────────
+
+// searDir returns the .sear directory next to the running executable.
+// Falls back to .sear in the current working directory if the executable
+// path cannot be determined.
+func searDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ".sear"
+	}
+	return filepath.Join(filepath.Dir(exe), ".sear")
+}
+
+func defaultStateFile() string {
+	return filepath.Join(searDir(), "state.json")
+}
+
+func defaultWorkDir() string {
+	return filepath.Join(searDir(), "work")
 }
