@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/sear-project/sear/internal/common"
-	"github.com/sear-project/sear/internal/daemon/store"
+	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/daemon/store"
 )
 
 // Env bundles the dependencies shared by all handlers.

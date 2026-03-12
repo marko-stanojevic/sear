@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sear-project/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/common"
 )
 
 // HandleArtifacts dispatches artifact CRUD and download/upload.

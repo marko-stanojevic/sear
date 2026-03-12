@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sear-project/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/common"
 )
 
 // PlaybookRecord wraps a Playbook with server-side metadata.

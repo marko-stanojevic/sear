@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/sear-project/sear/internal/client/executor"
-	"github.com/sear-project/sear/internal/client/identity"
-	"github.com/sear-project/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/client/executor"
+	"github.com/marko-stanojevic/sear/internal/client/identity"
+	"github.com/marko-stanojevic/sear/internal/common"
 )
 
 // localState is persisted to disk so the client can resume after a reboot.

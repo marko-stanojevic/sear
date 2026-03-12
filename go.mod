@@ -1,4 +1,4 @@
-module github.com/sear-project/sear
+module github.com/marko-stanojevic/sear
 
 go 1.21
 

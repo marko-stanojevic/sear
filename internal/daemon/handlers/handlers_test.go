@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sear-project/sear/internal/common"
-	"github.com/sear-project/sear/internal/daemon/handlers"
-	"github.com/sear-project/sear/internal/daemon/store"
+	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/daemon/handlers"
+	"github.com/marko-stanojevic/sear/internal/daemon/store"
 )
 
 // ── Test helpers ──────────────────────────────────────────────────────────────

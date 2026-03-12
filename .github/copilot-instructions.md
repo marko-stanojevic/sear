@@ -4,7 +4,7 @@
 
 **Sear** is a portable client-server framework written in Go, designed for bootstrapping edge datacenters and on-prem hardware. It executes GitHub Actions-style YAML workflows that persist across system reboots, with extensible client registration and a central dashboard for real-time deployment monitoring.
 
-- **Module path**: `github.com/sear-project/sear`
+- **Module path**: `github.com/marko-stanojevic/sear`
 - **Language**: Go (no CGo dependencies)
 - **Key dependencies**: `gopkg.in/yaml.v3`, `github.com/golang-jwt/jwt/v5`, `github.com/google/uuid`, `github.com/gorilla/websocket`
 

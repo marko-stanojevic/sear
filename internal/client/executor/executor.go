@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sear-project/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/common"
 )
 
 // Logger is a function the executor calls to emit log lines.

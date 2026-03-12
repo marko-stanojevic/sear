@@ -1,8 +1,14 @@
 # sear
 
-Sear is a portable client-server framework for bootstrapping edge and on-prem infrastructure with YAML workflows.
+[![CI](https://github.com/marko-stanojevic/sear/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/marko-stanojevic/sear/actions/workflows/ci.yml)
+[![Release](https://github.com/marko-stanojevic/sear/actions/workflows/release.yml/badge.svg)](https://github.com/marko-stanojevic/sear/actions/workflows/release.yml)
+[![Coverage](https://codecov.io/gh/marko-stanojevic/sear/graph/badge.svg?branch=main)](https://codecov.io/gh/marko-stanojevic/sear)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/marko-stanojevic/sear)](https://github.com/marko-stanojevic/sear/blob/main/go.mod)
+[![Latest Release](https://img.shields.io/github/v/release/marko-stanojevic/sear)](https://github.com/marko-stanojevic/sear/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/marko-stanojevic/sear)](https://goreportcard.com/report/github.com/marko-stanojevic/sear)
+[![License](https://img.shields.io/github/license/marko-stanojevic/sear)](LICENSE)
 
-Contributor and development documentation is in [CONTRIBUTING.MD](CONTRIBUTING.MD).
+Sear is a portable client-server framework for bootstrapping edge and on-prem infrastructure with YAML workflows.
 
 The project has two binaries:
 
@@ -25,7 +31,7 @@ The project has two binaries:
 
 Download prebuilt binaries from GitHub Releases:
 
-- https://github.com/sear-project/sear/releases
+- https://github.com/marko-stanojevic/sear/releases
 
 Choose the archive for your OS/architecture and extract it.
 
@@ -57,8 +63,6 @@ If `root_password` or `registration_secrets` are missing, the daemon generates t
 - Auth: HTTP Basic
 - Username: `admin`
 - Password: value from `root_password` in secrets file (or generated password printed at startup)
-
-For source builds and local development workflow, use CONTRIBUTING.MD.
 
 ## Configuration
 
@@ -113,29 +117,7 @@ Step options:
 
 Example playbook: `examples/playbook.yml`
 
-## API overview
+## Documentation
 
-Public endpoints:
-
-- `GET /healthz`
-- `POST /api/v1/register`
-- `GET /api/v1/ws` (WebSocket; JWT in bearer token or `?token=`)
-
-Admin endpoints (HTTP Basic, user `admin`):
-
-- `GET /status`
-- `GET /status/ui`
-- `GET|POST /admin/playbooks`
-- `GET|PUT|DELETE /admin/playbooks/{id}`
-- `POST /admin/playbooks/{id}/assign`
-- `GET|PUT|DELETE /admin/clients/{id}`
-- `GET /admin/deployments`
-- `GET /admin/deployments/{id}`
-- `GET /admin/deployments/{id}/logs`
-- `GET|PUT|DELETE /secrets/{name}` and `GET /secrets`
-
-Artifact endpoints (client JWT or admin Basic auth):
-
-- `GET|POST /artifacts`
-- `GET|DELETE /artifacts/{id}`
-- `GET /artifacts/{id}/meta`
+- API endpoints: [docs/api-endpoints.md](docs/api-endpoints.md)
+- Contributor and development guide: [CONTRIBUTING.MD](CONTRIBUTING.MD)
