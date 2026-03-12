@@ -27,8 +27,8 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Go tools
-RUN go install golang.org/x/tools/cmd/goimports@v0.30.0 \
-    && go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.3
+RUN go install golang.org/x/tools/cmd/goimports@latest \
+    && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 # Create non-root user
 RUN useradd -m -s /bin/bash -u 1000 vscode \
