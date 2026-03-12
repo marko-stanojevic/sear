@@ -193,4 +193,3 @@ func GenerateSecret(numBytes int) (string, error) {
 func decodeJSON(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
 }
-

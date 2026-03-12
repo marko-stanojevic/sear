@@ -1,0 +1,98 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "mkdir -p bin && go build -o bin/sear-daemon ./cmd/sear-daemon && go build -o bin/sear-client ./cmd/sear-client",
+            "windows": {
+                "command": "if (-not (Test-Path bin)) { New-Item -ItemType Directory -Path bin | Out-Null }; go build -o bin/sear-daemon.exe ./cmd/sear-daemon; go build -o bin/sear-client.exe ./cmd/sear-client"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "silent"
+            }
+        },
+        {
+            "label": "run daemon (examples)",
+            "type": "shell",
+            "command": "go run ./cmd/sear-daemon -config examples/config.yml -secrets examples/secrets.yml",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "run client (examples)",
+            "type": "shell",
+            "command": "go run ./cmd/sear-client -config examples/client.config.yml",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "test",
+            "type": "shell",
+            "command": "go test ./... -v -count=1",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always"
+            }
+        },
+        {
+            "label": "test-race",
+            "type": "shell",
+            "command": "go test ./... -race -count=1",
+            "presentation": {
+                "reveal": "always"
+            }
+        },
+        {
+            "label": "lint",
+            "type": "shell",
+            "command": "golangci-lint run ./...",
+            "presentation": {
+                "reveal": "always"
+            }
+        },
+        {
+            "label": "tidy",
+            "type": "shell",
+            "command": "go mod tidy",
+            "presentation": {
+                "reveal": "silent"
+            }
+        },
+        {
+            "label": "clean",
+            "type": "shell",
+            "command": "rm -rf bin dist",
+            "windows": {
+                "command": "if (Test-Path bin) { Remove-Item -Recurse -Force bin }; if (Test-Path dist) { Remove-Item -Recurse -Force dist }"
+            },
+            "presentation": {
+                "reveal": "silent"
+            }
+        },
+        {
+            "label": "clean-build",
+            "type": "shell",
+            "command": "echo clean-build complete",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "clean",
+                "build"
+            ],
+            "presentation": {
+                "reveal": "silent"
+            }
+        }
+    ]
+}

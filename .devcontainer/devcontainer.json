@@ -1,0 +1,49 @@
+{
+    "name": "go-sear-devcontainer",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "go.toolsManagement.checkForUpdates": "local",
+                "go.useLanguageServer": true,
+                "go.gopath": "/go",
+                "go.lintTool": "golangci-lint",
+                "go.lintFlags": [ "--fast" ],
+                "go.formatTool": "goimports",
+                "editor.formatOnSave": true,
+                "editor.defaultFormatter": "golang.go",
+                "[go]": {
+                    "editor.codeActionsOnSave": {
+                        "source.organizeImports": "explicit"
+                    }
+                },
+                "terminal.integrated.defaultProfile.linux": "bash"
+            },
+            "extensions": [
+                "golang.go",
+                "editorconfig.editorconfig",
+                "github.vscode-github-actions",
+                "github.copilot",
+                "github.copilot-chat"
+            ],
+            "remote.extensionKind": {
+                "github.copilot": [ "ui" ],
+                "github.copilot-chat": [ "ui" ],
+                "github.vscode-github-actions": [ "ui" ]
+            }
+        }
+    },
+
+    "onCreateCommand": "go mod download",
+    "postCreateCommand": "go build ./cmd/sear-daemon && go build ./cmd/sear-client",
+    "postAttachCommand": "echo 'Dev container ready.'",
+
+    "waitFor": "postCreateCommand",
+
+    "remoteUser": "vscode",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+    "workspaceFolder": "/workspace"
+}

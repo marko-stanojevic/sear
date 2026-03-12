@@ -36,6 +36,12 @@ type Store struct {
 	playbooks   map[string]*PlaybookRecord
 	artifacts   map[string]*common.Artifact
 	secrets     map[string]string // client secrets (name→value)
+
+	// logMusMu protects logMus; logMus holds a per-deployment mutex so that
+	// concurrent log reads/writes for the same deployment are serialised without
+	// blocking unrelated deployments.
+	logMusMu sync.Mutex
+	logMus   map[string]*sync.Mutex
 }
 
 // snapshot is the structure serialised to state.json.
@@ -68,8 +74,19 @@ func New(dir string, logsDir string) (*Store, error) {
 		playbooks:   make(map[string]*PlaybookRecord),
 		artifacts:   make(map[string]*common.Artifact),
 		secrets:     make(map[string]string),
+		logMus:      make(map[string]*sync.Mutex),
 	}
-	return s, s.load()
+	if err := s.load(); err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(s.stateFile); os.IsNotExist(err) {
+		if err := s.save(); err != nil {
+			return nil, fmt.Errorf("initializing store: %w", err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("checking store state file: %w", err)
+	}
+	return s, nil
 }
 
 // ── Persistence ───────────────────────────────────────────────────────────────
@@ -338,6 +355,18 @@ func (s *Store) logPath(deploymentID string) string {
 	return filepath.Join(s.logsDir, deploymentID+".json")
 }
 
+// logMu returns (and lazily creates) the mutex for a specific deployment ID.
+func (s *Store) logMu(depID string) *sync.Mutex {
+	s.logMusMu.Lock()
+	defer s.logMusMu.Unlock()
+	if mu, ok := s.logMus[depID]; ok {
+		return mu
+	}
+	mu := &sync.Mutex{}
+	s.logMus[depID] = mu
+	return mu
+}
+
 // AppendLogs appends log entries to their respective per-deployment log files.
 // Multiple deployments in a single batch are handled correctly.
 func (s *Store) AppendLogs(entries []*common.LogEntry) error {
@@ -355,8 +384,12 @@ func (s *Store) AppendLogs(entries []*common.LogEntry) error {
 }
 
 func (s *Store) appendDepLogs(depID string, entries []*common.LogEntry) error {
+	mu := s.logMu(depID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	path := s.logPath(depID)
-	existing := s.readDepLogs(path)
+	existing := s.readDepLogsLocked(path)
 	existing = append(existing, entries...)
 	data, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
@@ -369,7 +402,9 @@ func (s *Store) appendDepLogs(depID string, entries []*common.LogEntry) error {
 	return os.Rename(tmp, path)
 }
 
-func (s *Store) readDepLogs(path string) []*common.LogEntry {
+// readDepLogsLocked reads log entries from path. The caller must hold the
+// per-deployment log mutex.
+func (s *Store) readDepLogsLocked(path string) []*common.LogEntry {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -381,7 +416,10 @@ func (s *Store) readDepLogs(path string) []*common.LogEntry {
 
 // GetLogsForDeployment returns all log entries for a specific deployment.
 func (s *Store) GetLogsForDeployment(deploymentID string) []*common.LogEntry {
-	return s.readDepLogs(s.logPath(deploymentID))
+	mu := s.logMu(deploymentID)
+	mu.Lock()
+	defer mu.Unlock()
+	return s.readDepLogsLocked(s.logPath(deploymentID))
 }
 
 // GetLogsForClient returns all log entries for every deployment of a client.
@@ -397,7 +435,10 @@ func (s *Store) GetLogsForClient(clientID string) []*common.LogEntry {
 
 	var out []*common.LogEntry
 	for _, id := range depIDs {
-		out = append(out, s.readDepLogs(s.logPath(id))...)
+		mu := s.logMu(id)
+		mu.Lock()
+		out = append(out, s.readDepLogsLocked(s.logPath(id))...)
+		mu.Unlock()
 	}
 	return out
 }

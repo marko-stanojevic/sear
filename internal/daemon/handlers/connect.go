@@ -60,10 +60,11 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 	e.pushPlaybookIfAssigned(clientID)
 
 	// Read loop.
-	ws.SetReadDeadline(time.Now().Add(90 * time.Second))
+	if err := ws.SetReadDeadline(time.Now().Add(90 * time.Second)); err != nil {
+		return
+	}
 	ws.SetPongHandler(func(string) error {
-		ws.SetReadDeadline(time.Now().Add(90 * time.Second))
-		return nil
+		return ws.SetReadDeadline(time.Now().Add(90 * time.Second))
 	})
 
 	for {
@@ -71,7 +72,9 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
-		ws.SetReadDeadline(time.Now().Add(90 * time.Second))
+		if err := ws.SetReadDeadline(time.Now().Add(90 * time.Second)); err != nil {
+			return
+		}
 		e.handleWSMessage(clientID, data)
 	}
 }
@@ -142,18 +145,18 @@ func (e *Env) pushPlaybookIfAssigned(clientID string) {
 
 // handleWSMessage dispatches an inbound WebSocket message from a client.
 func (e *Env) handleWSMessage(clientID string, data []byte) {
-	var env struct {
+	var envelope struct {
 		Type common.WSMessageType `json:"type"`
 		Data json.RawMessage      `json:"data"`
 	}
-	if err := json.Unmarshal(data, &env); err != nil {
+	if err := json.Unmarshal(data, &envelope); err != nil {
 		return
 	}
 
-	switch env.Type {
+	switch envelope.Type {
 	case common.WSMsgLog:
 		var d common.WSLogData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		entry := &common.LogEntry{
@@ -168,7 +171,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgStepStart:
 		var d common.WSStepData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -178,7 +181,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgStepComplete:
 		var d common.WSStepData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -187,7 +190,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgStepFailed:
 		var d common.WSStepData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -197,7 +200,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgReboot:
 		var d common.WSRebootData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -207,7 +210,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgDeployDone:
 		var d common.WSStepData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		now := time.Now()
@@ -222,7 +225,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgDeployFailed:
 		var d common.WSStepData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		now := time.Now()
@@ -333,18 +336,21 @@ async function load() {
     const s = dep ? dep.status : c.status;
     if (c.status === 'connected' || c.status === 'deploying') conn++;
     if (dep && dep.status === 'running') active++;
-    return ` + "`" + `<div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">${c.hostname}</div>
-          <div class="card-sub">${c.platform} · ${c.platform_id||c.id.slice(0,8)}</div>
-        </div>
-        <span class="pill ${s}"><span class="dot"></span>${s}</span>
-      </div>
-      ${dep?` + "`" + `<div class="detail">Playbook step: <span>#${dep.resume_step_index}</span></div>
-        ${dep.error_detail?'<div class="detail" style="color:#f85149">'+dep.error_detail+'</div>':''}` + "`" + `:''}
-      <div class="detail">Last seen: <span>${new Date(c.last_seen_at).toLocaleString()}</span></div>
-    </div>` + "`" + `;
+	  const playbookDetail = dep
+	    ? '<div class="detail">Playbook step: <span>#' + dep.resume_step_index + '</span></div>' +
+	      (dep.error_detail ? '<div class="detail" style="color:#f85149">' + dep.error_detail + '</div>' : '')
+	    : '';
+	  return '<div class="card">' +
+	    '<div class="card-header">' +
+	      '<div>' +
+	        '<div class="card-title">' + c.hostname + '</div>' +
+	        '<div class="card-sub">' + c.platform + ' · ' + (c.platform_id || c.id.slice(0,8)) + '</div>' +
+	      '</div>' +
+	      '<span class="pill ' + s + '"><span class="dot"></span>' + s + '</span>' +
+	    '</div>' +
+	    playbookDetail +
+	    '<div class="detail">Last seen: <span>' + new Date(c.last_seen_at).toLocaleString() + '</span></div>' +
+	  '</div>';
   }).join('');
   document.getElementById('counts').textContent =
     'Clients: '+clients.length+' · Connected: '+conn+' · Deploying: '+active;
