@@ -145,18 +145,18 @@ func (e *Env) pushPlaybookIfAssigned(clientID string) {
 
 // handleWSMessage dispatches an inbound WebSocket message from a client.
 func (e *Env) handleWSMessage(clientID string, data []byte) {
-	var env struct {
+	var envelope struct {
 		Type common.WSMessageType `json:"type"`
 		Data json.RawMessage      `json:"data"`
 	}
-	if err := json.Unmarshal(data, &env); err != nil {
+	if err := json.Unmarshal(data, &envelope); err != nil {
 		return
 	}
 
-	switch env.Type {
+	switch envelope.Type {
 	case common.WSMsgLog:
 		var d common.WSLogData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		entry := &common.LogEntry{
@@ -171,7 +171,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgStepStart:
 		var d common.WSStepData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -181,7 +181,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgStepComplete:
 		var d common.WSStepData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -190,7 +190,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgStepFailed:
 		var d common.WSStepData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -200,7 +200,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgReboot:
 		var d common.WSRebootData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -210,7 +210,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgDeployDone:
 		var d common.WSStepData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		now := time.Now()
@@ -225,7 +225,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgDeployFailed:
 		var d common.WSStepData
-		if json.Unmarshal(env.Data, &d) != nil {
+		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
 		now := time.Now()
