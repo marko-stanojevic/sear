@@ -1,0 +1,46 @@
+name: Go Release
+description: Publish a GitHub Release with cross-compiled binaries using GoReleaser
+
+inputs:
+  github-token:
+    description: GitHub token used to create the release
+    required: true
+
+outputs:
+  version:
+    description: Resolved GitVersion majorMinorPatch
+    value: ${{ steps.version.outputs.majorMinorPatch }}
+  tag:
+    description: Resolved release tag prefixed with v
+    value: v${{ steps.version.outputs.majorMinorPatch }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+        cache: true
+
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v3.0.0
+      with:
+        versionSpec: '6.0.x'
+
+    - name: Resolve version
+      id: version
+      uses: gittools/actions/gitversion/execute@v3.0.0
+      with:
+        useConfigFile: true
+        configFilePath: gitversion.yml
+
+    - name: Run GoReleaser
+      uses: goreleaser/goreleaser-action@v6
+      with:
+        distribution: goreleaser
+        version: latest
+        args: release --clean --skip=validate --skip=publish
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GORELEASER_CURRENT_TAG: v${{ steps.version.outputs.majorMinorPatch }}

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -332,18 +333,21 @@ async function load() {
     const s = dep ? dep.status : c.status;
     if (c.status === 'connected' || c.status === 'deploying') conn++;
     if (dep && dep.status === 'running') active++;
-    return ` + "`" + `<div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">${c.hostname}</div>
-          <div class="card-sub">${c.platform} · ${c.platform_id||c.id.slice(0,8)}</div>
-        </div>
-        <span class="pill ${s}"><span class="dot"></span>${s}</span>
-      </div>
-      ${dep?` + "`" + `<div class="detail">Playbook step: <span>#${dep.resume_step_index}</span></div>
-        ${dep.error_detail?'<div class="detail" style="color:#f85149">'+dep.error_detail+'</div>':''}` + "`" + `:''}
-      <div class="detail">Last seen: <span>${new Date(c.last_seen_at).toLocaleString()}</span></div>
-    </div>` + "`";
+	  const playbookDetail = dep
+	    ? '<div class="detail">Playbook step: <span>#' + dep.resume_step_index + '</span></div>' +
+	      (dep.error_detail ? '<div class="detail" style="color:#f85149">' + dep.error_detail + '</div>' : '')
+	    : '';
+	  return '<div class="card">' +
+	    '<div class="card-header">' +
+	      '<div>' +
+	        '<div class="card-title">' + c.hostname + '</div>' +
+	        '<div class="card-sub">' + c.platform + ' · ' + (c.platform_id || c.id.slice(0,8)) + '</div>' +
+	      '</div>' +
+	      '<span class="pill ' + s + '"><span class="dot"></span>' + s + '</span>' +
+	    '</div>' +
+	    playbookDetail +
+	    '<div class="detail">Last seen: <span>' + new Date(c.last_seen_at).toLocaleString() + '</span></div>' +
+	  '</div>';
   }).join('');
   document.getElementById('counts').textContent =
     'Clients: '+clients.length+' · Connected: '+conn+' · Deploying: '+active;

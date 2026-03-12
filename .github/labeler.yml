@@ -1,0 +1,70 @@
+# Path-based labels
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'go.mod'
+      - 'go.sum'
+
+ci-cd:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/actions/*'
+      - '.github/workflows/*'
+
+docs:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'docs/**/*'
+      - '**/*.md'
+
+tests:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*_test.go'
+
+build:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.goreleaser.yml'
+      - '.golangci.yml'
+
+commands:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'cmd/**/*'
+      - 'internal/**/*'
+      - 'main.go'
+
+# Branch-based labels
+breaking:
+ - head-branch: ['^breaking', 'breaking', 'major']
+
+feature:
+ - head-branch: ['^feature', 'feature', 'enhancement', 'feat', 'add', 'minor']
+
+bugfix:
+ - head-branch: ['^bugfix', 'bugfix', 'fix', 'patch', 'hotfix']
+
+ # Conventional Commit-based labels
+conventional-commits:
+- type: 'bugfix'
+  nouns: ['bugfix', 'fix', 'patch', 'hotfix']
+  labels: ['bugfix']
+- type: 'feature'
+  nouns: ['feature', 'enhancement', 'feat', 'add', 'minor']
+  labels: ['feature']
+- type: 'breaking'
+  nouns: ['breaking', 'major']
+  labels: ['breaking']
+- type: 'docs'
+  nouns: ['document','documentation']
+  labels: ['docs']
+- type: 'build'
+  nouns: ['build','rebuild']
+  labels: ['build']
+- type: 'performance'
+  nouns: ['performance', 'optimize', 'optimization']
+  labels: ['performance']
+- type: 'config'
+  nouns: ['config', 'conf', 'cofiguration', 'configure']
+  labels: ['config']

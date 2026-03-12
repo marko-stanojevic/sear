@@ -1,0 +1,77 @@
+name: Go Build
+description: Cross-compile Go binaries for all target platforms
+
+inputs:
+  release-type:
+    description: "Build type: 'debug' or 'release'"
+    required: false
+    default: 'debug'
+
+outputs:
+  release-version:
+    description: The resolved semantic version
+    value: ${{ steps.version.outputs.semVer }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+        cache: true
+
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v3.0.0
+      with:
+        versionSpec: '6.0.x'
+
+    - name: Resolve version
+      id: version
+      uses: gittools/actions/gitversion/execute@v3.0.0
+      with:
+        useConfigFile: true
+        configFilePath: gitversion.yml
+
+    - name: Display GitVersion outputs
+      shell: bash
+      run: |
+        echo "SemVer: ${{ steps.version.outputs.semVer }}"
+        echo "FullSemVer: ${{ steps.version.outputs.fullSemVer }}"
+        echo "InformationalVersion: ${{ steps.version.outputs.informationalVersion }}"
+
+    - name: Build (debug)
+      if: inputs.release-type == 'debug'
+      shell: bash
+      run: |
+        mkdir -p dist/debug
+        go build -v -o dist/debug/arpmap ./cmd/...
+
+    - name: Cross-compile (release)
+      if: inputs.release-type == 'release'
+      shell: bash
+      env:
+        VERSION: ${{ steps.version.outputs.semVer }}
+      run: |
+        set -e
+        mkdir -p dist
+        platforms=("linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows/amd64")
+        for platform in "${platforms[@]}"; do
+          GOOS="${platform%%/*}"
+          GOARCH="${platform##*/}"
+          output="dist/arpmap-${VERSION}-${GOOS}-${GOARCH}"
+          [[ "$GOOS" == "windows" ]] && output="${output}.exe"
+          echo "Building ${output}…"
+          GOOS=$GOOS GOARCH=$GOARCH go build \
+            -ldflags="-s -w -X main.version=${VERSION}" \
+            -o "${output}" \
+            ./cmd/...
+        done
+
+    - name: Upload artifacts
+      if: inputs.release-type == 'release'
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist
+        path: dist/
+        retention-days: 30
