@@ -14,6 +14,8 @@
 # Binaries for programs and plugins
 dist/*
 bin/*
+sear-client
+sear-daemon
 *.exe
 *.exe~
 *.dll
@@ -42,6 +44,3 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
-bin/sear-client
-bin/sear-daemon
-bin/
