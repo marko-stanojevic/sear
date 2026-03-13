@@ -7,8 +7,8 @@ server_url: "http://sear-daemon:8080"
 # Must match one of the daemon's registration_secrets values.
 registration_secret: "replace-with-a-strong-random-value"
 
-# Platform hint. Use "auto" to let the client detect the environment.
-# Options: auto | baremetal | aws | azure | gcp | custom
+# Platform hint. Use "auto" to let the client detect the OS.
+# Options: auto | linux | mac | windows
 platform: "auto"
 
 # Where the client persists its token and resume position across reboots.

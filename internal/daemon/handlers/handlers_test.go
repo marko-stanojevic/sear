@@ -89,7 +89,7 @@ func decode[T any](t *testing.T, rr *httptest.ResponseRecorder) T {
 func registerClient(t *testing.T, env *handlers.Env, platformID, hostname string) (string, string) {
 	t.Helper()
 	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
-		Platform:           common.PlatformBaremetal,
+		Platform:           common.PlatformLinux,
 		PlatformID:         platformID,
 		Hostname:           hostname,
 		RegistrationSecret: "reg-secret-1",
@@ -106,7 +106,7 @@ func registerClient(t *testing.T, env *handlers.Env, platformID, hostname string
 func TestHandleRegister_Success(t *testing.T) {
 	env := newTestEnv(t)
 	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
-		Platform:           common.PlatformBaremetal,
+		Platform:           common.PlatformLinux,
 		PlatformID:         "SN-001",
 		Hostname:           "edge-01",
 		RegistrationSecret: "reg-secret-1",
@@ -126,7 +126,7 @@ func TestHandleRegister_Success(t *testing.T) {
 func TestHandleRegister_InvalidSecret(t *testing.T) {
 	env := newTestEnv(t)
 	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
-		Platform:           common.PlatformBaremetal,
+		Platform:           common.PlatformLinux,
 		PlatformID:         "SN-002",
 		Hostname:           "edge-02",
 		RegistrationSecret: "wrong-secret",
@@ -149,7 +149,7 @@ func TestHandleRegister_MissingFields(t *testing.T) {
 func TestHandleRegister_Idempotent(t *testing.T) {
 	env := newTestEnv(t)
 	req := common.RegistrationRequest{
-		Platform:           common.PlatformBaremetal,
+		Platform:           common.PlatformLinux,
 		PlatformID:         "SN-003",
 		Hostname:           "edge-03",
 		RegistrationSecret: "reg-secret-1",
@@ -169,7 +169,7 @@ func TestHandleRegister_CapturesClientIP(t *testing.T) {
 	env := newTestEnv(t)
 
 	body, err := json.Marshal(common.RegistrationRequest{
-		Platform:           common.PlatformBaremetal,
+		Platform:           common.PlatformLinux,
 		PlatformID:         "SN-004",
 		Hostname:           "edge-04",
 		RegistrationSecret: "reg-secret-1",
@@ -202,13 +202,12 @@ func TestHandleRegister_CapturesClientOS(t *testing.T) {
 	env := newTestEnv(t)
 
 	body, err := json.Marshal(common.RegistrationRequest{
-		Platform:           common.PlatformBaremetal,
+		Platform:           common.PlatformLinux,
 		PlatformID:         "SN-005",
 		Hostname:           "edge-05",
 		RegistrationSecret: "reg-secret-1",
 		Metadata: map[string]string{
 			"os":             "linux",
-			"os_type":        "linux",
 			"os_description": "Debian GNU/Linux 12 (bookworm)",
 		},
 	})
@@ -232,9 +231,6 @@ func TestHandleRegister_CapturesClientOS(t *testing.T) {
 	}
 	if client.OS != "linux" {
 		t.Errorf("os = %q; want %q", client.OS, "linux")
-	}
-	if client.OSType != "linux" {
-		t.Errorf("os_type = %q; want %q", client.OSType, "linux")
 	}
 	if client.OSDescription != "Debian GNU/Linux 12 (bookworm)" {
 		t.Errorf("os_description = %q; want %q", client.OSDescription, "Debian GNU/Linux 12 (bookworm)")
