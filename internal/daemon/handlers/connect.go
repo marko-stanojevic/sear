@@ -68,6 +68,25 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return ws.SetReadDeadline(time.Now().Add(90 * time.Second))
 	})
 
+	// Send pings every 30 s so the client resets its read deadline and replies
+	// with a pong that resets ours.  WriteControl is safe to call concurrently.
+	pingDone := make(chan struct{})
+	defer close(pingDone)
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+					return
+				}
+			case <-pingDone:
+				return
+			}
+		}
+	}()
+
 	for {
 		_, data, err := ws.ReadMessage()
 		if err != nil {
