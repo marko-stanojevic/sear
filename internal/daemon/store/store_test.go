@@ -27,7 +27,7 @@ func TestClientCRUD(t *testing.T) {
 	c := &common.Client{
 		ID:           "client-1",
 		Hostname:     "edge-01",
-		Platform:     common.PlatformBaremetal,
+		Platform:     common.PlatformLinux,
 		PlatformID:   "SN-12345",
 		Status:       common.ClientStatusRegistered,
 		RegisteredAt: time.Now(),

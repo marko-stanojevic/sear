@@ -67,8 +67,8 @@ type ClientConfig struct {
 	// RegistrationSecret must match one of the daemon's registration_secrets values.
 	RegistrationSecret string `yaml:"registration_secret"`
 
-	// Platform hint: baremetal | aws | azure | gcp | custom | auto (default).
-	// When "auto", the client detects the platform from the environment.
+	// Platform hint: linux | mac | windows | auto (default).
+	// When "auto", the client detects the platform from the OS.
 	Platform string `yaml:"platform"`
 
 	// StateFile is where the client persists its token and resume position

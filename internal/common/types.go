@@ -119,15 +119,13 @@ func ResolveEnvSecrets(env map[string]string, secrets map[string]string) map[str
 
 // ── Client / registration types ───────────────────────────────────────────────
 
-// PlatformType identifies the hardware / cloud platform.
+// PlatformType identifies the operating system platform.
 type PlatformType string
 
 const (
-	PlatformBaremetal PlatformType = "baremetal"
-	PlatformAzure     PlatformType = "azure"
-	PlatformAWS       PlatformType = "aws"
-	PlatformGCP       PlatformType = "gcp"
-	PlatformCustom    PlatformType = "custom"
+	PlatformLinux   PlatformType = "linux"
+	PlatformMac     PlatformType = "mac"
+	PlatformWindows PlatformType = "windows"
 )
 
 // RegistrationRequest is sent by a client to POST /api/v1/register.
@@ -159,12 +157,11 @@ const (
 
 // Client holds server-side information about a registered client machine.
 type Client struct {
-	ID           string            `json:"id"`
-	Hostname     string            `json:"hostname"`
-	Platform     PlatformType      `json:"platform"`
-	OS           string            `json:"os,omitempty"`
-	OSType       string            `json:"os_type,omitempty"`
-	OSDescription string           `json:"os_description,omitempty"`
+	ID            string            `json:"id"`
+	Hostname      string            `json:"hostname"`
+	Platform      PlatformType      `json:"platform"`
+	OS            string            `json:"os,omitempty"`
+	OSDescription string            `json:"os_description,omitempty"`
 	PlatformID   string            `json:"platform_id"`
 	IPAddress    string            `json:"ip_address,omitempty"`
 	Metadata     map[string]string `json:"metadata,omitempty"`

@@ -149,10 +149,6 @@ func (e *Env) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	client.Hostname = req.Hostname
 	client.Platform = req.Platform
 	client.OS = req.Metadata["os"]
-	client.OSType = req.Metadata["os_type"]
-	if client.OSType == "" {
-		client.OSType = client.OS
-	}
 	client.OSDescription = req.Metadata["os_description"]
 	client.PlatformID = req.PlatformID
 	client.IPAddress = requestIP(r)
