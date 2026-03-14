@@ -131,6 +131,8 @@ func (c *Client) connect(ctx context.Context) error {
 		return fmt.Errorf("dial: %w", err)
 	}
 	defer ws.Close()
+	writer := newWSOutboundWriter(ws)
+	defer writer.Stop()
 
 	log.Printf("WebSocket connected")
 
@@ -178,7 +180,7 @@ func (c *Client) connect(ctx context.Context) error {
 				log.Printf("warn: invalid playbook message: %v", err)
 				continue
 			}
-			c.runPlaybook(ctx, ws, &pd)
+			c.runPlaybook(ctx, writer, &pd)
 		}
 	}
 }
@@ -205,7 +207,7 @@ func wsEndpoint(serverURL, token string) string {
 
 // ── Playbook execution ────────────────────────────────────────────────────────
 
-func (c *Client) runPlaybook(ctx context.Context, ws *websocket.Conn, pd *common.WSPlaybookData) {
+func (c *Client) runPlaybook(ctx context.Context, writer *wsOutboundWriter, pd *common.WSPlaybookData) {
 	pb := pd.Playbook
 	depID := pd.DeploymentID
 	log.Printf("starting playbook %q (deployment %s, resume step %d)", pb.Name, depID, pd.ResumeStepIndex)
@@ -223,7 +225,7 @@ func (c *Client) runPlaybook(ctx context.Context, ws *websocket.Conn, pd *common
 		}
 		log.Printf("[%s / %s] starting", fs.JobName, stepName)
 
-		c.wsSend(ws, common.WSMessage{
+		writer.Send(common.WSMessage{
 			Type:      common.WSMsgStepStart,
 			Timestamp: time.Now(),
 			Data: common.WSStepData{
@@ -236,7 +238,7 @@ func (c *Client) runPlaybook(ctx context.Context, ws *websocket.Conn, pd *common
 
 		logger := func(level common.LogLevel, msg string) {
 			log.Printf("[%s] %s", level, msg)
-			c.wsSend(ws, common.WSMessage{
+			writer.Send(common.WSMessage{
 				Type:      common.WSMsgLog,
 				Timestamp: time.Now(),
 				Data: common.WSLogData{
@@ -255,7 +257,7 @@ func (c *Client) runPlaybook(ctx context.Context, ws *websocket.Conn, pd *common
 			resumeAt := fs.GlobalIndex + 1
 			logger(common.LogLevelInfo, fmt.Sprintf("step %q requested reboot (reason: %s); will resume at step %d",
 				stepName, result.RebootReason, resumeAt))
-			c.wsSend(ws, common.WSMessage{
+			writer.Send(common.WSMessage{
 				Type:      common.WSMsgReboot,
 				Timestamp: time.Now(),
 				Data: common.WSRebootData{
@@ -275,7 +277,7 @@ func (c *Client) runPlaybook(ctx context.Context, ws *websocket.Conn, pd *common
 		if result.Err != nil {
 			if fs.ContinueOnError {
 				logger(common.LogLevelWarn, fmt.Sprintf("step %q failed (continue-on-error): %v", stepName, result.Err))
-				c.wsSend(ws, common.WSMessage{
+				writer.Send(common.WSMessage{
 					Type:      common.WSMsgStepComplete,
 					Timestamp: time.Now(),
 					Data: common.WSStepData{
@@ -289,7 +291,7 @@ func (c *Client) runPlaybook(ctx context.Context, ws *websocket.Conn, pd *common
 			}
 			errMsg := fmt.Sprintf("step %q failed: %v", stepName, result.Err)
 			logger(common.LogLevelError, errMsg)
-			c.wsSend(ws, common.WSMessage{
+			writer.Send(common.WSMessage{
 				Type:      common.WSMsgDeployFailed,
 				Timestamp: time.Now(),
 				Data: common.WSStepData{
@@ -304,7 +306,7 @@ func (c *Client) runPlaybook(ctx context.Context, ws *websocket.Conn, pd *common
 		}
 
 		log.Printf("[%s / %s] completed", fs.JobName, stepName)
-		c.wsSend(ws, common.WSMessage{
+		writer.Send(common.WSMessage{
 			Type:      common.WSMsgStepComplete,
 			Timestamp: time.Now(),
 			Data: common.WSStepData{
@@ -317,27 +319,73 @@ func (c *Client) runPlaybook(ctx context.Context, ws *websocket.Conn, pd *common
 	}
 
 	log.Printf("playbook %q completed successfully", pb.Name)
-	c.wsSend(ws, common.WSMessage{
+	writer.Send(common.WSMessage{
 		Type:      common.WSMsgDeployDone,
 		Timestamp: time.Now(),
 		Data:      common.WSStepData{DeploymentID: depID},
 	})
 }
 
-// wsSend marshals and sends a message, logging any error.
-func (c *Client) wsSend(ws *websocket.Conn, msg common.WSMessage) {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		log.Printf("warn: marshal WS message: %v", err)
+type wsOutboundWriter struct {
+	ch   chan common.WSMessage
+	stop chan struct{}
+	done chan struct{}
+}
+
+func newWSOutboundWriter(ws *websocket.Conn) *wsOutboundWriter {
+	w := &wsOutboundWriter{
+		ch:   make(chan common.WSMessage, 256),
+		stop: make(chan struct{}),
+		done: make(chan struct{}),
+	}
+
+	go func() {
+		defer close(w.done)
+		for {
+			select {
+			case <-w.stop:
+				return
+			case msg := <-w.ch:
+				data, err := json.Marshal(msg)
+				if err != nil {
+					log.Printf("warn: marshal WS message: %v", err)
+					continue
+				}
+				if err := ws.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+					log.Printf("warn: WS set write deadline: %v", err)
+					return
+				}
+				if err := ws.WriteMessage(websocket.TextMessage, data); err != nil {
+					log.Printf("warn: WS write: %v", err)
+					return
+				}
+			}
+		}
+	}()
+
+	return w
+}
+
+func (w *wsOutboundWriter) Send(msg common.WSMessage) {
+	select {
+	case <-w.done:
+		log.Printf("warn: dropping WS message %q: writer closed", msg.Type)
 		return
+	default:
 	}
-	if err := ws.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
-		log.Printf("warn: WS set write deadline: %v", err)
-		return
+
+	select {
+	case <-w.done:
+		log.Printf("warn: dropping WS message %q: writer closed", msg.Type)
+	case w.ch <- msg:
+	default:
+		log.Printf("warn: dropping WS message %q: outbound queue full", msg.Type)
 	}
-	if err := ws.WriteMessage(websocket.TextMessage, data); err != nil {
-		log.Printf("warn: WS write: %v", err)
-	}
+}
+
+func (w *wsOutboundWriter) Stop() {
+	close(w.stop)
+	<-w.done
 }
 
 // ── Local state ───────────────────────────────────────────────────────────────

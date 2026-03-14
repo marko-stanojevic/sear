@@ -150,6 +150,13 @@ func (e *Env) pushPlaybookIfAssigned(clientID string) {
 	client.Status = common.ClientStatusDeploying
 	_ = e.Store.SaveClient(client)
 
+	pbName := pb.Name
+	if pb.Playbook != nil && pb.Playbook.Name != "" {
+		pbName = pb.Playbook.Name
+	}
+	e.appendDeploymentLog(depID, "", 0, common.LogLevelInfo,
+		fmt.Sprintf("starting playbook %q (deployment %s, resume step %d)", pbName, depID, resumeStep))
+
 	e.Hub.Send(clientID, common.WSMessage{
 		Type:      common.WSMsgPlaybook,
 		Timestamp: time.Now(),
@@ -194,6 +201,12 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
+		stepName := d.StepName
+		if stepName == "" {
+			stepName = fmt.Sprintf("step-%d", d.StepIndex)
+		}
+		e.appendDeploymentLog(d.DeploymentID, d.JobName, d.StepIndex, common.LogLevelInfo,
+			fmt.Sprintf("[%s / %s] starting", d.JobName, stepName))
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.Status = common.DeploymentStatusRunning
 			dep.ResumeStepIndex = d.StepIndex
@@ -204,6 +217,12 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
+		stepName := d.StepName
+		if stepName == "" {
+			stepName = fmt.Sprintf("step-%d", d.StepIndex)
+		}
+		e.appendDeploymentLog(d.DeploymentID, d.JobName, d.StepIndex, common.LogLevelInfo,
+			fmt.Sprintf("[%s / %s] completed", d.JobName, stepName))
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.ResumeStepIndex = d.StepIndex + 1
 		})
@@ -233,6 +252,18 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
+		pbName := "playbook"
+		if dep, ok := e.Store.GetDeployment(d.DeploymentID); ok {
+			if pb, ok := e.Store.GetPlaybook(dep.PlaybookID); ok {
+				if pb.Playbook != nil && pb.Playbook.Name != "" {
+					pbName = pb.Playbook.Name
+				} else if pb.Name != "" {
+					pbName = pb.Name
+				}
+			}
+		}
+		e.appendDeploymentLog(d.DeploymentID, "", 0, common.LogLevelInfo,
+			fmt.Sprintf("playbook %q completed successfully", pbName))
 		now := time.Now()
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.Status = common.DeploymentStatusDone
@@ -248,6 +279,21 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
+		pbName := "playbook"
+		if dep, ok := e.Store.GetDeployment(d.DeploymentID); ok {
+			if pb, ok := e.Store.GetPlaybook(dep.PlaybookID); ok {
+				if pb.Playbook != nil && pb.Playbook.Name != "" {
+					pbName = pb.Playbook.Name
+				} else if pb.Name != "" {
+					pbName = pb.Name
+				}
+			}
+		}
+		msg := fmt.Sprintf("playbook %q failed", pbName)
+		if d.Error != "" {
+			msg = fmt.Sprintf("%s: %s", msg, d.Error)
+		}
+		e.appendDeploymentLog(d.DeploymentID, d.JobName, d.StepIndex, common.LogLevelError, msg)
 		now := time.Now()
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.Status = common.DeploymentStatusFailed
@@ -272,6 +318,20 @@ func (e *Env) updateDeploy(depID string, fn func(*common.DeploymentState)) {
 	fn(dep)
 	dep.UpdatedAt = time.Now()
 	_ = e.Store.SaveDeployment(dep)
+}
+
+func (e *Env) appendDeploymentLog(deploymentID, jobName string, stepIndex int, level common.LogLevel, message string) {
+	if deploymentID == "" || message == "" {
+		return
+	}
+	_ = e.Store.AppendLogs([]*common.LogEntry{{
+		DeploymentID: deploymentID,
+		JobName:      jobName,
+		StepIndex:    stepIndex,
+		Level:        level,
+		Message:      message,
+		Timestamp:    time.Now(),
+	}})
 }
 
 // ── Status UI ─────────────────────────────────────────────────────────────────

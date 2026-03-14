@@ -55,14 +55,16 @@ const deploymentsHTML = `<!DOCTYPE html>
   .empty{text-align:center;color:#8b949e;padding:60px 20px}
   .panel{margin-top:16px;background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden}
   .panel-head{background:#0d1117;border-bottom:1px solid #30363d;padding:10px 12px;color:#8b949e;font-size:.8rem;display:flex;justify-content:space-between;align-items:center}
+  .log-head{display:grid;grid-template-columns:.9fr .6fr .7fr .9fr 2fr;gap:10px;padding:8px 12px;border-bottom:1px solid #30363d;background:#0d1117;color:#8b949e;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em}
   .log-list{max-height:360px;overflow:auto}
-  .log-row{display:grid;grid-template-columns:.9fr .6fr .5fr 2.2fr;gap:10px;padding:8px 12px;border-bottom:1px solid #21262d;font-size:.82rem}
+  .log-row{display:grid;grid-template-columns:.9fr .6fr .7fr .9fr 2fr;gap:10px;padding:8px 12px;border-bottom:1px solid #21262d;font-size:.82rem}
   .log-row:last-child{border-bottom:none}
   .log-row .ts{color:#8b949e}
   .log-row .msg{white-space:pre-wrap;word-break:break-word}
   @media (max-width: 1100px){
     .list-head{display:none}
     .list-row{grid-template-columns:1fr;gap:6px}
+    .log-head{display:none}
     .log-row{grid-template-columns:1fr;gap:4px}
   }
   #login-overlay{display:none;position:fixed;inset:0;background:#0d1117cc;backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:100}
@@ -204,15 +206,32 @@ async function openLogs(id){
   if(!r.ok){root.innerHTML='<div class="empty">Failed to load logs.</div>';return;}
   var logs=await r.json()||[];
   if(!logs.length){root.innerHTML='<div class="empty">No logs for this deployment.</div>';return;}
-  root.innerHTML=logs.map(function(l){
+  var stepNameByKey={};
+  logs.forEach(function(l){
+    var m=String(l.message||'').match(/^\[(.+?) \/ (.+?)\] (starting|completed)$/);
+    if(m){
+      var k=String(l.job_name||m[1]||'')+'|'+String(l.step_index||0);
+      stepNameByKey[k]=m[2]||'';
+    }
+  });
+  var rows=logs.map(function(l){
     var ts=l.timestamp?new Date(l.timestamp).toLocaleString():'-';
+    var hasStep=!!String(l.job_name||'').trim();
+    var job=hasStep?String(l.job_name):'-';
+    var step='-';
+    if(hasStep){
+      var key=job+'|'+String(l.step_index||0);
+      step=stepNameByKey[key]||'-';
+    }
     return '<div class="log-row">'+
       '<div class="ts">'+esc(ts)+'</div>'+
       '<div>'+esc(l.level||'-')+'</div>'+
-      '<div>#'+esc(l.step_index||0)+'</div>'+
+      '<div>'+esc(job)+'</div>'+
+      '<div>'+esc(step)+'</div>'+
       '<div class="msg">'+esc(l.message||'')+'</div>'+
     '</div>';
   }).join('');
+  root.innerHTML='<div class="log-head"><div>Time</div><div>Level</div><div>Job</div><div>Step</div><div>Message</div></div>'+rows;
 }
 function closeLogs(){document.getElementById('logs-panel').style.display='none';}
 

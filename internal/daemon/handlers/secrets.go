@@ -14,7 +14,10 @@ import (
 //	PUT    /secrets/{name}   – set or update a secret value
 //	DELETE /secrets/{name}   – delete a secret
 func (e *Env) HandleSecrets(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimPrefix(r.URL.Path, "/api/v1/secrets")
+  name := strings.TrimPrefix(r.URL.Path, "/api/v1/secrets")
+  if name == r.URL.Path {
+    name = strings.TrimPrefix(r.URL.Path, "/secrets")
+  }
 	name = strings.TrimPrefix(name, "/")
 
 	switch r.Method {
