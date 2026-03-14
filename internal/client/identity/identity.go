@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"net"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 )
@@ -14,8 +15,9 @@ import (
 // PlatformInfo contains the discovered platform identifiers.
 type PlatformInfo struct {
 	Platform string
-	ID       string
 	Hostname string
+	Model    string
+	Vendor   string
 	Metadata map[string]string
 }
 
@@ -26,20 +28,27 @@ func Collect(platformHint string) PlatformInfo {
 		hostname = "unknown"
 	}
 	meta := map[string]string{
-		"os":   runtime.GOOS,
+		"os":   osDescription(),
+		"type": runtime.GOOS,
 		"arch": runtime.GOARCH,
 	}
-	if desc := osDescription(); desc != "" {
-		meta["os_description"] = desc
+	vendor, model := hardwareInfo()
+	if vendor != "" {
+		meta["vendor"] = vendor
+	}
+	if model != "" {
+		meta["model"] = model
 	}
 
 	platform := normalizePlatformHint(platformHint)
-
-	id := collectID(meta)
+	if id := collectID(meta); id != "" {
+		meta["machine_id"] = id
+	}
 	return PlatformInfo{
 		Platform: platform,
-		ID:       id,
 		Hostname: hostname,
+		Model:    model,
+		Vendor:   vendor,
 		Metadata: meta,
 	}
 }
@@ -76,24 +85,20 @@ func detectPlatform() string {
 // ── ID collection ─────────────────────────────────────────────────────────────
 
 func collectID(meta map[string]string) string {
-	// Use DMI serial, stable MAC, or a random fallback.
-	return baremetalID(meta)
-}
-
-func baremetalID(meta map[string]string) string {
-	// Try DMI product serial (Linux sysfs path).
-	if serial := readFile("/sys/class/dmi/id/product_serial"); serial != "" &&
-		serial != "Unknown" && serial != "Not Specified" {
-		meta["dmi_serial"] = serial
+	if isLikelyVM(meta) {
+		if guid := vmGUID(); guid != "" {
+			meta["vm_guid"] = guid
+			return guid
+		}
+	}
+	if serial := hardwareSerial(); serial != "" {
+		meta["serial_number"] = serial
 		return serial
 	}
-	// Try chassis serial.
-	if serial := readFile("/sys/class/dmi/id/chassis_serial"); serial != "" &&
-		serial != "Unknown" && serial != "Not Specified" {
-		meta["dmi_chassis_serial"] = serial
-		return serial
+	if guid := vmGUID(); guid != "" {
+		meta["vm_guid"] = guid
+		return guid
 	}
-	// Stable MAC address of the first non-virtual interface.
 	if mac := firstStableMAC(); mac != "" {
 		meta["mac_address"] = mac
 		return mac
@@ -103,6 +108,60 @@ func baremetalID(meta map[string]string) string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return "rnd-" + hex.EncodeToString(b)
+}
+
+func isLikelyVM(meta map[string]string) bool {
+	vendor := strings.ToLower(strings.TrimSpace(meta["vendor"]))
+	model := strings.ToLower(strings.TrimSpace(meta["model"]))
+	v := vendor + " " + model
+	markers := []string{
+		"vmware", "virtualbox", "kvm", "qemu", "xen", "hyper-v", "virtual machine",
+		"microsoft corporation", "amazon ec2", "google compute", "openstack", "parallels",
+	}
+	for _, m := range markers {
+		if strings.Contains(v, m) {
+			return true
+		}
+	}
+	return false
+}
+
+func hardwareSerial() string {
+	switch runtime.GOOS {
+	case "linux":
+		if serial := cleanHardwareValue(readFile("/sys/class/dmi/id/product_serial")); serial != "" {
+			return serial
+		}
+		if serial := cleanHardwareValue(readFile("/sys/class/dmi/id/chassis_serial")); serial != "" {
+			return serial
+		}
+	case "darwin":
+		return cleanHardwareValue(ioregValue("IOPlatformSerialNumber"))
+	case "windows":
+		return cleanHardwareValue(firstNonEmpty(
+			runAndTrim("wmic", "bios", "get", "serialnumber", "/value"),
+			runAndTrim("powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_BIOS).SerialNumber"),
+		))
+	}
+	return ""
+}
+
+func vmGUID() string {
+	switch runtime.GOOS {
+	case "linux":
+		return cleanHardwareValue(firstNonEmpty(
+			readFile("/sys/class/dmi/id/product_uuid"),
+			readFile("/sys/hypervisor/uuid"),
+		))
+	case "darwin":
+		return cleanHardwareValue(ioregValue("IOPlatformUUID"))
+	case "windows":
+		return cleanHardwareValue(firstNonEmpty(
+			runAndTrim("wmic", "csproduct", "get", "uuid", "/value"),
+			runAndTrim("powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_ComputerSystemProduct).UUID"),
+		))
+	}
+	return ""
 }
 
 func firstStableMAC() string {
@@ -152,6 +211,107 @@ func osDescription() string {
 		return name
 	}
 	return "linux"
+}
+
+func hardwareInfo() (vendor string, model string) {
+	switch runtime.GOOS {
+	case "linux":
+		vendor = firstNonEmpty(
+			readFile("/sys/class/dmi/id/sys_vendor"),
+			readFile("/sys/devices/virtual/dmi/id/sys_vendor"),
+		)
+		model = firstNonEmpty(
+			readFile("/sys/class/dmi/id/product_name"),
+			readFile("/sys/devices/virtual/dmi/id/product_name"),
+			readFile("/proc/device-tree/model"),
+		)
+	case "darwin":
+		vendor = "Apple"
+		model = firstNonEmpty(runAndTrim("sysctl", "-n", "hw.model"))
+	case "windows":
+		vendor = firstNonEmpty(
+			runAndTrim("wmic", "computersystem", "get", "manufacturer", "/value"),
+			runAndTrim("powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_ComputerSystem).Manufacturer"),
+		)
+		model = firstNonEmpty(
+			runAndTrim("wmic", "computersystem", "get", "model", "/value"),
+			runAndTrim("powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_ComputerSystem).Model"),
+		)
+	}
+
+	vendor = cleanHardwareValue(vendor)
+	model = cleanHardwareValue(model)
+	return vendor, model
+}
+
+func runAndTrim(cmd string, args ...string) string {
+	out, err := exec.Command(cmd, args...).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		s := strings.TrimSpace(v)
+		if s == "" {
+			continue
+		}
+		for _, line := range strings.Split(s, "\n") {
+			line = strings.TrimSpace(strings.Trim(line, "\""))
+			if line == "" {
+				continue
+			}
+			if strings.Contains(line, "=") {
+				_, rhs, ok := strings.Cut(line, "=")
+				if ok {
+					line = strings.TrimSpace(rhs)
+				}
+			}
+			if line == "" {
+				continue
+			}
+			line = strings.Trim(line, "\";")
+			if strings.Contains(strings.ToLower(line), "<class ") {
+				continue
+			}
+			return line
+		}
+	}
+	return ""
+}
+
+func ioregValue(key string) string {
+	out := runAndTrim("ioreg", "-rd1", "-c", "IOPlatformExpertDevice")
+	if out == "" {
+		return ""
+	}
+	needle := strings.ToLower(key)
+	for _, line := range strings.Split(out, "\n") {
+		l := strings.TrimSpace(line)
+		if l == "" {
+			continue
+		}
+		if !strings.Contains(strings.ToLower(l), needle) {
+			continue
+		}
+		_, rhs, ok := strings.Cut(l, "=")
+		if !ok {
+			continue
+		}
+		return strings.Trim(strings.TrimSpace(rhs), "\";")
+	}
+	return ""
+}
+
+func cleanHardwareValue(v string) string {
+	v = strings.TrimSpace(v)
+	v = strings.Trim(v, "\x00")
+	if strings.EqualFold(v, "unknown") || strings.EqualFold(v, "none") || strings.EqualFold(v, "not specified") {
+		return ""
+	}
+	return v
 }
 
 func parseOSRelease(path string) map[string]string {

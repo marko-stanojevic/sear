@@ -419,9 +419,9 @@ async function load() {
 	    '<div class="card-header">' +
 	      '<div>' +
 	        '<div class="card-title">' + esc(c.hostname || c.id) + '</div>' +
-	        '<div class="card-sub">Type: ' + esc(c.os_type || c.os || (c.metadata && (c.metadata.os_type || c.metadata.os)) || '-') + '</div>' +
-	        '<div class="card-sub">Description: ' + esc(c.os_description || (c.metadata && c.metadata.os_description) || '-') + '</div>' +
-	        '<div class="card-sub">Platform: ' + esc(c.platform || '-') + ' · Platform ID: ' + esc(c.platform_id || c.id.slice(0,8)) + '</div>' +
+	        '<div class="card-sub">OS: ' + esc(c.os || (c.metadata && c.metadata.os) || (c.metadata && c.metadata.type) || (c.metadata && c.metadata.os_type) || '-') + '</div>' +
+	        '<div class="card-sub">Platform: ' + esc(c.platform || '-') + '</div>' +
+	        '<div class="card-sub">Hardware: ' + esc(c.vendor || (c.metadata && c.metadata.vendor) || '-') + ' · ' + esc(c.model || (c.metadata && c.metadata.model) || '-') + '</div>' +
 	        '<div class="card-sub">IP: ' + esc(c.ip_address || '-') + '</div>' +
 	      '</div>' +
 	      '<span class="pill ' + s + '"><span class="dot"></span>' + s + '</span>' +
