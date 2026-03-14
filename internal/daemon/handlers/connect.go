@@ -150,6 +150,13 @@ func (e *Env) pushPlaybookIfAssigned(clientID string) {
 	client.Status = common.ClientStatusDeploying
 	_ = e.Store.SaveClient(client)
 
+	pbName := pb.Name
+	if pb.Playbook != nil && pb.Playbook.Name != "" {
+		pbName = pb.Playbook.Name
+	}
+	e.appendDeploymentLog(depID, "", 0, common.LogLevelInfo,
+		fmt.Sprintf("starting playbook %q (deployment %s, resume step %d)", pbName, depID, resumeStep))
+
 	e.Hub.Send(clientID, common.WSMessage{
 		Type:      common.WSMsgPlaybook,
 		Timestamp: time.Now(),
@@ -194,6 +201,12 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
+		stepName := d.StepName
+		if stepName == "" {
+			stepName = fmt.Sprintf("step-%d", d.StepIndex)
+		}
+		e.appendDeploymentLog(d.DeploymentID, d.JobName, d.StepIndex, common.LogLevelInfo,
+			fmt.Sprintf("[%s / %s] starting", d.JobName, stepName))
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.Status = common.DeploymentStatusRunning
 			dep.ResumeStepIndex = d.StepIndex
@@ -204,6 +217,12 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
+		stepName := d.StepName
+		if stepName == "" {
+			stepName = fmt.Sprintf("step-%d", d.StepIndex)
+		}
+		e.appendDeploymentLog(d.DeploymentID, d.JobName, d.StepIndex, common.LogLevelInfo,
+			fmt.Sprintf("[%s / %s] completed", d.JobName, stepName))
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.ResumeStepIndex = d.StepIndex + 1
 		})
@@ -233,6 +252,18 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
+		pbName := "playbook"
+		if dep, ok := e.Store.GetDeployment(d.DeploymentID); ok {
+			if pb, ok := e.Store.GetPlaybook(dep.PlaybookID); ok {
+				if pb.Playbook != nil && pb.Playbook.Name != "" {
+					pbName = pb.Playbook.Name
+				} else if pb.Name != "" {
+					pbName = pb.Name
+				}
+			}
+		}
+		e.appendDeploymentLog(d.DeploymentID, "", 0, common.LogLevelInfo,
+			fmt.Sprintf("playbook %q completed successfully", pbName))
 		now := time.Now()
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.Status = common.DeploymentStatusDone
@@ -248,6 +279,21 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
+		pbName := "playbook"
+		if dep, ok := e.Store.GetDeployment(d.DeploymentID); ok {
+			if pb, ok := e.Store.GetPlaybook(dep.PlaybookID); ok {
+				if pb.Playbook != nil && pb.Playbook.Name != "" {
+					pbName = pb.Playbook.Name
+				} else if pb.Name != "" {
+					pbName = pb.Name
+				}
+			}
+		}
+		msg := fmt.Sprintf("playbook %q failed", pbName)
+		if d.Error != "" {
+			msg = fmt.Sprintf("%s: %s", msg, d.Error)
+		}
+		e.appendDeploymentLog(d.DeploymentID, d.JobName, d.StepIndex, common.LogLevelError, msg)
 		now := time.Now()
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.Status = common.DeploymentStatusFailed
@@ -272,6 +318,20 @@ func (e *Env) updateDeploy(depID string, fn func(*common.DeploymentState)) {
 	fn(dep)
 	dep.UpdatedAt = time.Now()
 	_ = e.Store.SaveDeployment(dep)
+}
+
+func (e *Env) appendDeploymentLog(deploymentID, jobName string, stepIndex int, level common.LogLevel, message string) {
+	if deploymentID == "" || message == "" {
+		return
+	}
+	_ = e.Store.AppendLogs([]*common.LogEntry{{
+		DeploymentID: deploymentID,
+		JobName:      jobName,
+		StepIndex:    stepIndex,
+		Level:        level,
+		Message:      message,
+		Timestamp:    time.Now(),
+	}})
 }
 
 // ── Status UI ─────────────────────────────────────────────────────────────────
@@ -310,8 +370,14 @@ const statusHTML = `<!DOCTYPE html>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh}
-  header{background:#161b22;border-bottom:1px solid #30363d;padding:16px 24px;display:flex;align-items:center;gap:12px}
+  header{background:#161b22;border-bottom:1px solid #30363d;padding:0 24px;display:flex;align-items:stretch;gap:0}
+  .header-brand{display:flex;align-items:center;gap:12px;padding:16px 0}
   header h1{font-size:1.25rem;font-weight:600}
+  nav{display:flex;gap:2px;align-items:stretch;margin-left:24px}
+  nav a{color:#8b949e;text-decoration:none;padding:0 14px;display:flex;align-items:center;font-size:.875rem;border-bottom:2px solid transparent}
+  nav a:hover{color:#e6edf3}
+  nav a.active{color:#e6edf3;border-bottom-color:#f78166}
+  .header-right{margin-left:auto;display:flex;align-items:center}
   .badge{background:#238636;color:#fff;font-size:.75rem;padding:2px 8px;border-radius:12px}
 	.container{max-width:1200px;margin:0 auto;padding:24px}
   .meta{color:#8b949e;font-size:.875rem;margin-bottom:20px;display:flex;align-items:center;gap:16px}
@@ -383,15 +449,25 @@ const statusHTML = `<!DOCTYPE html>
   </div>
 </div>
 <header>
-  <h1>⚡ Sear Daemon</h1>
-  <span class="badge">LIVE</span>
+	<div class="header-brand">
+		<h1>&#x26A1; Sear Daemon</h1>
+		<span class="badge">LIVE</span>
+	</div>
+	<nav>
+		<a href="/ui" class="active">Clients</a>
+		<a href="/ui/secrets">Secrets</a>
+		<a href="/ui/playbooks">Playbooks</a>
+		<a href="/ui/deployments">Deployments</a>
+	</nav>
+	<div class="header-right">
+		<button onclick="logout()">Sign out</button>
+	</div>
 </header>
 <div class="container">
-  <div class="meta">
-    <span id="counts">Loading…</span>
-    <button onclick="load()">↻ Refresh</button>
-    <button onclick="logout()" style="margin-left:auto">Sign out</button>
-  </div>
+	<div class="meta">
+		<span id="counts">Loading&#x2026;</span>
+		<button onclick="load()">&#x21BB; Refresh</button>
+	</div>
 	<div class="filters">
 		<input id="f-query" type="text" placeholder="Search hostname, OS, vendor, model, IP">
 		<select id="f-status">
@@ -432,7 +508,7 @@ async function doLogin(){
   const p=document.getElementById('lp').value;
   if(!p){document.getElementById('login-error').textContent='Password required';return;}
   const creds=btoa(u+':'+p);
-  const r=await fetch('/status',{headers:{Authorization:'Basic '+creds}});
+	const r=await fetch('/api/v1/status',{headers:{Authorization:'Basic '+creds}});
   if(r.status===401){document.getElementById('login-error').textContent='Invalid password';return;}
   sessionStorage.setItem('sear_creds',creds);
   hideLogin();
@@ -558,7 +634,7 @@ function clearFilters() {
 }
 
 async function load() {
-	const r = await fetch('/status');
+	const r = await fetch('/api/v1/status');
   if (r.status === 401) {
     const root = document.getElementById('root');
     root.innerHTML = '<div class="empty">Unauthorized. Reload the page to sign in.</div>';

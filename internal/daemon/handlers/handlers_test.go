@@ -392,8 +392,8 @@ func TestHandleSecrets_CRUD(t *testing.T) {
 
 	// Set.
 	b, _ := json.Marshal(map[string]string{"value": "s3cr3t"})
-	req := httptest.NewRequest(http.MethodPut, "/secrets/MY_SECRET", bytes.NewReader(b))
-	req.URL.Path = "/secrets/MY_SECRET"
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/secrets/MY_SECRET", bytes.NewReader(b))
+	req.URL.Path = "/api/v1/secrets/MY_SECRET"
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	env.HandleSecrets(rr, req)
@@ -402,8 +402,8 @@ func TestHandleSecrets_CRUD(t *testing.T) {
 	}
 
 	// Get.
-	req2 := httptest.NewRequest(http.MethodGet, "/secrets/MY_SECRET", nil)
-	req2.URL.Path = "/secrets/MY_SECRET"
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/secrets/MY_SECRET", nil)
+	req2.URL.Path = "/api/v1/secrets/MY_SECRET"
 	rr2 := httptest.NewRecorder()
 	env.HandleSecrets(rr2, req2)
 	var got map[string]string
@@ -413,8 +413,8 @@ func TestHandleSecrets_CRUD(t *testing.T) {
 	}
 
 	// List names (values must be redacted).
-	req3 := httptest.NewRequest(http.MethodGet, "/secrets", nil)
-	req3.URL.Path = "/secrets"
+	req3 := httptest.NewRequest(http.MethodGet, "/api/v1/secrets", nil)
+	req3.URL.Path = "/api/v1/secrets"
 	rr3 := httptest.NewRecorder()
 	env.HandleSecrets(rr3, req3)
 	var names []string
@@ -424,8 +424,8 @@ func TestHandleSecrets_CRUD(t *testing.T) {
 	}
 
 	// Delete.
-	req4 := httptest.NewRequest(http.MethodDelete, "/secrets/MY_SECRET", nil)
-	req4.URL.Path = "/secrets/MY_SECRET"
+	req4 := httptest.NewRequest(http.MethodDelete, "/api/v1/secrets/MY_SECRET", nil)
+	req4.URL.Path = "/api/v1/secrets/MY_SECRET"
 	rr4 := httptest.NewRecorder()
 	env.HandleSecrets(rr4, req4)
 	if rr4.Code != http.StatusOK {

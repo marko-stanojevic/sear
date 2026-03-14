@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -9,15 +11,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/marko-stanojevic/sear/internal/common"
 	"github.com/marko-stanojevic/sear/internal/daemon/store"
+	"gopkg.in/yaml.v3"
 )
 
-// ── GET /status ───────────────────────────────────────────────────────────────
+// ── Status endpoint and UI ─────────────────────────────────────────────────────
 
-// StatusResponse is returned by GET /status (JSON) and GET /status/ui (rendered).
+// StatusResponse is returned by GET /api/v1/status (JSON) and used by the /ui status dashboard.
 type StatusResponse struct {
-	Clients     []*common.Client          `json:"clients"`
-	Deployments []*common.DeploymentState `json:"deployments"`
-	TotalClients int                      `json:"total_clients,omitempty"`
+	Clients      []*common.Client          `json:"clients"`
+	Deployments  []*common.DeploymentState `json:"deployments"`
+	TotalClients int                       `json:"total_clients,omitempty"`
 }
 
 // ── /playbooks ────────────────────────────────────────────────────────────────────
@@ -53,20 +56,33 @@ func (e *Env) HandleRootPlaybooks(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "playbook not found")
 			return
 		}
-		writeJSON(w, http.StatusOK, pb)
+		pbYAML, err := yaml.Marshal(pb.Playbook)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to render playbook YAML")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":            pb.ID,
+			"name":          pb.Name,
+			"description":   pb.Description,
+			"playbook":      pb.Playbook,
+			"playbook_yaml": string(pbYAML),
+			"created_at":    pb.CreatedAt,
+			"updated_at":    pb.UpdatedAt,
+		})
 
 	case http.MethodPost:
 		if id != "" && sub == "assign" {
 			e.assignPlaybook(w, r, id)
 			return
 		}
-		var rec store.PlaybookRecord
-		if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		rec, err := decodePlaybookWritePayload(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		if rec.Playbook == nil {
-			writeError(w, http.StatusBadRequest, "playbook field is required")
+			writeError(w, http.StatusBadRequest, "playbook or playbook_yaml field is required")
 			return
 		}
 		if len(rec.Playbook.Jobs) == 0 {
@@ -92,9 +108,17 @@ func (e *Env) HandleRootPlaybooks(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "playbook not found")
 			return
 		}
-		var updated store.PlaybookRecord
-		if err := json.NewDecoder(r.Body).Decode(&updated); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		updated, err := decodePlaybookWritePayload(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if updated.Playbook == nil {
+			writeError(w, http.StatusBadRequest, "playbook or playbook_yaml field is required")
+			return
+		}
+		if len(updated.Playbook.Jobs) == 0 {
+			writeError(w, http.StatusBadRequest, "playbook must contain at least one job")
 			return
 		}
 		updated.ID = existing.ID
@@ -120,6 +144,43 @@ func (e *Env) HandleRootPlaybooks(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func decodePlaybookWritePayload(r *http.Request) (store.PlaybookRecord, error) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return store.PlaybookRecord{}, fmt.Errorf("failed to read request body: %w", err)
+	}
+
+	var in struct {
+		Name         string           `json:"name"`
+		Description  string           `json:"description"`
+		Playbook     *common.Playbook `json:"playbook"`
+		PlaybookYAML string           `json:"playbook_yaml"`
+	}
+	if err := json.Unmarshal(body, &in); err != nil {
+		return store.PlaybookRecord{}, fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	out := store.PlaybookRecord{
+		Name:        in.Name,
+		Description: in.Description,
+		Playbook:    in.Playbook,
+	}
+
+	if strings.TrimSpace(in.PlaybookYAML) != "" {
+		var pb common.Playbook
+		if err := yaml.Unmarshal([]byte(in.PlaybookYAML), &pb); err != nil {
+			return store.PlaybookRecord{}, fmt.Errorf("invalid YAML in playbook_yaml: %w", err)
+		}
+		out.Playbook = &pb
+	}
+
+	if out.Name == "" && out.Playbook != nil {
+		out.Name = out.Playbook.Name
+	}
+
+	return out, nil
 }
 
 // assignPlaybook assigns a playbook to a client and immediately pushes it

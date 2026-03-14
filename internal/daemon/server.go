@@ -31,8 +31,13 @@ func NewServer(env *handlers.Env) http.Handler {
 	// ── Root API (HTTP Basic auth) ───────────────────────────────────────────
 	root := env.RequireRootAuth
 
-	mux.Handle("/status", root(http.HandlerFunc(env.HandleStatus)))
-	mux.Handle("/status/ui", root(http.HandlerFunc(env.HandleStatusUI)))
+	mux.Handle("/api/v1/status", root(http.HandlerFunc(env.HandleStatus)))
+
+	// HTML UI pages are served without Basic auth; in-page JS handles auth for API calls.
+	mux.Handle("/ui", http.HandlerFunc(env.HandleStatusUI))
+	mux.Handle("/ui/secrets", http.HandlerFunc(env.HandleSecretsUI))
+	mux.Handle("/ui/playbooks", http.HandlerFunc(env.HandlePlaybooksUI))
+	mux.Handle("/ui/deployments", http.HandlerFunc(env.HandleDeploymentsUI))
 
 	mux.Handle("/playbooks", root(http.HandlerFunc(env.HandleRootPlaybooks)))
 	mux.Handle("/playbooks/", root(http.HandlerFunc(env.HandleRootPlaybooks)))
@@ -48,8 +53,8 @@ func NewServer(env *handlers.Env) http.Handler {
 	mux.Handle("/artifacts", dualAuth(env, http.HandlerFunc(env.HandleArtifacts)))
 	mux.Handle("/artifacts/", dualAuth(env, http.HandlerFunc(env.HandleArtifacts)))
 
-	mux.Handle("/secrets", root(http.HandlerFunc(env.HandleSecrets)))
-	mux.Handle("/secrets/", root(http.HandlerFunc(env.HandleSecrets)))
+	mux.Handle("/api/v1/secrets", root(http.HandlerFunc(env.HandleSecrets)))
+	mux.Handle("/api/v1/secrets/", root(http.HandlerFunc(env.HandleSecrets)))
 
 	return logging(cors(mux))
 }
