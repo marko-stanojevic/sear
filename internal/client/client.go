@@ -133,7 +133,10 @@ func (c *Client) connect(ctx context.Context) error {
 
 	log.Printf("WebSocket connected")
 
-	ws.SetPingHandler(func(string) error {
+	ws.SetPingHandler(func(appData string) error {
+		// Reset the read deadline so the server's periodic pings keep the
+		// connection alive on our side too.
+		_ = ws.SetReadDeadline(time.Now().Add(90 * time.Second))
 		return ws.WriteControl(websocket.PongMessage, nil, time.Now().Add(5*time.Second))
 	})
 
