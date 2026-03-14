@@ -30,7 +30,7 @@ func TestClientCRUD(t *testing.T) {
 		Platform:     common.PlatformLinux,
 		Status:       common.ClientStatusRegistered,
 		RegisteredAt: time.Now(),
-		LastSeenAt:   time.Now(),
+		LastActivityAt: time.Now(),
 	}
 	if err := s.SaveClient(c); err != nil {
 		t.Fatalf("SaveClient: %v", err)
@@ -67,7 +67,7 @@ func TestSaveClientNormalizesPlatformFromOS(t *testing.T) {
 		OS:           "darwin",
 		Status:       common.ClientStatusRegistered,
 		RegisteredAt: time.Now(),
-		LastSeenAt:   time.Now(),
+		LastActivityAt: time.Now(),
 	}
 	if err := s.SaveClient(c); err != nil {
 		t.Fatalf("SaveClient: %v", err)
@@ -96,6 +96,45 @@ func TestSaveClientNormalizesPlatformFromOS(t *testing.T) {
 	}
 	if c.Platform != common.PlatformWindows {
 		t.Fatalf("client Platform = %q; want %q", c.Platform, common.PlatformWindows)
+	}
+}
+
+func TestListClientsStableOrder(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now()
+
+	clients := []*common.Client{
+{ID: "id-z", Hostname: "zeta",  Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
+		{ID: "id-a",  Hostname: "alpha", Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
+		{ID: "id-b",  Hostname: "",      Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
+		{ID: "id-a2", Hostname: "alpha", Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
+	}
+	for _, c := range clients {
+		if err := s.SaveClient(c); err != nil {
+			t.Fatalf("SaveClient(%s): %v", c.ID, err)
+		}
+	}
+
+	got := s.ListClients()
+	if len(got) != 4 {
+		t.Fatalf("ListClients len = %d; want 4", len(got))
+	}
+
+	wantIDs := []string{"id-a", "id-a2", "id-z", "id-b"}
+	for i, want := range wantIDs {
+		if got[i].ID != want {
+			t.Fatalf("ListClients[%d].ID = %q; want %q", i, got[i].ID, want)
+		}
+	}
+
+	// Call repeatedly to ensure order remains deterministic.
+	for n := 0; n < 3; n++ {
+		again := s.ListClients()
+		for i, want := range wantIDs {
+			if again[i].ID != want {
+				t.Fatalf("ListClients call %d index %d ID = %q; want %q", n+2, i, again[i].ID, want)
+			}
+		}
 	}
 }
 

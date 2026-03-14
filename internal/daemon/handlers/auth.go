@@ -76,7 +76,7 @@ func (e *Env) RequireClientAuth(next http.Handler) http.Handler {
 			return
 		}
 		if c, ok := e.Store.GetClient(clientID); ok {
-			c.LastSeenAt = time.Now()
+			c.LastActivityAt = time.Now()
 			if c.Status == common.ClientStatusOffline {
 				c.Status = common.ClientStatusConnected
 			}
@@ -180,7 +180,7 @@ func (e *Env) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	client.IPAddress = requestIP(r)
 	client.Metadata = req.Metadata
 	client.Status = common.ClientStatusRegistered
-	client.LastSeenAt = time.Now()
+	client.LastActivityAt = time.Now()
 
 	if err := e.Store.SaveClient(client); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save client")

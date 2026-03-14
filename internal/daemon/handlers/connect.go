@@ -43,7 +43,7 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 
 	client.Status = common.ClientStatusConnected
 	client.IPAddress = requestIP(r)
-	client.LastSeenAt = time.Now()
+	client.LastActivityAt = time.Now()
 	_ = e.Store.SaveClient(client)
 
 	defer func() {
@@ -282,6 +282,7 @@ func (e *Env) HandleStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
@@ -312,14 +313,21 @@ const statusHTML = `<!DOCTYPE html>
   header{background:#161b22;border-bottom:1px solid #30363d;padding:16px 24px;display:flex;align-items:center;gap:12px}
   header h1{font-size:1.25rem;font-weight:600}
   .badge{background:#238636;color:#fff;font-size:.75rem;padding:2px 8px;border-radius:12px}
-  .container{max-width:1200px;margin:0 auto;padding:24px}
+	.container{max-width:1200px;margin:0 auto;padding:24px}
   .meta{color:#8b949e;font-size:.875rem;margin-bottom:20px;display:flex;align-items:center;gap:16px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
-  .card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}
-  .card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
-  .card-title{font-weight:600;font-size:1rem}
-  .card-sub{font-size:.8rem;color:#8b949e;margin-top:2px}
-  .pill{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;padding:3px 10px;border-radius:12px;font-weight:500}
+	.filters{display:grid;grid-template-columns:minmax(220px,1fr) 180px 160px auto;gap:10px;margin-bottom:14px}
+	.filters input,.filters select{background:#0d1117;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:.85rem;outline:none}
+	.filters input:focus,.filters select:focus{border-color:#58a6ff}
+	.list{background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden}
+	.list-head,.list-row{display:grid;grid-template-columns:1.2fr 1fr .7fr .9fr .9fr .8fr .8fr 1fr 46px;gap:10px;align-items:center;padding:10px 12px}
+	.list-head{background:#0d1117;color:#8b949e;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #30363d;position:sticky;top:0;z-index:2}
+	.list-row{border-bottom:1px solid #21262d;font-size:.875rem}
+	.list-row:last-child{border-bottom:none}
+	.cell-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+	.name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	.sub{font-size:.75rem;color:#8b949e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:inherit}
+	.pill{display:inline-flex;align-items:center;gap:6px;font-size:inherit;padding:3px 10px;border-radius:12px;font-weight:500}
   .pill.running{background:#1f6feb33;color:#58a6ff}
   .pill.done{background:#23863633;color:#3fb950}
   .pill.failed{background:#da363333;color:#f85149}
@@ -327,11 +335,29 @@ const statusHTML = `<!DOCTYPE html>
   .pill.pending,.pill.registered,.pill.offline{background:#21262d;color:#8b949e}
   .pill.connected,.pill.deploying{background:#1f6feb22;color:#79c0ff}
   .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
-  .detail{font-size:.8rem;color:#8b949e;margin-top:6px}
-  .detail span{color:#e6edf3}
-  button{background:#21262d;border:1px solid #30363d;color:#e6edf3;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:.85rem}
+	button{background:#21262d;border:1px solid #30363d;color:#e6edf3;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:.85rem}
   button:hover{background:#30363d}
+	.card-top-right{display:flex;align-items:flex-start;gap:8px}
+  .card-menu{position:relative}
+  .menu-btn{background:transparent;border:none;color:#8b949e;padding:2px 7px;border-radius:4px;cursor:pointer;font-size:1.1rem;line-height:1}
+  .menu-btn:hover{background:#30363d;color:#e6edf3}
+  .menu-dropdown{display:none;position:absolute;right:0;top:calc(100% + 4px);background:#161b22;border:1px solid #30363d;border-radius:6px;min-width:150px;z-index:10;box-shadow:0 8px 24px #010409cc}
+  .menu-dropdown.open{display:block}
+  .menu-item{display:block;width:100%;text-align:left;background:transparent;border:none;color:#f85149;padding:8px 14px;cursor:pointer;font-size:.85rem;border-radius:6px}
+  .menu-item:hover{background:#da363320}
   .empty{text-align:center;color:#8b949e;padding:60px 20px}
+	@media (max-width: 1100px){
+		.filters{grid-template-columns:1fr 1fr;}
+		.list-head{display:none}
+		.list-row{grid-template-columns:1fr;gap:6px;padding:12px}
+		.list-row > div{display:flex;justify-content:space-between;gap:12px}
+		.list-row .cell-main{display:block}
+		.list-row .cell-main .name{margin-bottom:2px}
+		.mobile-label{display:inline;color:#8b949e;font-size:.75rem}
+	}
+	@media (min-width: 1101px){
+		.mobile-label{display:none}
+	}
   #login-overlay{display:none;position:fixed;inset:0;background:#0d1117cc;backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:100}
   #login-overlay.show{display:flex}
   #login-box{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:32px;min-width:320px}
@@ -366,6 +392,28 @@ const statusHTML = `<!DOCTYPE html>
     <button onclick="load()">↻ Refresh</button>
     <button onclick="logout()" style="margin-left:auto">Sign out</button>
   </div>
+	<div class="filters">
+		<input id="f-query" type="text" placeholder="Search hostname, OS, vendor, model, IP">
+		<select id="f-status">
+			<option value="">All statuses</option>
+			<option value="registered">registered</option>
+			<option value="connected">connected</option>
+			<option value="deploying">deploying</option>
+			<option value="running">running</option>
+			<option value="rebooting">rebooting</option>
+			<option value="done">done</option>
+			<option value="failed">failed</option>
+			<option value="offline">offline</option>
+			<option value="pending">pending</option>
+		</select>
+		<select id="f-platform">
+			<option value="">All platforms</option>
+			<option value="linux">linux</option>
+			<option value="windows">windows</option>
+			<option value="mac">mac</option>
+		</select>
+		<button onclick="clearFilters()">Clear filters</button>
+	</div>
   <div id="root"></div>
 </div>
 <script>
@@ -391,49 +439,141 @@ async function doLogin(){
   load();
 }
 document.getElementById('lp').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
-const depByClient = {};
+async function removeClient(id, hostname) {
+  if (!confirm('Remove client "' + hostname + '"?\nThis cannot be undone.')) return;
+  const creds = sessionStorage.getItem('sear_creds');
+  const headers = {'Content-Type':'application/json'};
+  if (creds) headers['Authorization'] = 'Basic ' + creds;
+  const r = await fetch('/clients/' + encodeURIComponent(id), {method:'DELETE', headers});
+  if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
+  if (!r.ok) { alert('Failed to remove client: ' + r.status); return; }
+  load();
+}
+document.addEventListener('click', function(e) {
+  const menuBtn = e.target.closest('.menu-btn');
+  if (menuBtn) {
+    e.stopPropagation();
+    const dropdown = menuBtn.nextElementSibling;
+    const wasOpen = dropdown.classList.contains('open');
+    document.querySelectorAll('.menu-dropdown.open').forEach(d => d.classList.remove('open'));
+    if (!wasOpen) dropdown.classList.add('open');
+    return;
+  }
+  const item = e.target.closest('.menu-item');
+  if (item && item.dataset.action === 'remove') {
+    document.querySelectorAll('.menu-dropdown.open').forEach(d => d.classList.remove('open'));
+    removeClient(item.dataset.id, item.dataset.hostname);
+    return;
+  }
+  document.querySelectorAll('.menu-dropdown.open').forEach(d => d.classList.remove('open'));
+});
+let latestClients = [];
+let latestDeps = {};
+
+function filterClients(clients, deps) {
+	const q = (document.getElementById('f-query').value || '').trim().toLowerCase();
+	const status = (document.getElementById('f-status').value || '').trim().toLowerCase();
+	const platform = (document.getElementById('f-platform').value || '').trim().toLowerCase();
+	return clients.filter(c => {
+		const dep = deps[c.id];
+		const s = ((dep ? dep.status : c.status) || '').toLowerCase();
+		const p = (c.platform || '').toLowerCase();
+		const os = (c.os || (c.metadata && c.metadata.os) || (c.metadata && c.metadata.type) || (c.metadata && c.metadata.os_type) || '');
+		const vendor = (c.vendor || (c.metadata && c.metadata.vendor) || '');
+		const model = (c.model || (c.metadata && c.metadata.model) || '');
+		const ip = (c.ip_address || '');
+		const haystack = (c.hostname || c.id || '') + ' ' + os + ' ' + vendor + ' ' + model + ' ' + ip;
+		if (status && s !== status) return false;
+		if (platform && p !== platform) return false;
+		if (q && !haystack.toLowerCase().includes(q)) return false;
+		return true;
+	});
+}
+
+function render() {
+	const root = document.getElementById('root');
+	if (!latestClients.length) {
+		root.innerHTML = '<div class="empty">No clients registered yet.</div>';
+		document.getElementById('counts').textContent = 'Clients: 0';
+		return;
+	}
+
+	const filtered = filterClients(latestClients, latestDeps);
+
+	let conn = 0, active = 0;
+	filtered.forEach(c => {
+		const dep = latestDeps[c.id];
+		if (c.status === 'connected' || c.status === 'deploying') conn++;
+		if (dep && dep.status === 'running') active++;
+	});
+
+	if (!filtered.length) {
+		root.innerHTML = '<div class="empty">No clients match your filters.</div>';
+		document.getElementById('counts').textContent = 'Shown: 0 / ' + latestClients.length + ' · Connected: 0 · Deploying: 0';
+		return;
+	}
+
+	const rows = filtered.map(c => {
+		const dep = latestDeps[c.id];
+		const s = dep ? dep.status : c.status;
+		const os = c.os || (c.metadata && c.metadata.os) || (c.metadata && c.metadata.type) || (c.metadata && c.metadata.os_type) || '-';
+		const vendor = c.vendor || (c.metadata && c.metadata.vendor) || '-';
+		const model = c.model || (c.metadata && c.metadata.model) || '-';
+		const step = dep ? '#' + dep.resume_step_index : '-';
+		const when = c.last_activity_at ? new Date(c.last_activity_at).toLocaleString() : '-';
+		return '<div class="list-row">' +
+			'<div class="cell-main"><div class="name">' + esc(c.hostname || c.id) + '</div><div class="sub mono">' + esc(c.id || '-') + '</div></div>' +
+			'<div><span class="mobile-label">OS</span><span>' + esc(os) + '</span></div>' +
+			'<div><span class="mobile-label">Platform</span><span>' + esc(c.platform || '-') + '</span></div>' +
+			'<div><span class="mobile-label">Vendor</span><span>' + esc(vendor) + '</span></div>' +
+			'<div><span class="mobile-label">Model</span><span>' + esc(model) + '</span></div>' +
+			'<div><span class="mobile-label">IP</span><span class="mono">' + esc(c.ip_address || '-') + '</span></div>' +
+			'<div><span class="mobile-label">Status</span><span class="pill ' + s + '"><span class="dot"></span>' + esc(s || '-') + '</span></div>' +
+			'<div><span class="mobile-label">Last</span><span>' + esc(when) + '</span><div class="sub">Step: ' + esc(step) + '</div></div>' +
+			'<div class="card-top-right"><div class="card-menu">' +
+				'<button class="menu-btn" title="Actions">⋮</button>' +
+				'<div class="menu-dropdown">' +
+					'<button class="menu-item" data-action="remove" data-id="' + esc(c.id) + '" data-hostname="' + esc(c.hostname || c.id) + '">✕ Remove client</button>' +
+				'</div>' +
+			'</div></div>' +
+		'</div>';
+	}).join('');
+
+	root.innerHTML = '<div class="list">' +
+		'<div class="list-head">' +
+			'<div>Client</div><div>OS</div><div>Platform</div><div>Vendor</div><div>Model</div><div>IP</div><div>Status</div><div>Last Activity</div><div></div>' +
+		'</div>' +
+		rows +
+	'</div>';
+
+	document.getElementById('counts').textContent =
+		'Shown: ' + filtered.length + ' / ' + latestClients.length + ' · Connected: ' + conn + ' · Deploying: ' + active;
+}
+
+function clearFilters() {
+	document.getElementById('f-query').value = '';
+	document.getElementById('f-status').value = '';
+	document.getElementById('f-platform').value = '';
+	render();
+}
+
 async function load() {
-  const r = await fetch('/status');
+	const r = await fetch('/status');
   if (r.status === 401) {
     const root = document.getElementById('root');
     root.innerHTML = '<div class="empty">Unauthorized. Reload the page to sign in.</div>';
     return;
   }
   const d = await r.json();
-  const deps = {};
-  (d.deployments||[]).forEach(dep => { deps[dep.client_id] = dep; });
-  const root = document.getElementById('root');
-  const clients = d.clients || [];
-  if (!clients.length) { root.innerHTML='<div class="empty">No clients registered yet.</div>'; return; }
-  let conn=0, active=0;
-  const cards = clients.map(c => {
-    const dep = deps[c.id];
-    const s = dep ? dep.status : c.status;
-    if (c.status === 'connected' || c.status === 'deploying') conn++;
-    if (dep && dep.status === 'running') active++;
-	  const playbookDetail = dep
-	    ? '<div class="detail">Playbook step: <span>#' + dep.resume_step_index + '</span></div>' +
-	      (dep.error_detail ? '<div class="detail" style="color:#f85149">' + dep.error_detail + '</div>' : '')
-	    : '';
-	  return '<div class="card">' +
-	    '<div class="card-header">' +
-	      '<div>' +
-	        '<div class="card-title">' + esc(c.hostname || c.id) + '</div>' +
-	        '<div class="card-sub">OS: ' + esc(c.os || (c.metadata && c.metadata.os) || (c.metadata && c.metadata.type) || (c.metadata && c.metadata.os_type) || '-') + '</div>' +
-	        '<div class="card-sub">Platform: ' + esc(c.platform || '-') + '</div>' +
-	        '<div class="card-sub">Hardware: ' + esc(c.vendor || (c.metadata && c.metadata.vendor) || '-') + ' · ' + esc(c.model || (c.metadata && c.metadata.model) || '-') + '</div>' +
-	        '<div class="card-sub">IP: ' + esc(c.ip_address || '-') + '</div>' +
-	      '</div>' +
-	      '<span class="pill ' + s + '"><span class="dot"></span>' + s + '</span>' +
-	    '</div>' +
-	    playbookDetail +
-	    '<div class="detail">Last seen: <span>' + new Date(c.last_seen_at).toLocaleString() + '</span></div>' +
-	  '</div>';
-  }).join('');
-  document.getElementById('counts').textContent =
-    'Clients: '+clients.length+' · Connected: '+conn+' · Deploying: '+active;
-  root.innerHTML = '<div class="grid">'+cards+'</div>';
+  latestDeps = {};
+  (d.deployments||[]).forEach(dep => { latestDeps[dep.client_id] = dep; });
+  latestClients = d.clients || [];
+  render();
 }
+['f-query','f-status','f-platform'].forEach(id => {
+	const el = document.getElementById(id);
+	el.addEventListener(id === 'f-query' ? 'input' : 'change', render);
+});
 load();
 setInterval(load, 10000);
 </script>

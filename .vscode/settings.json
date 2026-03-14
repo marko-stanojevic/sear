@@ -1,9 +1,14 @@
 {
-    "files.watcherExclude": {
-        "**": false
-    },
     "files.useExperimentalFileWatcher": true,
     "remote.WSL.fileWatcher.polling": true,
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/**": true,
+        "**/dist/**": true,
+        "**/bin/sear/logs/**": true,
+        "**/bin/sear/artifacts/**": true
+    },
     "editor.formatOnSave": true,
     "editor.formatOnPaste": true,
     "editor.tabSize": 4,

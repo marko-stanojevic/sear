@@ -5,6 +5,7 @@ package identity
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -241,7 +242,39 @@ func hardwareInfo() (vendor string, model string) {
 
 	vendor = cleanHardwareValue(vendor)
 	model = cleanHardwareValue(model)
+
+	if runtime.GOOS == "linux" && vendor == "" && model == "" {
+		if cv, cm := detectContainer(); cv != "" {
+			vendor, model = cv, cm
+			log.Printf("hardware: DMI unavailable, detected container runtime: %s", cv)
+		}
+	}
+
 	return vendor, model
+}
+
+// detectContainer returns the container runtime name and a generic model label
+// when the process is running inside a container (Docker, Podman, LXC, etc.).
+func detectContainer() (vendor, model string) {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return "Docker", "container"
+	}
+	if _, err := os.Stat("/run/.containerenv"); err == nil {
+		return "Podman", "container"
+	}
+	cgroup := readFile("/proc/1/cgroup")
+	lower := strings.ToLower(cgroup)
+	switch {
+	case strings.Contains(lower, "docker"):
+		return "Docker", "container"
+	case strings.Contains(lower, "podman"):
+		return "Podman", "container"
+	case strings.Contains(lower, "lxc"):
+		return "LXC", "container"
+	case strings.Contains(lower, "containerd"):
+		return "containerd", "container"
+	}
+	return "", ""
 }
 
 func runAndTrim(cmd string, args ...string) string {

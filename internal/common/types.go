@@ -158,18 +158,18 @@ const (
 
 // Client holds server-side information about a registered client machine.
 type Client struct {
-	ID            string            `json:"id"`
-	Hostname      string            `json:"hostname"`
-	Platform      PlatformType      `json:"platform"`
-	OS            string            `json:"os,omitempty"`
-	Model         string            `json:"model,omitempty"`
-	Vendor        string            `json:"vendor,omitempty"`
-	IPAddress     string            `json:"ip_address,omitempty"`
-	Metadata      map[string]string `json:"metadata,omitempty"`
-	Status        ClientStatus      `json:"status"`
-	PlaybookID    string            `json:"playbook_id,omitempty"`
-	RegisteredAt  time.Time         `json:"registered_at"`
-	LastSeenAt    time.Time         `json:"last_seen_at"`
+	ID             string            `json:"id"`
+	Hostname       string            `json:"hostname"`
+	Platform       PlatformType      `json:"platform"`
+	OS             string            `json:"os,omitempty"`
+	Model          string            `json:"model,omitempty"`
+	Vendor         string            `json:"vendor,omitempty"`
+	IPAddress      string            `json:"ip_address,omitempty"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
+	Status         ClientStatus      `json:"status"`
+	PlaybookID     string            `json:"playbook_id,omitempty"`
+	RegisteredAt   time.Time         `json:"registered_at"`
+	LastActivityAt time.Time         `json:"last_activity_at"`
 }
 
 // ── Deployment / state types ──────────────────────────────────────────────────
