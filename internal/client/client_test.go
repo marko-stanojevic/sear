@@ -11,7 +11,7 @@ func newTestClient(serverURL string) *client.Client {
 	cfg := &common.ClientConfig{
 		ServerURL:          serverURL,
 		RegistrationSecret: "test-secret",
-		Platform:           "baremetal",
+		Platform:           "auto",
 	}
 	return client.New(cfg)
 }

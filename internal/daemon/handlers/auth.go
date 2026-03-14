@@ -123,6 +123,10 @@ func (e *Env) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "platform_id and hostname are required")
 		return
 	}
+	if !validPlatform(req.Platform) {
+		writeError(w, http.StatusBadRequest, "platform must be one of linux, mac, or windows")
+		return
+	}
 
 	// Validate registration secret using constant-time comparison to prevent
 	// timing-based enumeration of valid secrets.
@@ -181,6 +185,15 @@ func (e *Env) validRegistrationSecret(s string) bool {
 		}
 	}
 	return false
+}
+
+func validPlatform(platform common.PlatformType) bool {
+	switch platform {
+	case common.PlatformLinux, common.PlatformMac, common.PlatformWindows:
+		return true
+	default:
+		return false
+	}
 }
 
 // requestIP extracts the best-effort client IP from forwarded headers or

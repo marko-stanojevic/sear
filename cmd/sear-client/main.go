@@ -26,13 +26,6 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	if cfg.ServerURL == "" {
-		log.Fatal("config: server_url is required")
-	}
-	if cfg.RegistrationSecret == "" {
-		log.Fatal("config: registration_secret is required")
-	}
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 

@@ -4,6 +4,7 @@ package common
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -102,7 +103,14 @@ func LoadDaemonSecrets(path string) (*DaemonSecrets, error) {
 
 // LoadClientConfig reads and unmarshals a ClientConfig from path.
 func LoadClientConfig(path string) (*ClientConfig, error) {
-	return loadYAML[ClientConfig](path)
+	cfg, err := loadYAML[ClientConfig](path)
+	if err != nil {
+		return nil, err
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("validating %s: %w", path, err)
+	}
+	return cfg, nil
 }
 
 // LoadPlaybook reads and unmarshals a Playbook from a YAML file.
@@ -120,4 +128,22 @@ func loadYAML[T any](path string) (*T, error) {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	return &v, nil
+}
+
+// Validate checks that the client config contains the required fields and
+// uses a supported platform hint.
+func (c *ClientConfig) Validate() error {
+	if strings.TrimSpace(c.ServerURL) == "" {
+		return fmt.Errorf("server_url is required")
+	}
+	if strings.TrimSpace(c.RegistrationSecret) == "" {
+		return fmt.Errorf("registration_secret is required")
+	}
+	platform := strings.ToLower(strings.TrimSpace(c.Platform))
+	switch platform {
+	case "", "auto", "linux", "mac", "windows":
+		return nil
+	default:
+		return fmt.Errorf("platform must be one of auto, linux, mac, or windows")
+	}
 }

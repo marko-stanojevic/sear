@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -121,6 +122,41 @@ func (s *Store) load() error {
 	return nil
 }
 
+func normalizePlatform(platform common.PlatformType, osName string, metadata map[string]string) common.PlatformType {
+	current := strings.ToLower(strings.TrimSpace(string(platform)))
+	switch current {
+	case "", "auto":
+		return platformFromOS(osName, metadata)
+	case "linux":
+		return common.PlatformLinux
+	case "mac":
+		return common.PlatformMac
+	case "windows":
+		return common.PlatformWindows
+	default:
+		return platformFromOS(osName, metadata)
+	}
+}
+
+func platformFromOS(osName string, metadata map[string]string) common.PlatformType {
+	osv := strings.ToLower(strings.TrimSpace(osName))
+	if osv == "" && metadata != nil {
+		osv = strings.ToLower(strings.TrimSpace(metadata["os"]))
+		if osv == "" {
+			osv = strings.ToLower(strings.TrimSpace(metadata["os_type"]))
+		}
+	}
+
+	switch osv {
+	case "darwin":
+		return common.PlatformMac
+	case "windows":
+		return common.PlatformWindows
+	default:
+		return common.PlatformLinux
+	}
+}
+
 // save must be called with s.mu held (write lock).
 func (s *Store) save() error {
 	snap := snapshot{
@@ -146,6 +182,7 @@ func (s *Store) save() error {
 func (s *Store) SaveClient(c *common.Client) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	c.Platform = normalizePlatform(c.Platform, c.OS, c.Metadata)
 	s.clients[c.ID] = c
 	return s.save()
 }
