@@ -186,13 +186,22 @@ function render(){
       '<div>'+rowStatus(d.status)+'</div>'+
       '<div>'+esc(upd)+'</div>'+
       '<div>'+esc(finished)+'</div>'+
-      '<div><button onclick="openLogs(\''+esc(String(d.id||'')).replace(/'/g,'&#39;')+'\')">Logs</button></div>'+
+      '<div><button class="logs-btn" data-id="'+encodeURIComponent(String(d.id||''))+'">Logs</button></div>'+
     '</div>';
   }).join('');
   root.innerHTML='<div class="list">'+
     '<div class="list-head"><div>Deployment</div><div>Client</div><div>Playbook</div><div>Status</div><div>Updated</div><div>Finished</div><div></div></div>'+
     rows+
   '</div>';
+  var buttons=root.querySelectorAll('.logs-btn');
+  buttons.forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var encodedId=btn.getAttribute('data-id')||'';
+      var id='';
+      try{id=decodeURIComponent(encodedId);}catch(e){id=encodedId;}
+      openLogs(id);
+    });
+  });
 }
 
 async function openLogs(id){
