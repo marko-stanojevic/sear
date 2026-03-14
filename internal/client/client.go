@@ -367,6 +367,7 @@ func newWSOutboundWriter(ws *websocket.Conn) *wsOutboundWriter {
 }
 
 func (w *wsOutboundWriter) Send(msg common.WSMessage) {
+	// Fast-path check: if the writer is already closed, don't block.
 	select {
 	case <-w.done:
 		log.Printf("warn: dropping WS message %q: writer closed", msg.Type)
@@ -374,12 +375,11 @@ func (w *wsOutboundWriter) Send(msg common.WSMessage) {
 	default:
 	}
 
+	// Apply backpressure: block until the message is enqueued or the writer closes.
 	select {
 	case <-w.done:
 		log.Printf("warn: dropping WS message %q: writer closed", msg.Type)
 	case w.ch <- msg:
-	default:
-		log.Printf("warn: dropping WS message %q: outbound queue full", msg.Type)
 	}
 }
 
