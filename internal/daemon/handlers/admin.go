@@ -14,9 +14,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ── GET /status ───────────────────────────────────────────────────────────────
+// ── Status endpoint and UI ─────────────────────────────────────────────────────
 
-// StatusResponse is returned by GET /status (JSON) and GET /status/ui (rendered).
+// StatusResponse is returned by GET /api/v1/status (JSON) and used by the /ui status dashboard.
 type StatusResponse struct {
 	Clients      []*common.Client          `json:"clients"`
 	Deployments  []*common.DeploymentState `json:"deployments"`
