@@ -32,10 +32,12 @@ func NewServer(env *handlers.Env) http.Handler {
 	root := env.RequireRootAuth
 
 	mux.Handle("/api/v1/status", root(http.HandlerFunc(env.HandleStatus)))
-	mux.Handle("/ui", root(http.HandlerFunc(env.HandleStatusUI)))
-	mux.Handle("/ui/secrets", root(http.HandlerFunc(env.HandleSecretsUI)))
-	mux.Handle("/ui/playbooks", root(http.HandlerFunc(env.HandlePlaybooksUI)))
-	mux.Handle("/ui/deployments", root(http.HandlerFunc(env.HandleDeploymentsUI)))
+
+	// HTML UI pages are served without Basic auth; in-page JS handles auth for API calls.
+	mux.Handle("/ui", http.HandlerFunc(env.HandleStatusUI))
+	mux.Handle("/ui/secrets", http.HandlerFunc(env.HandleSecretsUI))
+	mux.Handle("/ui/playbooks", http.HandlerFunc(env.HandlePlaybooksUI))
+	mux.Handle("/ui/deployments", http.HandlerFunc(env.HandleDeploymentsUI))
 
 	mux.Handle("/playbooks", root(http.HandlerFunc(env.HandleRootPlaybooks)))
 	mux.Handle("/playbooks/", root(http.HandlerFunc(env.HandleRootPlaybooks)))
