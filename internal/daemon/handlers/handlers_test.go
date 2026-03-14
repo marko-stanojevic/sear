@@ -343,7 +343,7 @@ func TestHandleRootPlaybooks_CRUD(t *testing.T) {
 		},
 	}
 	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/playbooks", bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/playbooks", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	env.HandleRootPlaybooks(rr, req)
@@ -357,7 +357,7 @@ func TestHandleRootPlaybooks_CRUD(t *testing.T) {
 	}
 
 	// List.
-	req2 := httptest.NewRequest(http.MethodGet, "/playbooks", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/playbooks", nil)
 	rr2 := httptest.NewRecorder()
 	env.HandleRootPlaybooks(rr2, req2)
 	var list []*store.PlaybookRecord
@@ -367,8 +367,8 @@ func TestHandleRootPlaybooks_CRUD(t *testing.T) {
 	}
 
 	// Get by ID.
-	req3 := httptest.NewRequest(http.MethodGet, "/playbooks/"+created.ID, nil)
-	req3.URL.Path = "/playbooks/" + created.ID
+	req3 := httptest.NewRequest(http.MethodGet, "/api/v1/playbooks/"+created.ID, nil)
+	req3.URL.Path = "/api/v1/playbooks/" + created.ID
 	rr3 := httptest.NewRecorder()
 	env.HandleRootPlaybooks(rr3, req3)
 	if rr3.Code != http.StatusOK {
@@ -376,8 +376,8 @@ func TestHandleRootPlaybooks_CRUD(t *testing.T) {
 	}
 
 	// Delete.
-	req4 := httptest.NewRequest(http.MethodDelete, "/playbooks/"+created.ID, nil)
-	req4.URL.Path = "/playbooks/" + created.ID
+	req4 := httptest.NewRequest(http.MethodDelete, "/api/v1/playbooks/"+created.ID, nil)
+	req4.URL.Path = "/api/v1/playbooks/" + created.ID
 	rr4 := httptest.NewRecorder()
 	env.HandleRootPlaybooks(rr4, req4)
 	if rr4.Code != http.StatusOK {
@@ -451,8 +451,8 @@ func TestCrossClientDeploymentForbidden(t *testing.T) {
 	_ = env.Store.SaveDeployment(dep)
 
 	// Root reading logs for someone else's deployment should work.
-	req := httptest.NewRequest(http.MethodGet, "/deployments/dep-owned/logs", nil)
-	req.URL.Path = "/deployments/dep-owned/logs"
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/deployments/dep-owned/logs", nil)
+	req.URL.Path = "/api/v1/deployments/dep-owned/logs"
 	rr := httptest.NewRecorder()
 	env.HandleRootDeployments(rr, req)
 	if rr.Code != http.StatusOK {

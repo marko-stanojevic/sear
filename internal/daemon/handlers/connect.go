@@ -520,7 +520,7 @@ async function removeClient(id, hostname) {
   const creds = sessionStorage.getItem('sear_creds');
   const headers = {'Content-Type':'application/json'};
   if (creds) headers['Authorization'] = 'Basic ' + creds;
-  const r = await fetch('/clients/' + encodeURIComponent(id), {method:'DELETE', headers});
+	const r = await fetch('/api/v1/clients/' + encodeURIComponent(id), {method:'DELETE', headers});
   if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
   if (!r.ok) { alert('Failed to remove client: ' + r.status); return; }
   load();

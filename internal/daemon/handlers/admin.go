@@ -18,25 +18,24 @@ import (
 
 // StatusResponse is returned by GET /api/v1/status (JSON) and used by the /ui status dashboard.
 type StatusResponse struct {
-	Clients      []*common.Client          `json:"clients"`
-	Deployments  []*common.DeploymentState `json:"deployments"`
-	TotalClients int                       `json:"total_clients,omitempty"`
+	Clients     []*common.Client          `json:"clients"`
+	Deployments []*common.DeploymentState `json:"deployments"`
 }
 
-// ── /playbooks ────────────────────────────────────────────────────────────────────
+// ── /api/v1/playbooks ─────────────────────────────────────────────────────────────
 
 // HandleRootPlaybooks dispatches CRUD on playbooks.
 //
-//	GET    /playbooks              – list all
-//	POST   /playbooks              – create
-//	GET    /playbooks/{id}         – get one
-//	PUT    /playbooks/{id}         – update
-//	DELETE /playbooks/{id}         – delete
-//	POST   /playbooks/{id}/assign  – assign to a client (pushes immediately
-//	                                 if client is connected via WebSocket)
+//	GET    /api/v1/playbooks              – list all
+//	POST   /api/v1/playbooks              – create
+//	GET    /api/v1/playbooks/{id}         – get one
+//	PUT    /api/v1/playbooks/{id}         – update
+//	DELETE /api/v1/playbooks/{id}         – delete
+//	POST   /api/v1/playbooks/{id}/assign  – assign to a client (pushes immediately
+//	                                         if client is connected via WebSocket)
 func (e *Env) HandleRootPlaybooks(w http.ResponseWriter, r *http.Request) {
 	// Strip prefix to isolate the path tail.
-	tail := strings.TrimPrefix(r.URL.Path, "/playbooks")
+	tail := strings.TrimPrefix(r.URL.Path, "/api/v1/playbooks")
 	tail = strings.TrimPrefix(tail, "/")
 	parts := strings.SplitN(tail, "/", 2)
 	id := parts[0]
@@ -214,16 +213,16 @@ func (e *Env) assignPlaybook(w http.ResponseWriter, r *http.Request, playbookID 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "assigned"})
 }
 
-// ── /clients ──────────────────────────────────────────────────────────────────────
+// ── /api/v1/clients ───────────────────────────────────────────────────────────────
 
 // HandleRootClients dispatches CRUD on clients.
 //
-//	GET    /clients          – list all
-//	GET    /clients/{id}     – get one
-//	PUT    /clients/{id}     – update (e.g. assign playbook, set status)
-//	DELETE /clients/{id}     – delete
+//	GET    /api/v1/clients          – list all
+//	GET    /api/v1/clients/{id}     – get one
+//	PUT    /api/v1/clients/{id}     – update (e.g. assign playbook, set status)
+//	DELETE /api/v1/clients/{id}     – delete
 func (e *Env) HandleRootClients(w http.ResponseWriter, r *http.Request) {
-	tail := strings.TrimPrefix(r.URL.Path, "/clients")
+	tail := strings.TrimPrefix(r.URL.Path, "/api/v1/clients")
 	tail = strings.TrimPrefix(tail, "/")
 	id := tail
 
@@ -286,19 +285,19 @@ func (e *Env) HandleRootClients(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ── /deployments ──────────────────────────────────────────────────────────────────
+// ── /api/v1/deployments ───────────────────────────────────────────────────────────
 
 // HandleRootDeployments lists deployments and exposes per-deployment logs.
 //
-//	GET /deployments              – list all
-//	GET /deployments/{id}         – get one
-//	GET /deployments/{id}/logs    – get logs for deployment
+//	GET /api/v1/deployments              – list all
+//	GET /api/v1/deployments/{id}         – get one
+//	GET /api/v1/deployments/{id}/logs    – get logs for deployment
 func (e *Env) HandleRootDeployments(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	path := strings.TrimPrefix(r.URL.Path, "/deployments")
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/deployments")
 	path = strings.TrimPrefix(path, "/")
 	parts := strings.SplitN(path, "/", 2)
 	id := parts[0]

@@ -139,7 +139,7 @@ async function doLogin(){
   var p=document.getElementById('lp').value;
   if(!p){document.getElementById('login-error').textContent='Password required';return;}
   var creds=btoa(u+':'+p);
-  var r=await fetch('/deployments',{headers:{Authorization:'Basic '+creds}});
+  var r=await fetch('/api/v1/deployments',{headers:{Authorization:'Basic '+creds}});
   if(r.status===401){document.getElementById('login-error').textContent='Invalid password';return;}
   sessionStorage.setItem('sear_creds',creds);
   hideLogin();
@@ -210,7 +210,7 @@ async function openLogs(id){
   document.getElementById('logs-title').textContent='Logs: '+id;
   p.style.display='block';
   root.innerHTML='<div class="empty">Loading logs...</div>';
-  var r=await fetch('/deployments/'+encodeURIComponent(id)+'/logs',{headers:headersAuth()});
+  var r=await fetch('/api/v1/deployments/'+encodeURIComponent(id)+'/logs',{headers:headersAuth()});
   if(r.status===401){showLogin('Session expired - sign in again');return;}
   if(!r.ok){root.innerHTML='<div class="empty">Failed to load logs.</div>';return;}
   var logs=await r.json()||[];
@@ -247,7 +247,7 @@ function closeLogs(){document.getElementById('logs-panel').style.display='none';
 async function load(){
   var auth=authHeader();
   if(!auth){showLogin('');return;}
-  var r=await fetch('/deployments',{headers:headersAuth()});
+  var r=await fetch('/api/v1/deployments',{headers:headersAuth()});
   if(r.status===401){showLogin('');return;}
   if(!r.ok){document.getElementById('root').innerHTML='<div class="empty">Failed to load deployments.</div>';return;}
   deployments=await r.json()||[];

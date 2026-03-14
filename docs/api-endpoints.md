@@ -25,74 +25,94 @@ This document describes the HTTP and WebSocket endpoints exposed by sear-daemon.
 
 ## Root endpoints
 
-All root endpoints require HTTP Basic auth.
+Root management APIs require HTTP Basic auth.
 
-### Status
+### UI pages
 
-- `GET /status`
+UI pages are served under `/ui`:
+
+- `GET /ui`
+  - Clients/status dashboard UI
+
+- `GET /ui/secrets`
+  - Secrets management UI
+
+- `GET /ui/playbooks`
+  - Playbooks management UI
+
+- `GET /ui/deployments`
+  - Deployments and logs UI
+
+The UI signs in and then calls the root APIs below using HTTP Basic credentials.
+
+### Status API
+
+- `GET /api/v1/status`
   - JSON summary of clients and deployments
-
-- `GET /status/ui`
-  - Live HTML dashboard
 
 ### Playbooks
 
-- `GET /playbooks`
+- `GET /api/v1/playbooks`
   - List all playbooks
 
-- `POST /playbooks`
+- `POST /api/v1/playbooks`
   - Create playbook
+  - Accepts JSON payload with either:
+    - `playbook` (JSON object), or
+    - `playbook_yaml` (string)
 
-- `GET /playbooks/{id}`
+- `GET /api/v1/playbooks/{id}`
   - Get a playbook
+  - Includes `playbook_yaml` in response for editor-friendly roundtrips
 
-- `PUT /playbooks/{id}`
+- `PUT /api/v1/playbooks/{id}`
   - Update playbook
+  - Accepts `playbook` or `playbook_yaml` (same as create)
 
-- `DELETE /playbooks/{id}`
+- `DELETE /api/v1/playbooks/{id}`
   - Delete playbook
 
-- `POST /playbooks/{id}/assign`
+- `POST /api/v1/playbooks/{id}/assign`
   - Assign playbook to a client
   - If client is connected, deployment is pushed immediately
 
 ### Clients
 
-- `GET /clients`
+- `GET /api/v1/clients`
   - List clients
 
-- `GET /clients/{id}`
+- `GET /api/v1/clients/{id}`
   - Get client
 
-- `PUT /clients/{id}`
+- `PUT /api/v1/clients/{id}`
   - Update client fields such as `playbook_id` or `status`
 
-- `DELETE /clients/{id}`
+- `DELETE /api/v1/clients/{id}`
   - Delete client
 
 ### Deployments
 
-- `GET /deployments`
+- `GET /api/v1/deployments`
   - List deployments
 
-- `GET /deployments/{id}`
+- `GET /api/v1/deployments/{id}`
   - Get deployment details
 
-- `GET /deployments/{id}/logs`
+- `GET /api/v1/deployments/{id}/logs`
   - Get deployment log entries
 
 ### Secrets
 
-- `GET /secrets`
+- `GET /api/v1/secrets`
   - List secret names
 
-- `GET /secrets/{name}`
+- `GET /api/v1/secrets/{name}`
   - Get secret value
 
-- `PUT /secrets/{name}`
+- `PUT /api/v1/secrets/{name}`
   - Set or update secret value
 
-- `DELETE /secrets/{name}`
+- `DELETE /api/v1/secrets/{name}`
   - Delete secret
 
 ## Artifacts endpoints

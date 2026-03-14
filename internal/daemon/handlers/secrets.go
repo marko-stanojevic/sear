@@ -10,21 +10,23 @@ import (
 // HandleSecrets manages the server-side secrets store.
 //
 // Primary API (mounted by NewServer):
+//
 //	GET    /api/v1/secrets          – list secret names (values are never exposed in list)
 //	GET    /api/v1/secrets/{name}   – get a specific secret value
 //	PUT    /api/v1/secrets/{name}   – set or update a secret value
 //	DELETE /api/v1/secrets/{name}   – delete a secret
 //
 // Legacy paths (still accepted for backward compatibility):
+//
 //	GET    /secrets                 – list secret names (values are never exposed in list)
 //	GET    /secrets/{name}          – get a specific secret value
 //	PUT    /secrets/{name}          – set or update a secret value
 //	DELETE /secrets/{name}          – delete a secret
 func (e *Env) HandleSecrets(w http.ResponseWriter, r *http.Request) {
-  name := strings.TrimPrefix(r.URL.Path, "/api/v1/secrets")
-  if name == r.URL.Path {
-    name = strings.TrimPrefix(r.URL.Path, "/secrets")
-  }
+	name := strings.TrimPrefix(r.URL.Path, "/api/v1/secrets")
+	if name == r.URL.Path {
+		name = strings.TrimPrefix(r.URL.Path, "/secrets")
+	}
 	name = strings.TrimPrefix(name, "/")
 
 	switch r.Method {

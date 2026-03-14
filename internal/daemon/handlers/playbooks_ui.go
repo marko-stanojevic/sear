@@ -145,7 +145,7 @@ async function doLogin(){
   var p=document.getElementById('lp').value;
   if(!p){document.getElementById('login-error').textContent='Password required';return;}
   var creds=btoa(u+':'+p);
-  var r=await fetch('/playbooks',{headers:{Authorization:'Basic '+creds}});
+  var r=await fetch('/api/v1/playbooks',{headers:{Authorization:'Basic '+creds}});
   if(r.status===401){document.getElementById('login-error').textContent='Invalid password';return;}
   sessionStorage.setItem('sear_creds',creds);
   hideLogin();
@@ -190,7 +190,7 @@ async function openEdit(i){
   document.getElementById('pb-modal-err').textContent='';
   document.getElementById('pb-modal-bg').classList.add('show');
 
-  var r=await fetch('/playbooks/'+encodeURIComponent(pb.id),{headers:headersAuth()});
+  var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(pb.id),{headers:headersAuth()});
   if(r.status===401){closePBModal();showLogin('Session expired - sign in again');return;}
   if(!r.ok){document.getElementById('pb-modal-err').textContent='Failed to load playbook details';return;}
   var full=await r.json();
@@ -206,7 +206,7 @@ async function savePlaybook(){
   if(!name){errEl.textContent='Name is required';return;}
   if(!raw.trim()){errEl.textContent='Playbook YAML is required';return;}
   var payload={name:name,description:desc,playbook_yaml:raw};
-  var url=editingID?('/playbooks/'+encodeURIComponent(editingID)):'/playbooks';
+  var url=editingID?('/api/v1/playbooks/'+encodeURIComponent(editingID)):'/api/v1/playbooks';
   var method=editingID?'PUT':'POST';
   var r=await fetch(url,{method:method,headers:headersJSON(),body:JSON.stringify(payload)});
   if(r.status===401){closePBModal();showLogin('Session expired - sign in again');return;}
@@ -223,7 +223,7 @@ async function savePlaybook(){
 async function removePlaybook(i){
   var pb=playbooks[i];
   if(!confirm('Delete playbook "'+(pb.name||pb.id)+'"?'))return;
-  var r=await fetch('/playbooks/'+encodeURIComponent(pb.id),{method:'DELETE',headers:headersAuth()});
+  var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(pb.id),{method:'DELETE',headers:headersAuth()});
   if(r.status===401){showLogin('Session expired - sign in again');return;}
   if(!r.ok){alert('Delete failed: '+r.status);return;}
   load();
@@ -245,7 +245,7 @@ async function confirmAssign(){
   var errEl=document.getElementById('assign-modal-err');
   var clientID=document.getElementById('assign-client').value;
   if(!clientID){errEl.textContent='Select a client';return;}
-  var r=await fetch('/playbooks/'+encodeURIComponent(assigningID)+'/assign',{method:'POST',headers:headersJSON(),body:JSON.stringify({client_id:clientID})});
+  var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(assigningID)+'/assign',{method:'POST',headers:headersJSON(),body:JSON.stringify({client_id:clientID})});
   if(r.status===401){closeAssignModal();showLogin('Session expired - sign in again');return;}
   if(!r.ok){
     var msg='Assign failed ('+r.status+')';
@@ -285,10 +285,10 @@ function render(){
 async function load(){
   var auth=authHeader();
   if(!auth){showLogin('');return;}
-  var p=await fetch('/playbooks',{headers:headersAuth()});
+  var p=await fetch('/api/v1/playbooks',{headers:headersAuth()});
   if(p.status===401){showLogin('');return;}
   if(!p.ok){document.getElementById('root').innerHTML='<div class="empty">Failed to load playbooks.</div>';return;}
-  var c=await fetch('/clients',{headers:headersAuth()});
+  var c=await fetch('/api/v1/clients',{headers:headersAuth()});
   clients=c.ok?await c.json():[];
   playbooks=await p.json()||[];
   render();
