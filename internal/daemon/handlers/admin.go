@@ -17,6 +17,7 @@ import (
 type StatusResponse struct {
 	Clients     []*common.Client          `json:"clients"`
 	Deployments []*common.DeploymentState `json:"deployments"`
+	TotalClients int                      `json:"total_clients,omitempty"`
 }
 
 // ── /playbooks ────────────────────────────────────────────────────────────────────

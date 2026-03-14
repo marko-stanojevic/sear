@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -226,6 +227,20 @@ func (s *Store) ListClients() []*common.Client {
 	for _, c := range s.clients {
 		out = append(out, c)
 	}
+	sort.Slice(out, func(i, j int) bool {
+		hi := strings.ToLower(strings.TrimSpace(out[i].Hostname))
+		hj := strings.ToLower(strings.TrimSpace(out[j].Hostname))
+		if hi == hj {
+			return out[i].ID < out[j].ID
+		}
+		if hi == "" {
+			return false
+		}
+		if hj == "" {
+			return true
+		}
+		return hi < hj
+	})
 	return out
 }
 
