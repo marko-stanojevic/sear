@@ -136,6 +136,19 @@ func TestHandleRegister_InvalidSecret(t *testing.T) {
 	}
 }
 
+func TestHandleRegister_InvalidPlatform(t *testing.T) {
+	env := newTestEnv(t)
+	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
+		Platform:           common.PlatformType("darwin"),
+		PlatformID:         "SN-002-invalid",
+		Hostname:           "edge-02",
+		RegistrationSecret: "reg-secret-1",
+	}, "")
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d; want 400 (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
 func TestHandleRegister_MissingFields(t *testing.T) {
 	env := newTestEnv(t)
 	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{

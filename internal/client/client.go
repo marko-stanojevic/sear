@@ -70,10 +70,8 @@ func (c *Client) Run(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if c.state.Token == "" {
-			if err := c.register(ctx); err != nil {
-				return fmt.Errorf("registration: %w", err)
-			}
+		if err := c.register(ctx); err != nil {
+			return fmt.Errorf("registration: %w", err)
 		}
 		log.Printf("connecting to %s", c.cfg.ServerURL)
 		if err := c.connect(ctx); err != nil {

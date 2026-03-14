@@ -60,7 +60,7 @@ func TestLoadClientConfig(t *testing.T) {
 	content := `
 server_url: "http://sear:8080"
 registration_secret: "reg-secret"
-platform: "baremetal"
+platform: "auto"
 reconnect_interval_seconds: 5
 log_batch_size: 50
 `

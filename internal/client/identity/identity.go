@@ -19,9 +19,7 @@ type PlatformInfo struct {
 	Metadata map[string]string
 }
 
-
-// Collect gathers platform info. If platformHint is "auto" or empty the
-// platform is auto-detected from the OS; otherwise the hint is used directly.
+// Collect gathers platform info and resolves the configured platform hint.
 func Collect(platformHint string) PlatformInfo {
 	hostname, _ := os.Hostname()
 	if hostname == "" {
@@ -35,10 +33,7 @@ func Collect(platformHint string) PlatformInfo {
 		meta["os_description"] = desc
 	}
 
-	platform := strings.ToLower(platformHint)
-	if platform == "" || platform == "auto" {
-		platform = detectPlatform()
-	}
+	platform := normalizePlatformHint(platformHint)
 
 	id := collectID(meta)
 	return PlatformInfo{
@@ -46,6 +41,22 @@ func Collect(platformHint string) PlatformInfo {
 		ID:       id,
 		Hostname: hostname,
 		Metadata: meta,
+	}
+}
+
+func normalizePlatformHint(hint string) string {
+	v := strings.ToLower(strings.TrimSpace(hint))
+	switch v {
+	case "", "auto":
+		return detectPlatform()
+	case "linux":
+		return "linux"
+	case "mac":
+		return "mac"
+	case "windows":
+		return "windows"
+	default:
+		return detectPlatform()
 	}
 }
 

@@ -59,6 +59,48 @@ func TestClientCRUD(t *testing.T) {
 	}
 }
 
+func TestSaveClientNormalizesPlatformFromOS(t *testing.T) {
+	s := newTestStore(t)
+
+	c := &common.Client{
+		ID:           "client-1",
+		Hostname:     "edge-01",
+		OS:           "darwin",
+		PlatformID:   "SN-12345",
+		Status:       common.ClientStatusRegistered,
+		RegisteredAt: time.Now(),
+		LastSeenAt:   time.Now(),
+	}
+	if err := s.SaveClient(c); err != nil {
+		t.Fatalf("SaveClient: %v", err)
+	}
+
+	got, ok := s.GetClient("client-1")
+	if !ok {
+		t.Fatal("GetClient: not found")
+	}
+	if got.Platform != common.PlatformMac {
+		t.Fatalf("Platform = %q; want %q", got.Platform, common.PlatformMac)
+	}
+
+	c.Platform = "custom"
+	c.OS = "windows"
+	if err := s.SaveClient(c); err != nil {
+		t.Fatalf("SaveClient with non-canonical platform: %v", err)
+	}
+
+	got, ok = s.GetClient("client-1")
+	if !ok {
+		t.Fatal("GetClient after update: not found")
+	}
+	if got.Platform != common.PlatformWindows {
+		t.Fatalf("Platform = %q; want %q", got.Platform, common.PlatformWindows)
+	}
+	if c.Platform != common.PlatformWindows {
+		t.Fatalf("client Platform = %q; want %q", c.Platform, common.PlatformWindows)
+	}
+}
+
 // ── Deployments ───────────────────────────────────────────────────────────────
 
 func TestDeploymentCRUD(t *testing.T) {
