@@ -98,8 +98,9 @@ func (c *Client) register(ctx context.Context) error {
 	pf := identity.Collect(c.cfg.Platform)
 	req := common.RegistrationRequest{
 		Platform:           common.PlatformType(pf.Platform),
-		PlatformID:         pf.ID,
 		Hostname:           pf.Hostname,
+		Model:              pf.Model,
+		Vendor:             pf.Vendor,
 		RegistrationSecret: c.cfg.RegistrationSecret,
 		Metadata:           pf.Metadata,
 	}

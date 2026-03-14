@@ -119,7 +119,29 @@ func (s *Store) load() error {
 	if snap.Secrets != nil {
 		s.secrets = snap.Secrets
 	}
+	for _, c := range s.clients {
+		migrateLegacyClientFields(c)
+	}
 	return nil
+}
+
+func migrateLegacyClientFields(c *common.Client) {
+	if c == nil || c.Metadata == nil {
+		return
+	}
+	if strings.TrimSpace(c.OS) == "" {
+		if osDesc := strings.TrimSpace(c.Metadata["os_description"]); osDesc != "" {
+			c.OS = osDesc
+		} else if osName := strings.TrimSpace(c.Metadata["os"]); osName != "" {
+			c.OS = osName
+		}
+	}
+	if strings.TrimSpace(c.Vendor) == "" {
+		c.Vendor = strings.TrimSpace(c.Metadata["vendor"])
+	}
+	if strings.TrimSpace(c.Model) == "" {
+		c.Model = strings.TrimSpace(c.Metadata["model"])
+	}
 }
 
 func normalizePlatform(platform common.PlatformType, osName string, metadata map[string]string) common.PlatformType {
@@ -142,6 +164,9 @@ func platformFromOS(osName string, metadata map[string]string) common.PlatformTy
 	osv := strings.ToLower(strings.TrimSpace(osName))
 	if osv == "" && metadata != nil {
 		osv = strings.ToLower(strings.TrimSpace(metadata["os"]))
+		if osv == "" {
+			osv = strings.ToLower(strings.TrimSpace(metadata["type"]))
+		}
 		if osv == "" {
 			osv = strings.ToLower(strings.TrimSpace(metadata["os_type"]))
 		}

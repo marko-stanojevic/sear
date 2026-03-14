@@ -131,8 +131,9 @@ const (
 // RegistrationRequest is sent by a client to POST /api/v1/register.
 type RegistrationRequest struct {
 	Platform           PlatformType      `json:"platform"`
-	PlatformID         string            `json:"platform_id"`
 	Hostname           string            `json:"hostname"`
+	Model              string            `json:"model,omitempty"`
+	Vendor             string            `json:"vendor,omitempty"`
 	RegistrationSecret string            `json:"registration_secret"`
 	Metadata           map[string]string `json:"metadata,omitempty"`
 }
@@ -161,14 +162,14 @@ type Client struct {
 	Hostname      string            `json:"hostname"`
 	Platform      PlatformType      `json:"platform"`
 	OS            string            `json:"os,omitempty"`
-	OSDescription string            `json:"os_description,omitempty"`
-	PlatformID   string            `json:"platform_id"`
-	IPAddress    string            `json:"ip_address,omitempty"`
-	Metadata     map[string]string `json:"metadata,omitempty"`
-	Status       ClientStatus      `json:"status"`
-	PlaybookID   string            `json:"playbook_id,omitempty"`
-	RegisteredAt time.Time         `json:"registered_at"`
-	LastSeenAt   time.Time         `json:"last_seen_at"`
+	Model         string            `json:"model,omitempty"`
+	Vendor        string            `json:"vendor,omitempty"`
+	IPAddress     string            `json:"ip_address,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+	Status        ClientStatus      `json:"status"`
+	PlaybookID    string            `json:"playbook_id,omitempty"`
+	RegisteredAt  time.Time         `json:"registered_at"`
+	LastSeenAt    time.Time         `json:"last_seen_at"`
 }
 
 // ── Deployment / state types ──────────────────────────────────────────────────

@@ -107,7 +107,7 @@ func (e *Env) RequireRootAuth(next http.Handler) http.Handler {
 
 // HandleRegister processes POST /api/v1/register.
 // Clients authenticate with a pre-shared registration secret.
-// Re-registration of the same PlatformID is idempotent — the existing client
+// Re-registration of the same machine_id is idempotent — the existing client
 // record is reused and a fresh JWT is issued.
 func (e *Env) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -119,8 +119,8 @@ func (e *Env) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
-	if req.PlatformID == "" || req.Hostname == "" {
-		writeError(w, http.StatusBadRequest, "platform_id and hostname are required")
+	if req.Hostname == "" {
+		writeError(w, http.StatusBadRequest, "hostname is required")
 		return
 	}
 	if !validPlatform(req.Platform) {
@@ -135,26 +135,48 @@ func (e *Env) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reuse existing client record when the same platform_id re-registers
+	// Reuse existing client record when the same machine_id re-registers
 	// (e.g., after an OS re-image that cleared the client state file).
 	var client *common.Client
-	for _, c := range e.Store.ListClients() {
-		if c.PlatformID == req.PlatformID {
-			client = c
-			break
+	machineID := strings.TrimSpace(req.Metadata["machine_id"])
+	if machineID != "" {
+		for _, c := range e.Store.ListClients() {
+			if strings.TrimSpace(c.Metadata["machine_id"]) == machineID {
+				client = c
+				break
+			}
 		}
 	}
 	if client == nil {
+		clientID := preferredClientID(machineID)
+		if existing, ok := e.Store.GetClient(clientID); ok {
+			existingMachineID := ""
+			if existing.Metadata != nil {
+				existingMachineID = strings.TrimSpace(existing.Metadata["machine_id"])
+			}
+			if machineID == "" || existingMachineID == "" || existingMachineID != machineID {
+				clientID = uuid.New().String()
+			}
+		}
 		client = &common.Client{
-			ID:           uuid.New().String(),
+			ID:           clientID,
 			RegisteredAt: time.Now(),
 		}
 	}
 	client.Hostname = req.Hostname
 	client.Platform = req.Platform
-	client.OS = req.Metadata["os"]
-	client.OSDescription = req.Metadata["os_description"]
-	client.PlatformID = req.PlatformID
+	client.OS = strings.TrimSpace(req.Metadata["os"])
+	if client.OS == "" {
+		client.OS = strings.TrimSpace(req.Metadata["os_description"])
+	}
+	client.Model = strings.TrimSpace(req.Model)
+	if client.Model == "" {
+		client.Model = strings.TrimSpace(req.Metadata["model"])
+	}
+	client.Vendor = strings.TrimSpace(req.Vendor)
+	if client.Vendor == "" {
+		client.Vendor = strings.TrimSpace(req.Metadata["vendor"])
+	}
 	client.IPAddress = requestIP(r)
 	client.Metadata = req.Metadata
 	client.Status = common.ClientStatusRegistered
@@ -234,4 +256,36 @@ func GenerateSecret(numBytes int) (string, error) {
 
 func decodeJSON(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
+}
+
+func preferredClientID(machineID string) string {
+	v := strings.TrimSpace(machineID)
+	if v == "" {
+		return uuid.New().String()
+	}
+
+	var b strings.Builder
+	b.Grow(len(v))
+	for _, r := range v {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-', r == '_', r == '.', r == ':':
+			b.WriteRune(r)
+		case r == ' ', r == '/', r == '\\':
+			b.WriteRune('-')
+		}
+	}
+	out := strings.Trim(b.String(), "-._:")
+	if out == "" {
+		return uuid.New().String()
+	}
+	if len(out) > 128 {
+		out = out[:128]
+	}
+	return out
 }

@@ -86,12 +86,12 @@ func decode[T any](t *testing.T, rr *httptest.ResponseRecorder) T {
 }
 
 // registerClient is a test helper that registers a client and returns its token.
-func registerClient(t *testing.T, env *handlers.Env, platformID, hostname string) (string, string) {
+func registerClient(t *testing.T, env *handlers.Env, machineID, hostname string) (string, string) {
 	t.Helper()
 	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
 		Platform:           common.PlatformLinux,
-		PlatformID:         platformID,
 		Hostname:           hostname,
+		Metadata:           map[string]string{"machine_id": machineID},
 		RegistrationSecret: "reg-secret-1",
 	}, "")
 	if rr.Code != http.StatusOK {
@@ -107,7 +107,6 @@ func TestHandleRegister_Success(t *testing.T) {
 	env := newTestEnv(t)
 	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
 		Platform:           common.PlatformLinux,
-		PlatformID:         "SN-001",
 		Hostname:           "edge-01",
 		RegistrationSecret: "reg-secret-1",
 	}, "")
@@ -127,7 +126,6 @@ func TestHandleRegister_InvalidSecret(t *testing.T) {
 	env := newTestEnv(t)
 	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
 		Platform:           common.PlatformLinux,
-		PlatformID:         "SN-002",
 		Hostname:           "edge-02",
 		RegistrationSecret: "wrong-secret",
 	}, "")
@@ -140,7 +138,6 @@ func TestHandleRegister_InvalidPlatform(t *testing.T) {
 	env := newTestEnv(t)
 	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
 		Platform:           common.PlatformType("darwin"),
-		PlatformID:         "SN-002-invalid",
 		Hostname:           "edge-02",
 		RegistrationSecret: "reg-secret-1",
 	}, "")
@@ -163,8 +160,8 @@ func TestHandleRegister_Idempotent(t *testing.T) {
 	env := newTestEnv(t)
 	req := common.RegistrationRequest{
 		Platform:           common.PlatformLinux,
-		PlatformID:         "SN-003",
 		Hostname:           "edge-03",
+		Metadata:           map[string]string{"machine_id": "machine-003"},
 		RegistrationSecret: "reg-secret-1",
 	}
 	rr1 := postJSON(t, env.HandleRegister, "/api/v1/register", req, "")
@@ -176,6 +173,28 @@ func TestHandleRegister_Idempotent(t *testing.T) {
 	if r1.ClientID != r2.ClientID {
 		t.Errorf("second registration should reuse client ID: %q != %q", r1.ClientID, r2.ClientID)
 	}
+	if r1.ClientID != "machine-003" {
+		t.Errorf("client_id = %q; want %q", r1.ClientID, "machine-003")
+	}
+}
+
+func TestHandleRegister_ClientIDSanitizedFromMachineID(t *testing.T) {
+	env := newTestEnv(t)
+	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
+		Platform: common.PlatformLinux,
+		Hostname: "edge-03b",
+		Metadata: map[string]string{
+			"machine_id": "HPE ProLiant/Gen10 SN 1234",
+		},
+		RegistrationSecret: "reg-secret-1",
+	}, "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	resp := decode[common.RegistrationResponse](t, rr)
+	if resp.ClientID != "HPE-ProLiant-Gen10-SN-1234" {
+		t.Errorf("client_id = %q; want %q", resp.ClientID, "HPE-ProLiant-Gen10-SN-1234")
+	}
 }
 
 func TestHandleRegister_CapturesClientIP(t *testing.T) {
@@ -183,7 +202,6 @@ func TestHandleRegister_CapturesClientIP(t *testing.T) {
 
 	body, err := json.Marshal(common.RegistrationRequest{
 		Platform:           common.PlatformLinux,
-		PlatformID:         "SN-004",
 		Hostname:           "edge-04",
 		RegistrationSecret: "reg-secret-1",
 	})
@@ -216,12 +234,12 @@ func TestHandleRegister_CapturesClientOS(t *testing.T) {
 
 	body, err := json.Marshal(common.RegistrationRequest{
 		Platform:           common.PlatformLinux,
-		PlatformID:         "SN-005",
+		Model:              "PowerEdge R650",
+		Vendor:             "Dell Inc.",
 		Hostname:           "edge-05",
 		RegistrationSecret: "reg-secret-1",
 		Metadata: map[string]string{
-			"os":             "linux",
-			"os_description": "Debian GNU/Linux 12 (bookworm)",
+			"os": "Debian GNU/Linux 12 (bookworm)",
 		},
 	})
 	if err != nil {
@@ -242,11 +260,14 @@ func TestHandleRegister_CapturesClientOS(t *testing.T) {
 	if !ok {
 		t.Fatalf("client %q not found", resp.ClientID)
 	}
-	if client.OS != "linux" {
-		t.Errorf("os = %q; want %q", client.OS, "linux")
+	if client.OS != "Debian GNU/Linux 12 (bookworm)" {
+		t.Errorf("os = %q; want %q", client.OS, "Debian GNU/Linux 12 (bookworm)")
 	}
-	if client.OSDescription != "Debian GNU/Linux 12 (bookworm)" {
-		t.Errorf("os_description = %q; want %q", client.OSDescription, "Debian GNU/Linux 12 (bookworm)")
+	if client.Model != "PowerEdge R650" {
+		t.Errorf("model = %q; want %q", client.Model, "PowerEdge R650")
+	}
+	if client.Vendor != "Dell Inc." {
+		t.Errorf("vendor = %q; want %q", client.Vendor, "Dell Inc.")
 	}
 }
 
