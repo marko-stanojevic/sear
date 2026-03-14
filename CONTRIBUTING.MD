@@ -125,6 +125,20 @@ sear/
 - Logs are persisted per deployment under logsDir and not in state.json.
 - Keep job and step order deterministic in playbook processing.
 
+## Route conventions
+
+Keep route structure consistent:
+
+- API endpoints are versioned under `/api/v1`.
+  - Public/client control examples: `/api/v1/register`, `/api/v1/ws`
+  - Root management examples: `/api/v1/status`, `/api/v1/secrets`, `/api/v1/playbooks`, `/api/v1/clients`, `/api/v1/deployments`
+- Browser UI pages are under `/ui`.
+  - `/ui`, `/ui/secrets`, `/ui/playbooks`, `/ui/deployments`
+- When adding a new resource:
+  - expose API under `/api/v1/<resource>`
+  - expose UI under `/ui/<resource>` when needed
+  - update `docs/api-endpoints.md`, `README.md`, and tests in the same change
+
 ## CI and release
 
 CI workflow:

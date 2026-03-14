@@ -72,8 +72,13 @@ If `root_password` or `registration_secrets` are missing, the daemon generates t
 
 ### 5) Open status dashboard
 
-- URL: `http://localhost:8080/status/ui`
-- Auth: HTTP Basic
+- URL: `http://localhost:8080/ui`
+- UI pages:
+	- `/ui` (clients/status)
+	- `/ui/secrets`
+	- `/ui/playbooks`
+	- `/ui/deployments`
+- Auth: sign in from the UI (HTTP Basic credentials used for API calls)
 - Username: `root`
 - Password: value from `root_password` in secrets file (or generated password printed at startup)
 
@@ -134,3 +139,9 @@ Example playbook: `examples/playbook.yml`
 
 - API endpoints: [docs/api-endpoints.md](docs/api-endpoints.md)
 - Contributor and development guide: [CONTRIBUTING.MD](CONTRIBUTING.MD)
+
+## API route conventions
+
+- Public/client control endpoints are under `/api/v1` (for example `/api/v1/register`, `/api/v1/ws`).
+- Root management APIs are also under `/api/v1` (for example `/api/v1/status`, `/api/v1/secrets`, `/api/v1/playbooks`, `/api/v1/clients`, `/api/v1/deployments`).
+- Browser pages are under `/ui`.
