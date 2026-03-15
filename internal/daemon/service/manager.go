@@ -33,10 +33,10 @@ func (m *Manager) StatusSnapshot() ([]*common.Client, []*common.DeploymentState)
 func (m *Manager) AssignPlaybookToClient(playbookID, clientID string) error {
 	client, ok := m.Store.GetClient(clientID)
 	if !ok {
-		return ErrClientNotFound
+		return fmt.Errorf("assign playbook to client: %w", ErrClientNotFound)
 	}
 	if _, ok := m.Store.GetPlaybook(playbookID); !ok {
-		return ErrPlaybookNotFound
+		return fmt.Errorf("assign playbook to client: %w", ErrPlaybookNotFound)
 	}
 	client.PlaybookID = playbookID
 	if err := m.Store.SaveClient(client); err != nil {
@@ -72,7 +72,10 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string) {
 		resumeStep = dep.ResumeStepIndex
 		dep.Status = common.DeploymentStatusRunning
 		dep.UpdatedAt = time.Now()
-		_ = m.Store.SaveDeployment(dep)
+		if err := m.Store.SaveDeployment(dep); err != nil {
+			fmt.Printf("failed to save deployment %s for client %s: %v\n", dep.ID, clientID, err)
+			return
+		}
 	} else if !hasDep ||
 		dep.Status == common.DeploymentStatusDone ||
 		dep.Status == common.DeploymentStatusFailed {
@@ -86,13 +89,19 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string) {
 			StartedAt:       time.Now(),
 			UpdatedAt:       time.Now(),
 		}
-		_ = m.Store.SaveDeployment(newDep)
+		if err := m.Store.SaveDeployment(newDep); err != nil {
+			fmt.Printf("failed to save new deployment %s for client %s: %v\n", depID, clientID, err)
+			return
+		}
 	} else {
 		return
 	}
 
 	client.Status = common.ClientStatusDeploying
-	_ = m.Store.SaveClient(client)
+	if err := m.Store.SaveClient(client); err != nil {
+		fmt.Printf("failed to update client %s status to deploying: %v\n", clientID, err)
+		return
+	}
 
 	pbName := pb.Name
 	if pb.Playbook != nil && pb.Playbook.Name != "" {
@@ -141,5 +150,12 @@ func (m *Manager) ResolvePlaybookNameByDeployment(deploymentID string) string {
 	}
 	return pbName
 }
+
+var (
+	// ErrClientNotFound indicates that the requested client does not exist in the store.
+	ErrClientNotFound = errors.New("client not found")
+	// ErrPlaybookNotFound indicates that the requested playbook does not exist in the store.
+	ErrPlaybookNotFound = errors.New("playbook not found")
+)
 
 var _ ports.StorePort = (*store.Store)(nil)
