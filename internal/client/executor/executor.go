@@ -21,8 +21,8 @@ type Logger func(level common.LogLevel, msg string)
 
 // Result is returned after running a step.
 type Result struct {
-	Err         error
-	NeedsReboot bool
+	Err          error
+	NeedsReboot  bool
 	RebootReason string
 }
 
@@ -124,7 +124,9 @@ func runShell(ctx context.Context, step common.Step, secrets, stepEnv map[string
 	_ = pw.Close()
 
 	// Stream output to the logger.
+	drainDone := make(chan struct{})
 	go func() {
+		defer close(drainDone)
 		defer func() {
 			_ = pr.Close()
 		}()
@@ -151,8 +153,10 @@ func runShell(ctx context.Context, step common.Step, secrets, stepEnv map[string
 	}()
 
 	if err := cmd.Wait(); err != nil {
+		<-drainDone
 		return Result{Err: fmt.Errorf("shell exited with error: %w", err)}
 	}
+	<-drainDone
 	return Result{}
 }
 

@@ -10,38 +10,52 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/marko-stanojevic/sear/internal/common"
 )
 
-func testLogger(lines *[]string) Logger {
+type logCollector struct {
+	mu    sync.Mutex
+	lines []string
+}
+
+func (c *logCollector) logger() Logger {
 	return func(_ common.LogLevel, msg string) {
-		*lines = append(*lines, msg)
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.lines = append(c.lines, msg)
 	}
 }
 
-func TestRunStepSimplePaths(t *testing.T) {
-	logs := []string{}
+func (c *logCollector) joined() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return strings.Join(c.lines, "\n")
+}
 
-	res := RunStep(context.Background(), common.Step{Uses: "reboot", With: map[string]string{"reason": "maintenance"}}, nil, "", "", testLogger(&logs))
+func TestRunStepSimplePaths(t *testing.T) {
+	logs := &logCollector{}
+
+	res := RunStep(context.Background(), common.Step{Uses: "reboot", With: map[string]string{"reason": "maintenance"}}, nil, "", "", logs.logger())
 	if !res.NeedsReboot || res.RebootReason != "maintenance" || res.Err != nil {
 		t.Fatalf("unexpected reboot result: %+v", res)
 	}
 
-	res = RunStep(context.Background(), common.Step{Uses: "upload-logs"}, nil, "", "", testLogger(&logs))
+	res = RunStep(context.Background(), common.Step{Uses: "upload-logs"}, nil, "", "", logs.logger())
 	if res.Err != nil || res.NeedsReboot {
 		t.Fatalf("upload-logs should be no-op success: %+v", res)
 	}
 
-	res = RunStep(context.Background(), common.Step{Name: "bad", Uses: "unknown-step"}, nil, "", "", testLogger(&logs))
+	res = RunStep(context.Background(), common.Step{Name: "bad", Uses: "unknown-step"}, nil, "", "", logs.logger())
 	if res.Err == nil {
 		t.Fatal("expected unknown step error")
 	}
 }
 
 func TestRunStepShell(t *testing.T) {
-	logs := []string{}
+	logs := &logCollector{}
 	shell := "sh"
 	run := "echo hello-sear"
 	if runtime.GOOS == "windows" {
@@ -49,11 +63,11 @@ func TestRunStepShell(t *testing.T) {
 		run = "echo hello-sear"
 	}
 
-	res := RunStep(context.Background(), common.Step{Run: run, Shell: shell}, nil, "", "", testLogger(&logs))
+	res := RunStep(context.Background(), common.Step{Run: run, Shell: shell}, nil, "", "", logs.logger())
 	if res.Err != nil {
 		t.Fatalf("run shell failed: %v", res.Err)
 	}
-	joined := strings.Join(logs, "\n")
+	joined := logs.joined()
 	if !strings.Contains(strings.ToLower(joined), "hello-sear") {
 		t.Fatalf("expected shell output in logs, got: %q", joined)
 	}
@@ -71,8 +85,8 @@ func TestRunDownloadArtifact(t *testing.T) {
 
 	dest := t.TempDir()
 	step := common.Step{Uses: "download-artifact", With: map[string]string{"artifact": "my.bin", "path": dest}}
-	logs := []string{}
-	res := runDownloadArtifact(context.Background(), step, ts.URL+"/artifacts", "", testLogger(&logs))
+	logs := &logCollector{}
+	res := runDownloadArtifact(context.Background(), step, ts.URL+"/artifacts", "", logs.logger())
 	if res.Err != nil {
 		t.Fatalf("download-artifact failed: %v", res.Err)
 	}
@@ -109,9 +123,9 @@ func TestRunUploadArtifact(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	logs := []string{}
+	logs := &logCollector{}
 	step := common.Step{Uses: "upload-artifact", With: map[string]string{"artifact": "remote.bin", "path": src}}
-	res := runUploadArtifact(context.Background(), step, ts.URL, "", testLogger(&logs))
+	res := runUploadArtifact(context.Background(), step, ts.URL, "", logs.logger())
 	if res.Err != nil {
 		t.Fatalf("upload-artifact failed: %v", res.Err)
 	}
