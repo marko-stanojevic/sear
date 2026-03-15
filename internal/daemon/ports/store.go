@@ -2,6 +2,7 @@ package ports
 
 import (
 	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/daemon/store"
 )
 
 // StorePort defines persistence capabilities used by handler/service layers.
@@ -16,9 +17,9 @@ type StorePort interface {
 	GetActiveDeploymentForClient(clientID string) (*common.DeploymentState, bool)
 	ListDeployments() []*common.DeploymentState
 
-	SavePlaybook(p *common.PlaybookRecord) error
-	GetPlaybook(id string) (*common.PlaybookRecord, bool)
-	ListPlaybooks() []*common.PlaybookRecord
+	SavePlaybook(p *store.PlaybookRecord) error
+	GetPlaybook(id string) (*store.PlaybookRecord, bool)
+	ListPlaybooks() []*store.PlaybookRecord
 	DeletePlaybook(id string) error
 
 	SaveArtifact(a *common.Artifact) error
