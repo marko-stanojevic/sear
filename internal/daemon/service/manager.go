@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -8,6 +9,14 @@ import (
 	"github.com/marko-stanojevic/sear/internal/common"
 	"github.com/marko-stanojevic/sear/internal/daemon/ports"
 	"github.com/marko-stanojevic/sear/internal/daemon/store"
+)
+
+// Sentinel errors returned by service operations.
+var (
+	// ErrClientNotFound is returned when a client ID does not match any registered client.
+	ErrClientNotFound = errors.New("client not found")
+	// ErrPlaybookNotFound is returned when a playbook ID does not match any stored playbook.
+	ErrPlaybookNotFound = errors.New("playbook not found")
 )
 
 // Manager hosts daemon application-level orchestration logic.
@@ -24,10 +33,10 @@ func (m *Manager) StatusSnapshot() ([]*common.Client, []*common.DeploymentState)
 func (m *Manager) AssignPlaybookToClient(playbookID, clientID string) error {
 	client, ok := m.Store.GetClient(clientID)
 	if !ok {
-		return fmt.Errorf("client not found")
+		return ErrClientNotFound
 	}
 	if _, ok := m.Store.GetPlaybook(playbookID); !ok {
-		return fmt.Errorf("playbook not found")
+		return ErrPlaybookNotFound
 	}
 	client.PlaybookID = playbookID
 	if err := m.Store.SaveClient(client); err != nil {

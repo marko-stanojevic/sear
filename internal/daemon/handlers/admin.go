@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/sear/internal/daemon/service"
 	"github.com/marko-stanojevic/sear/internal/daemon/store"
 	"gopkg.in/yaml.v3"
 )
@@ -197,8 +199,8 @@ func (e *Env) assignPlaybook(w http.ResponseWriter, r *http.Request, playbookID 
 		return
 	}
 	if err := e.Service.AssignPlaybookToClient(playbookID, body.ClientID); err != nil {
-		switch err.Error() {
-		case "client not found", "playbook not found":
+		switch {
+		case errors.Is(err, service.ErrClientNotFound), errors.Is(err, service.ErrPlaybookNotFound):
 			writeError(w, http.StatusNotFound, err.Error())
 		default:
 			writeError(w, http.StatusInternalServerError, err.Error())
