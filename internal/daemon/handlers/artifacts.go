@@ -95,8 +95,12 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		size, copyErr := io.Copy(f, r.Body)
-		_ = f.Close()
+		closeErr := f.Close()
 		if copyErr != nil {
+			writeError(w, http.StatusInternalServerError, "failed to write artifact")
+			return
+		}
+		if closeErr != nil {
 			writeError(w, http.StatusInternalServerError, "failed to write artifact")
 			return
 		}
