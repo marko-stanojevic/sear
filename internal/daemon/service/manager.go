@@ -11,6 +11,14 @@ import (
 	"github.com/marko-stanojevic/sear/internal/daemon/store"
 )
 
+// Sentinel errors returned by service operations.
+var (
+	// ErrClientNotFound is returned when a client ID does not match any registered client.
+	ErrClientNotFound = errors.New("client not found")
+	// ErrPlaybookNotFound is returned when a playbook ID does not match any stored playbook.
+	ErrPlaybookNotFound = errors.New("playbook not found")
+)
+
 // Manager hosts daemon application-level orchestration logic.
 type Manager struct {
 	Store     ports.StorePort
@@ -142,12 +150,5 @@ func (m *Manager) ResolvePlaybookNameByDeployment(deploymentID string) string {
 	}
 	return pbName
 }
-
-var (
-	// ErrClientNotFound indicates that the requested client does not exist in the store.
-	ErrClientNotFound = errors.New("client not found")
-	// ErrPlaybookNotFound indicates that the requested playbook does not exist in the store.
-	ErrPlaybookNotFound = errors.New("playbook not found")
-)
 
 var _ ports.StorePort = (*store.Store)(nil)
