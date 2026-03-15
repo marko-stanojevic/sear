@@ -44,7 +44,7 @@ Sear helps infrastructure teams roll out and manage repeatable deployments acros
 
 Download prebuilt binaries from GitHub Releases:
 
-- https://github.com/marko-stanojevic/sear/releases
+- <https://github.com/marko-stanojevic/sear/releases>
 
 Choose the archive for your OS/architecture and extract it.
 
@@ -75,10 +75,11 @@ If `root_password` or `registration_secrets` are missing, the daemon generates t
 
 - URL: `http://localhost:8080/ui`
 - UI pages:
-	- `/ui` (clients/status)
-	- `/ui/secrets`
-	- `/ui/playbooks`
-	- `/ui/deployments`
+	- `/ui` (homepage/dashboard)
+	- `/ui/clients` (clients/status)
+	- `/ui/secrets` (secrets management)
+	- `/ui/playbooks` (playbook library)
+	- `/ui/deployments` (deployment history)
 
 ## Configuration tips
 

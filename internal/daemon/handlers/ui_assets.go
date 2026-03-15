@@ -5,8 +5,30 @@ import (
 	"net/http"
 )
 
-//go:embed ui/*.html
+//go:embed ui/*.html ui/assets/*
 var uiFS embed.FS
+
+// ServeUIAsset handles requests to /ui/assets/ by stripping the prefix
+// and using the embedded filesystem to return the file.
+func ServeUIAsset(w http.ResponseWriter, r *http.Request) {
+	// If it's a JS file, manually set content type just in case
+	importPath := "ui/assets/" + r.URL.Path[len("/ui/assets/"):]
+	
+	data, err := uiFS.ReadFile(importPath)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	
+	if len(importPath) > 3 && importPath[len(importPath)-3:] == ".js" {
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	} else if len(importPath) > 4 && importPath[len(importPath)-4:] == ".css" {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
 
 func renderUI(w http.ResponseWriter, name string) {
 	data, err := uiFS.ReadFile("ui/" + name)

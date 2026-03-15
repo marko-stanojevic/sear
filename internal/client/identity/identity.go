@@ -195,23 +195,44 @@ func readFile(path string) string {
 }
 
 func osDescription() string {
-	if runtime.GOOS != "linux" {
+	switch runtime.GOOS {
+	case "windows":
+		caption := firstNonEmpty(
+			runAndTrim("wmic", "os", "get", "caption", "/value"),
+			runAndTrim("powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_OperatingSystem).Caption"),
+		)
+		caption = strings.TrimPrefix(caption, "Microsoft ")
+		if caption != "" {
+			return caption
+		}
+		return "windows"
+	case "darwin":
+		name := runAndTrim("sw_vers", "-productName")
+		version := runAndTrim("sw_vers", "-productVersion")
+		if name != "" && version != "" {
+			return name + " " + version
+		}
+		if name != "" {
+			return name
+		}
+		return "macOS"
+	case "linux":
+		vals := parseOSRelease("/etc/os-release")
+		if pretty := vals["PRETTY_NAME"]; pretty != "" {
+			return pretty
+		}
+		name := vals["NAME"]
+		version := vals["VERSION"]
+		if name != "" && version != "" {
+			return strings.TrimSpace(name + " " + version)
+		}
+		if name != "" {
+			return name
+		}
+		return "linux"
+	default:
 		return runtime.GOOS
 	}
-
-	vals := parseOSRelease("/etc/os-release")
-	if pretty := vals["PRETTY_NAME"]; pretty != "" {
-		return pretty
-	}
-	name := vals["NAME"]
-	version := vals["VERSION"]
-	if name != "" && version != "" {
-		return strings.TrimSpace(name + " " + version)
-	}
-	if name != "" {
-		return name
-	}
-	return "linux"
 }
 
 func hardwareInfo() (vendor string, model string) {
