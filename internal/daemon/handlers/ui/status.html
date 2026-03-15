@@ -270,7 +270,8 @@ function clearFilters() {
 }
 
 async function load() {
-	const r = await fetch('/api/v1/status');
+	const headers = (typeof authHeader === 'function') ? authHeader() : {};
+	const r = await fetch('/api/v1/status', { headers });
   if (r.status === 401) {
     const root = document.getElementById('root');
     root.innerHTML = '<div class="empty">Unauthorized. Reload the page to sign in.</div>';
