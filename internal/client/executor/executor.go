@@ -117,14 +117,18 @@ func runShell(ctx context.Context, step common.Step, secrets, stepEnv map[string
 	cmd.Stderr = pw
 
 	if err := cmd.Start(); err != nil {
-		pw.Close()
-		pr.Close()
+		_ = pw.Close()
+		_ = pr.Close()
 		return Result{Err: fmt.Errorf("starting shell: %w", err)}
 	}
-	pw.Close()
+	_ = pw.Close()
 
 	// Stream output to the logger.
 	go func() {
+		defer func() {
+			_ = pr.Close()
+		}()
+
 		buf := make([]byte, 4096)
 		var leftover string
 		for {
@@ -181,7 +185,7 @@ func runDownloadArtifact(ctx context.Context, step common.Step, artifactsBaseURL
 	if err != nil {
 		return Result{Err: fmt.Errorf("download-artifact: %w", err)}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return Result{Err: fmt.Errorf("download-artifact: server returned %d", resp.StatusCode)}
 	}
@@ -194,7 +198,7 @@ func runDownloadArtifact(ctx context.Context, step common.Step, artifactsBaseURL
 	if err != nil {
 		return Result{Err: fmt.Errorf("download-artifact: create %s: %w", outPath, err)}
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	written, err := io.Copy(f, resp.Body)
 	if err != nil {
 		return Result{Err: fmt.Errorf("download-artifact: write: %w", err)}
@@ -218,7 +222,7 @@ func runUploadArtifact(ctx context.Context, step common.Step, artifactsBaseURL, 
 	if err != nil {
 		return Result{Err: fmt.Errorf("upload-artifact: open %s: %w", src, err)}
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	url := strings.TrimRight(artifactsBaseURL, "/") + "?name=" + name
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, f)
@@ -234,7 +238,7 @@ func runUploadArtifact(ctx context.Context, step common.Step, artifactsBaseURL, 
 	if err != nil {
 		return Result{Err: fmt.Errorf("upload-artifact: %w", err)}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var body bytes.Buffer
 	_, _ = io.Copy(&body, resp.Body)
 	if resp.StatusCode != http.StatusCreated {

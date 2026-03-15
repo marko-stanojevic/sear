@@ -53,7 +53,7 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			_ = e.Store.SaveClient(c)
 		}
-		ws.Close()
+		_ = ws.Close()
 	}()
 
 	// Push playbook immediately if one is assigned.
