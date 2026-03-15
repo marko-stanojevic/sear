@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -24,10 +25,10 @@ func (m *Manager) StatusSnapshot() ([]*common.Client, []*common.DeploymentState)
 func (m *Manager) AssignPlaybookToClient(playbookID, clientID string) error {
 	client, ok := m.Store.GetClient(clientID)
 	if !ok {
-		return fmt.Errorf("client not found")
+		return fmt.Errorf("assign playbook to client: %w", ErrClientNotFound)
 	}
 	if _, ok := m.Store.GetPlaybook(playbookID); !ok {
-		return fmt.Errorf("playbook not found")
+		return fmt.Errorf("assign playbook to client: %w", ErrPlaybookNotFound)
 	}
 	client.PlaybookID = playbookID
 	if err := m.Store.SaveClient(client); err != nil {
@@ -132,5 +133,12 @@ func (m *Manager) ResolvePlaybookNameByDeployment(deploymentID string) string {
 	}
 	return pbName
 }
+
+var (
+	// ErrClientNotFound indicates that the requested client does not exist in the store.
+	ErrClientNotFound = errors.New("client not found")
+	// ErrPlaybookNotFound indicates that the requested playbook does not exist in the store.
+	ErrPlaybookNotFound = errors.New("playbook not found")
+)
 
 var _ ports.StorePort = (*store.Store)(nil)
