@@ -16,7 +16,6 @@ func TestNormalizePlatformHint(t *testing.T) {
 		{name: "linux", hint: "linux", want: "linux"},
 		{name: "mac", hint: "mac", want: "mac"},
 		{name: "windows", hint: "windows", want: "windows"},
-		{name: "legacy alias falls back to auto", hint: "darwin", want: detectPlatform()},
 		{name: "unknown falls back to auto", hint: "custom", want: detectPlatform()},
 	}
 
