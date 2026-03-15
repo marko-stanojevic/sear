@@ -186,9 +186,8 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
-		pbName := "playbook"
 		if e.Service != nil {
-			pbName = e.Service.ResolvePlaybookNameByDeployment(d.DeploymentID)
+			pbName := e.Service.ResolvePlaybookNameByDeployment(d.DeploymentID)
 			e.Service.AppendDeploymentLog(d.DeploymentID, "", 0, common.LogLevelInfo,
 				fmt.Sprintf("playbook %q completed successfully", pbName))
 		}
