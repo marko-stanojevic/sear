@@ -151,11 +151,4 @@ func (m *Manager) ResolvePlaybookNameByDeployment(deploymentID string) string {
 	return pbName
 }
 
-var (
-	// ErrClientNotFound indicates that the requested client does not exist in the store.
-	ErrClientNotFound = errors.New("client not found")
-	// ErrPlaybookNotFound indicates that the requested playbook does not exist in the store.
-	ErrPlaybookNotFound = errors.New("playbook not found")
-)
-
 var _ ports.StorePort = (*store.Store)(nil)
