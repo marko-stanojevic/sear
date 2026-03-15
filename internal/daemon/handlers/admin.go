@@ -199,11 +199,10 @@ func (e *Env) assignPlaybook(w http.ResponseWriter, r *http.Request, playbookID 
 		return
 	}
 	if err := e.Service.AssignPlaybookToClient(playbookID, body.ClientID); err != nil {
-		if errors.Is(err, service.ErrClientNotFound) || errors.Is(err, service.ErrPlaybookNotFound) {
 		switch {
 		case errors.Is(err, service.ErrClientNotFound), errors.Is(err, service.ErrPlaybookNotFound):
 			writeError(w, http.StatusNotFound, err.Error())
-		} else {
+		default:
 			writeError(w, http.StatusInternalServerError, err.Error())
 		}
 		return
