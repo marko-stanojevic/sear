@@ -26,7 +26,7 @@ Sear helps infrastructure teams roll out and manage repeatable deployments acros
 | For operators | For integration | For contributors |
 | --- | --- | --- |
 | [Download releases](https://github.com/marko-stanojevic/sear/releases) | [API endpoints](docs/api-endpoints.md) | [Contributing guide](CONTRIBUTING.md) |
-| [Quick start](#quick-start) | [Playbook model](#playbook-model) | [Project docs](#documentation) |
+| [Quick start](#quick-start) | [Playbook model](docs/playbook-model.md) | [Project docs](docs/documentation.md) |
 
 ## Why teams choose sear
 
