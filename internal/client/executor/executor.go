@@ -125,6 +125,10 @@ func runShell(ctx context.Context, step common.Step, secrets, stepEnv map[string
 
 	// Stream output to the logger.
 	go func() {
+		defer func() {
+			_ = pr.Close()
+		}()
+
 		buf := make([]byte, 4096)
 		var leftover string
 		for {
