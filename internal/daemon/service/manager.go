@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/marko-stanojevic/sear/internal/common"
 	"github.com/marko-stanojevic/sear/internal/daemon/ports"
-	"github.com/marko-stanojevic/sear/internal/daemon/store"
 )
 
 // Manager hosts daemon application-level orchestration logic.
@@ -149,5 +148,3 @@ var (
 	// ErrPlaybookNotFound indicates that the requested playbook does not exist in the store.
 	ErrPlaybookNotFound = errors.New("playbook not found")
 )
-
-var _ ports.StorePort = (*store.Store)(nil)
