@@ -25,7 +25,7 @@ Sear helps infrastructure teams roll out and manage repeatable deployments acros
 
 | For operators | For integration | For contributors |
 | --- | --- | --- |
-| [Download releases](https://github.com/marko-stanojevic/sear/releases) | [API endpoints](docs/api-endpoints.md) | [Contributing guide](CONTRIBUTING.MD) |
+| [Download releases](https://github.com/marko-stanojevic/sear/releases) | [API endpoints](docs/api-endpoints.md) | [Contributing guide](CONTRIBUTING.md) |
 | [Quick start](#quick-start) | [Playbook model](#playbook-model) | [Project docs](#documentation) |
 
 ## Why teams choose sear
@@ -138,7 +138,7 @@ Example playbook: `examples/playbook.yml`
 ## Documentation
 
 - API endpoints: [docs/api-endpoints.md](docs/api-endpoints.md)
-- Contributor and development guide: [CONTRIBUTING.MD](CONTRIBUTING.MD)
+- Contributor and development guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## API route conventions
 
