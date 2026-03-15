@@ -39,11 +39,11 @@ type Store struct {
 	artifacts   map[string]*common.Artifact
 	secrets     map[string]string // client secrets (name→value)
 
-	// logMusMu protects logMus; logMus holds a per-deployment mutex so that
+	// logMutexesMu protects logMutexes; logMutexes holds a per-deployment mutex so that
 	// concurrent log reads/writes for the same deployment are serialised without
 	// blocking unrelated deployments.
-	logMusMu sync.Mutex
-	logMus   map[string]*sync.Mutex
+	logMutexesMu sync.Mutex
+	logMutexes   map[string]*sync.Mutex
 }
 
 // snapshot is the structure serialised to state.json.
@@ -76,7 +76,7 @@ func New(dir string, logsDir string) (*Store, error) {
 		playbooks:   make(map[string]*PlaybookRecord),
 		artifacts:   make(map[string]*common.Artifact),
 		secrets:     make(map[string]string),
-		logMus:      make(map[string]*sync.Mutex),
+		logMutexes:  make(map[string]*sync.Mutex),
 	}
 	if err := s.load(); err != nil {
 		return nil, err
@@ -162,18 +162,18 @@ func normalizePlatform(platform common.PlatformType, osName string, metadata map
 }
 
 func platformFromOS(osName string, metadata map[string]string) common.PlatformType {
-	osv := strings.ToLower(strings.TrimSpace(osName))
-	if osv == "" && metadata != nil {
-		osv = strings.ToLower(strings.TrimSpace(metadata["os"]))
-		if osv == "" {
-			osv = strings.ToLower(strings.TrimSpace(metadata["type"]))
+	normalizedOS := strings.ToLower(strings.TrimSpace(osName))
+	if normalizedOS == "" && metadata != nil {
+		normalizedOS = strings.ToLower(strings.TrimSpace(metadata["os"]))
+		if normalizedOS == "" {
+			normalizedOS = strings.ToLower(strings.TrimSpace(metadata["type"]))
 		}
-		if osv == "" {
-			osv = strings.ToLower(strings.TrimSpace(metadata["os_type"]))
+		if normalizedOS == "" {
+			normalizedOS = strings.ToLower(strings.TrimSpace(metadata["os_type"]))
 		}
 	}
 
-	switch osv {
+	switch normalizedOS {
 	case "darwin":
 		return common.PlatformMac
 	case "windows":
@@ -531,15 +531,15 @@ func (s *Store) logPath(deploymentID string) string {
 	return filepath.Join(s.logsDir, deploymentID+".json")
 }
 
-// logMu returns (and lazily creates) the mutex for a specific deployment ID.
-func (s *Store) logMu(depID string) *sync.Mutex {
-	s.logMusMu.Lock()
-	defer s.logMusMu.Unlock()
-	if mu, ok := s.logMus[depID]; ok {
+// logMutex returns (and lazily creates) the mutex for a specific deployment ID.
+func (s *Store) logMutex(deploymentID string) *sync.Mutex {
+	s.logMutexesMu.Lock()
+	defer s.logMutexesMu.Unlock()
+	if mu, ok := s.logMutexes[deploymentID]; ok {
 		return mu
 	}
 	mu := &sync.Mutex{}
-	s.logMus[depID] = mu
+	s.logMutexes[deploymentID] = mu
 	return mu
 }
 
@@ -551,21 +551,21 @@ func (s *Store) AppendLogs(entries []*common.LogEntry) error {
 	for _, e := range entries {
 		byDep[e.DeploymentID] = append(byDep[e.DeploymentID], e)
 	}
-	for depID, batch := range byDep {
-		if err := s.appendDepLogs(depID, batch); err != nil {
+	for deploymentID, batch := range byDep {
+		if err := s.appendDeploymentLogs(deploymentID, batch); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Store) appendDepLogs(depID string, entries []*common.LogEntry) error {
-	mu := s.logMu(depID)
+func (s *Store) appendDeploymentLogs(deploymentID string, entries []*common.LogEntry) error {
+	mu := s.logMutex(deploymentID)
 	mu.Lock()
 	defer mu.Unlock()
 
-	path := s.logPath(depID)
-	existing := s.readDepLogsLocked(path)
+	path := s.logPath(deploymentID)
+	existing := s.readDeploymentLogsLocked(path)
 	existing = append(existing, entries...)
 	data, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
@@ -578,9 +578,9 @@ func (s *Store) appendDepLogs(depID string, entries []*common.LogEntry) error {
 	return os.Rename(tmp, path)
 }
 
-// readDepLogsLocked reads log entries from path. The caller must hold the
+// readDeploymentLogsLocked reads log entries from path. The caller must hold the
 // per-deployment log mutex.
-func (s *Store) readDepLogsLocked(path string) []*common.LogEntry {
+func (s *Store) readDeploymentLogsLocked(path string) []*common.LogEntry {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -592,28 +592,28 @@ func (s *Store) readDepLogsLocked(path string) []*common.LogEntry {
 
 // GetLogsForDeployment returns all log entries for a specific deployment.
 func (s *Store) GetLogsForDeployment(deploymentID string) []*common.LogEntry {
-	mu := s.logMu(deploymentID)
+	mu := s.logMutex(deploymentID)
 	mu.Lock()
 	defer mu.Unlock()
-	return s.readDepLogsLocked(s.logPath(deploymentID))
+	return s.readDeploymentLogsLocked(s.logPath(deploymentID))
 }
 
 // GetLogsForClient returns all log entries for every deployment of a client.
 func (s *Store) GetLogsForClient(clientID string) []*common.LogEntry {
 	s.mu.RLock()
-	depIDs := make([]string, 0)
+	deploymentIDs := make([]string, 0)
 	for _, d := range s.deployments {
 		if d.ClientID == clientID {
-			depIDs = append(depIDs, d.ID)
+			deploymentIDs = append(deploymentIDs, d.ID)
 		}
 	}
 	s.mu.RUnlock()
 
 	var out []*common.LogEntry
-	for _, id := range depIDs {
-		mu := s.logMu(id)
+	for _, deploymentID := range deploymentIDs {
+		mu := s.logMutex(deploymentID)
 		mu.Lock()
-		out = append(out, s.readDepLogsLocked(s.logPath(id))...)
+		out = append(out, s.readDeploymentLogsLocked(s.logPath(deploymentID))...)
 		mu.Unlock()
 	}
 	return out

@@ -5,8 +5,8 @@ import (
 	"github.com/marko-stanojevic/sear/internal/daemon/store"
 )
 
-// StorePort defines persistence capabilities used by handler/service layers.
-type StorePort interface {
+// Store defines persistence capabilities used by handler/service layers.
+type Store interface {
 	SaveClient(c *common.Client) error
 	GetClient(id string) (*common.Client, bool)
 	ListClients() []*common.Client
@@ -40,8 +40,8 @@ type StorePort interface {
 	GetLogsForClient(clientID string) []*common.LogEntry
 }
 
-// HubPort defines websocket coordination capabilities used by services.
-type HubPort interface {
+// Hub defines websocket coordination capabilities used by services.
+type Hub interface {
 	IsConnected(clientID string) bool
 	Send(clientID string, msg common.WSMessage) bool
 }

@@ -207,10 +207,10 @@ func wsEndpoint(serverURL, token string) string {
 
 // ── Playbook execution ────────────────────────────────────────────────────────
 
-func (c *Client) runPlaybook(ctx context.Context, writer *wsOutboundWriter, pd *common.WSPlaybookData) {
+func (c *Client) runPlaybook(ctx context.Context, writer *WSOutboundWriter, pd *common.WSPlaybookData) {
 	pb := pd.Playbook
-	depID := pd.DeploymentID
-	log.Printf("starting playbook %q (deployment %s, resume step %d)", pb.Name, depID, pd.ResumeStepIndex)
+	deploymentID := pd.DeploymentID
+	log.Printf("starting playbook %q (deployment %s, resume step %d)", pb.Name, deploymentID, pd.ResumeStepIndex)
 
 	flat := common.FlattenPlaybook(pb)
 
@@ -229,7 +229,7 @@ func (c *Client) runPlaybook(ctx context.Context, writer *wsOutboundWriter, pd *
 			Type:      common.WSMsgStepStart,
 			Timestamp: time.Now(),
 			Data: common.WSStepData{
-				DeploymentID: depID,
+				DeploymentID: deploymentID,
 				JobName:      fs.JobName,
 				StepName:     stepName,
 				StepIndex:    fs.GlobalIndex,
@@ -242,7 +242,7 @@ func (c *Client) runPlaybook(ctx context.Context, writer *wsOutboundWriter, pd *
 				Type:      common.WSMsgLog,
 				Timestamp: time.Now(),
 				Data: common.WSLogData{
-					DeploymentID: depID,
+					DeploymentID: deploymentID,
 					JobName:      fs.JobName,
 					StepIndex:    fs.GlobalIndex,
 					Level:        level,
@@ -261,7 +261,7 @@ func (c *Client) runPlaybook(ctx context.Context, writer *wsOutboundWriter, pd *
 				Type:      common.WSMsgReboot,
 				Timestamp: time.Now(),
 				Data: common.WSRebootData{
-					DeploymentID:    depID,
+					DeploymentID:    deploymentID,
 					ResumeStepIndex: resumeAt,
 					Reason:          result.RebootReason,
 				},
@@ -281,7 +281,7 @@ func (c *Client) runPlaybook(ctx context.Context, writer *wsOutboundWriter, pd *
 					Type:      common.WSMsgStepComplete,
 					Timestamp: time.Now(),
 					Data: common.WSStepData{
-						DeploymentID: depID,
+						DeploymentID: deploymentID,
 						JobName:      fs.JobName,
 						StepName:     stepName,
 						StepIndex:    fs.GlobalIndex,
@@ -295,7 +295,7 @@ func (c *Client) runPlaybook(ctx context.Context, writer *wsOutboundWriter, pd *
 				Type:      common.WSMsgDeployFailed,
 				Timestamp: time.Now(),
 				Data: common.WSStepData{
-					DeploymentID: depID,
+					DeploymentID: deploymentID,
 					JobName:      fs.JobName,
 					StepName:     stepName,
 					StepIndex:    fs.GlobalIndex,
@@ -310,7 +310,7 @@ func (c *Client) runPlaybook(ctx context.Context, writer *wsOutboundWriter, pd *
 			Type:      common.WSMsgStepComplete,
 			Timestamp: time.Now(),
 			Data: common.WSStepData{
-				DeploymentID: depID,
+				DeploymentID: deploymentID,
 				JobName:      fs.JobName,
 				StepName:     stepName,
 				StepIndex:    fs.GlobalIndex,
@@ -322,18 +322,18 @@ func (c *Client) runPlaybook(ctx context.Context, writer *wsOutboundWriter, pd *
 	writer.Send(common.WSMessage{
 		Type:      common.WSMsgDeployDone,
 		Timestamp: time.Now(),
-		Data:      common.WSStepData{DeploymentID: depID},
+		Data:      common.WSStepData{DeploymentID: deploymentID},
 	})
 }
 
-type wsOutboundWriter struct {
+type WSOutboundWriter struct {
 	ch   chan common.WSMessage
 	stop chan struct{}
 	done chan struct{}
 }
 
-func newWSOutboundWriter(ws *websocket.Conn) *wsOutboundWriter {
-	w := &wsOutboundWriter{
+func newWSOutboundWriter(ws *websocket.Conn) *WSOutboundWriter {
+	w := &WSOutboundWriter{
 		ch:   make(chan common.WSMessage, 256),
 		stop: make(chan struct{}),
 		done: make(chan struct{}),
@@ -366,7 +366,7 @@ func newWSOutboundWriter(ws *websocket.Conn) *wsOutboundWriter {
 	return w
 }
 
-func (w *wsOutboundWriter) Send(msg common.WSMessage) {
+func (w *WSOutboundWriter) Send(msg common.WSMessage) {
 	// Fast-path check: if the writer is already closed, don't block.
 	select {
 	case <-w.done:
@@ -383,7 +383,7 @@ func (w *wsOutboundWriter) Send(msg common.WSMessage) {
 	}
 }
 
-func (w *wsOutboundWriter) Stop() {
+func (w *WSOutboundWriter) Stop() {
 	close(w.stop)
 	<-w.done
 }

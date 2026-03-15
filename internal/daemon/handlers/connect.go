@@ -187,9 +187,9 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 			return
 		}
 		if e.Service != nil {
-			pbName := e.Service.ResolvePlaybookNameByDeployment(d.DeploymentID)
+			playbookName := e.Service.ResolvePlaybookNameByDeployment(d.DeploymentID)
 			e.Service.AppendDeploymentLog(d.DeploymentID, "", 0, common.LogLevelInfo,
-				fmt.Sprintf("playbook %q completed successfully", pbName))
+				fmt.Sprintf("playbook %q completed successfully", playbookName))
 		}
 		now := time.Now()
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -206,11 +206,11 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 		if json.Unmarshal(envelope.Data, &d) != nil {
 			return
 		}
-		pbName := "playbook"
+		playbookName := "playbook"
 		if e.Service != nil {
-			pbName = e.Service.ResolvePlaybookNameByDeployment(d.DeploymentID)
+			playbookName = e.Service.ResolvePlaybookNameByDeployment(d.DeploymentID)
 		}
-		msg := fmt.Sprintf("playbook %q failed", pbName)
+		msg := fmt.Sprintf("playbook %q failed", playbookName)
 		if d.Error != "" {
 			msg = fmt.Sprintf("%s: %s", msg, d.Error)
 		}
@@ -233,8 +233,8 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 	}
 }
 
-func (e *Env) updateDeploy(depID string, fn func(*common.DeploymentState)) {
-	dep, ok := e.Store.GetDeployment(depID)
+func (e *Env) updateDeploy(deploymentID string, fn func(*common.DeploymentState)) {
+	dep, ok := e.Store.GetDeployment(deploymentID)
 	if !ok {
 		return
 	}

@@ -21,8 +21,8 @@ var (
 
 // Manager hosts daemon application-level orchestration logic.
 type Manager struct {
-	Store     ports.StorePort
-	Hub       ports.HubPort
+	Store     ports.Store
+	Hub       ports.Hub
 	ServerURL string
 }
 
@@ -61,14 +61,14 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string) {
 		return
 	}
 
-	var depID string
+	var deploymentID string
 	resumeStep := 0
 
 	if hasDep &&
 		(dep.Status == common.DeploymentStatusPending ||
 			dep.Status == common.DeploymentStatusRunning ||
 			dep.Status == common.DeploymentStatusRebooting) {
-		depID = dep.ID
+		deploymentID = dep.ID
 		resumeStep = dep.ResumeStepIndex
 		dep.Status = common.DeploymentStatusRunning
 		dep.UpdatedAt = time.Now()
@@ -79,9 +79,9 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string) {
 	} else if !hasDep ||
 		dep.Status == common.DeploymentStatusDone ||
 		dep.Status == common.DeploymentStatusFailed {
-		depID = uuid.New().String()
+		deploymentID = uuid.New().String()
 		newDep := &common.DeploymentState{
-			ID:              depID,
+			ID:              deploymentID,
 			ClientID:        clientID,
 			PlaybookID:      client.PlaybookID,
 			Status:          common.DeploymentStatusRunning,
@@ -90,7 +90,7 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string) {
 			UpdatedAt:       time.Now(),
 		}
 		if err := m.Store.SaveDeployment(newDep); err != nil {
-			fmt.Printf("failed to save new deployment %s for client %s: %v\n", depID, clientID, err)
+			fmt.Printf("failed to save new deployment %s for client %s: %v\n", deploymentID, clientID, err)
 			return
 		}
 	} else {
@@ -103,18 +103,18 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string) {
 		return
 	}
 
-	pbName := pb.Name
+	playbookName := pb.Name
 	if pb.Playbook != nil && pb.Playbook.Name != "" {
-		pbName = pb.Playbook.Name
+		playbookName = pb.Playbook.Name
 	}
-	m.AppendDeploymentLog(depID, "", 0, common.LogLevelInfo,
-		fmt.Sprintf("starting playbook %q (deployment %s, resume step %d)", pbName, depID, resumeStep))
+	m.AppendDeploymentLog(deploymentID, "", 0, common.LogLevelInfo,
+		fmt.Sprintf("starting playbook %q (deployment %s, resume step %d)", playbookName, deploymentID, resumeStep))
 
 	m.Hub.Send(clientID, common.WSMessage{
 		Type:      common.WSMsgPlaybook,
 		Timestamp: time.Now(),
 		Data: common.WSPlaybookData{
-			DeploymentID:     depID,
+			DeploymentID:     deploymentID,
 			Playbook:         pb.Playbook,
 			ResumeStepIndex:  resumeStep,
 			Secrets:          m.Store.AllSecrets(),
@@ -138,17 +138,17 @@ func (m *Manager) AppendDeploymentLog(deploymentID, jobName string, stepIndex in
 }
 
 func (m *Manager) ResolvePlaybookNameByDeployment(deploymentID string) string {
-	pbName := "playbook"
+	playbookName := "playbook"
 	if dep, ok := m.Store.GetDeployment(deploymentID); ok {
 		if pb, ok := m.Store.GetPlaybook(dep.PlaybookID); ok {
 			if pb.Playbook != nil && pb.Playbook.Name != "" {
-				pbName = pb.Playbook.Name
+				playbookName = pb.Playbook.Name
 			} else if pb.Name != "" {
-				pbName = pb.Name
+				playbookName = pb.Name
 			}
 		}
 	}
-	return pbName
+	return playbookName
 }
 
-var _ ports.StorePort = (*store.Store)(nil)
+var _ ports.Store = (*store.Store)(nil)
