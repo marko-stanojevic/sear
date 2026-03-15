@@ -18,7 +18,7 @@ runs:
   using: composite
   steps:
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version-file: go.mod
         cache: true
@@ -36,10 +36,10 @@ runs:
         configFilePath: gitversion.yml
 
     - name: Run GoReleaser
-      uses: goreleaser/goreleaser-action@v6
+      uses: goreleaser/goreleaser-action@v7
       with:
         distribution: goreleaser
-        version: latest
+        version: v2.14.3
         args: release --clean --skip=validate --skip=publish
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}

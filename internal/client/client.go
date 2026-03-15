@@ -130,7 +130,7 @@ func (c *Client) connect(ctx context.Context) error {
 		}
 		return fmt.Errorf("dial: %w", err)
 	}
-	defer ws.Close()
+	defer func() { _ = ws.Close() }()
 	writer := newWSOutboundWriter(ws)
 	defer writer.Stop()
 
@@ -429,7 +429,7 @@ func (c *Client) post(ctx context.Context, path string, body, out any, token str
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("HTTP %d from %s", resp.StatusCode, path)
 	}

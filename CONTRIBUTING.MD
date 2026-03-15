@@ -8,8 +8,8 @@ This document is for contributors and maintainers. For user-facing setup and usa
 
 Prerequisites:
 
-- Go 1.21+
-- Optional: golangci-lint
+- Go 1.26+
+- Optional: golangci-lint 2.11.3+
 
 Bootstrap dependencies:
 
@@ -152,7 +152,7 @@ Release workflow:
 Local GoReleaser snapshot validation:
 
 ```bash
-go run github.com/goreleaser/goreleaser/v2@latest release --snapshot --clean --skip=validate --skip=publish
+go run github.com/goreleaser/goreleaser/v2@v2.14.3 release --snapshot --clean --skip=validate --skip=publish
 ```
 
 Release packaging matrix is defined in [.goreleaser.yml](.goreleaser.yml).

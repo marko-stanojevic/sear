@@ -63,7 +63,7 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "artifact file missing on server")
 			return
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		ct := a.ContentType
 		if ct == "" {
 			ct = "application/octet-stream"
@@ -95,7 +95,7 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		size, copyErr := io.Copy(f, r.Body)
-		f.Close()
+		_ = f.Close()
 		if copyErr != nil {
 			writeError(w, http.StatusInternalServerError, "failed to write artifact")
 			return
