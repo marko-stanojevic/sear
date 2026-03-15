@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/marko-stanojevic/sear/internal/common"
 	"github.com/marko-stanojevic/sear/internal/daemon/ports"
-	"github.com/marko-stanojevic/sear/internal/daemon/store"
 )
 
 // Sentinel errors returned by service operations.
@@ -151,4 +150,4 @@ func (m *Manager) ResolvePlaybookNameByDeployment(deploymentID string) string {
 	return playbookName
 }
 
-var _ ports.Store = (*store.Store)(nil)
+
