@@ -173,6 +173,33 @@ func TestResolveSecrets(t *testing.T) {
 	}
 }
 
+func TestResolveEnvSecrets(t *testing.T) {
+	input := map[string]string{
+		"PLAIN": "value",
+		"PASS":  "${{ secrets.DB_PASS }}",
+	}
+	secrets := map[string]string{"DB_PASS": "hunter2"}
+
+	resolved := common.ResolveEnvSecrets(input, secrets)
+	if resolved["PLAIN"] != "value" {
+		t.Fatalf("PLAIN = %q; want value", resolved["PLAIN"])
+	}
+	if resolved["PASS"] != "hunter2" {
+		t.Fatalf("PASS = %q; want hunter2", resolved["PASS"])
+	}
+
+	// Ensure a new map is returned when input is non-empty.
+	resolved["PASS"] = "changed"
+	if input["PASS"] != "${{ secrets.DB_PASS }}" {
+		t.Fatalf("input map should not be mutated, got %q", input["PASS"])
+	}
+
+	empty := common.ResolveEnvSecrets(nil, secrets)
+	if empty != nil {
+		t.Fatalf("nil input should return nil, got %#v", empty)
+	}
+}
+
 func TestLoadConfigMissing(t *testing.T) {
 	_, err := common.LoadDaemonConfig("/nonexistent/path/config.yml")
 	if err == nil {

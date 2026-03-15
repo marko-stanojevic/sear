@@ -17,22 +17,31 @@ import (
 	"github.com/marko-stanojevic/sear/internal/common"
 )
 
+var runClient = func(ctx context.Context, cfg *common.ClientConfig) error {
+	c := client.New(cfg)
+	return c.Run(ctx)
+}
+
 func main() {
 	configPath := flag.String("config", "client.config.yml", "path to client config file")
 	flag.Parse()
-
-	cfg, err := common.LoadClientConfig(*configPath)
-	if err != nil {
-		log.Fatalf("config: %v", err)
-	}
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
-	c := client.New(cfg)
-	if err := c.Run(ctx); err != nil && err != context.Canceled {
+	if err := runWithConfig(*configPath); err != nil {
 		log.Fatalf("client: %v", err)
 	}
 	log.Println("sear-client stopped")
 	os.Exit(0)
+}
+
+func runWithConfig(configPath string) error {
+	cfg, err := common.LoadClientConfig(configPath)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if err := runClient(ctx, cfg); err != nil && err != context.Canceled {
+		return err
+	}
+	return nil
 }

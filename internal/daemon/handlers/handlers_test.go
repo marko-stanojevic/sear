@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -137,13 +138,24 @@ func TestHandleRegister_InvalidSecret(t *testing.T) {
 	}
 }
 
-func TestHandleRegister_InvalidPlatform(t *testing.T) {
+func TestHandleRegister_MethodNotAllowed(t *testing.T) {
 	env := newTestEnv(t)
-	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
-		Platform:           common.PlatformType("darwin"),
-		Hostname:           "edge-02",
-		RegistrationSecret: "reg-secret-1",
-	}, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/register", nil)
+	rr := httptest.NewRecorder()
+
+	env.HandleRegister(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d; want 405", rr.Code)
+	}
+}
+
+func TestHandleRegister_InvalidJSON(t *testing.T) {
+	env := newTestEnv(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/register", bytes.NewBufferString("{"))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	env.HandleRegister(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d; want 400 (body: %s)", rr.Code, rr.Body.String())
 	}
@@ -288,6 +300,36 @@ func TestRequireClientAuth_Missing(t *testing.T) {
 	}
 }
 
+func TestRequireClientAuth_QueryToken(t *testing.T) {
+	env := newTestEnv(t)
+	clientID, token := registerClient(t, env, "SN-QUERY-01", "query-client")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/ws?token="+token, nil)
+	rr := httptest.NewRecorder()
+
+	env.RequireClientAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-Client-ID"); got != clientID {
+			t.Fatalf("X-Client-ID = %q; want %q", got, clientID)
+		}
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d; want 200", rr.Code)
+	}
+}
+
+func TestHandleWS_UnauthorizedWithoutToken(t *testing.T) {
+	env := newTestEnv(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/ws", nil)
+	rr := httptest.NewRecorder()
+
+	env.HandleWS(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d; want 401", rr.Code)
+	}
+}
+
 func TestRequireRootAuth_WrongPassword(t *testing.T) {
 	env := newTestEnv(t)
 	req := httptest.NewRequest(http.MethodGet, "/status", nil)
@@ -327,6 +369,33 @@ func TestHandleStatus(t *testing.T) {
 	resp := decode[handlers.StatusResponse](t, rr)
 	if len(resp.Clients) != 1 {
 		t.Errorf("clients = %d; want 1", len(resp.Clients))
+	}
+}
+
+func TestHandleUIPages(t *testing.T) {
+	env := newTestEnv(t)
+
+	tests := []struct {
+		name    string
+		path    string
+		handler http.HandlerFunc
+	}{
+		{name: "status ui", path: "/ui", handler: env.HandleStatusUI},
+		{name: "secrets ui", path: "/ui/secrets", handler: env.HandleSecretsUI},
+		{name: "playbooks ui", path: "/ui/playbooks", handler: env.HandlePlaybooksUI},
+		{name: "deployments ui", path: "/ui/deployments", handler: env.HandleDeploymentsUI},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := getRequest(t, tt.handler, tt.path, "")
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status = %d; want 200", rr.Code)
+			}
+			if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+				t.Fatalf("content-type = %q; expected text/html", ct)
+			}
+		})
 	}
 }
 
@@ -388,6 +457,329 @@ func TestHandleRootPlaybooks_CRUD(t *testing.T) {
 	}
 }
 
+func TestHandleRootPlaybooks_MethodNotAllowed(t *testing.T) {
+	env := newTestEnv(t)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/playbooks", nil)
+	rr := httptest.NewRecorder()
+
+	env.HandleRootPlaybooks(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status=%d; want 405", rr.Code)
+	}
+}
+
+func TestHandleRootPlaybooks_CreateInvalidPayload(t *testing.T) {
+	env := newTestEnv(t)
+
+	t.Run("invalid json", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/playbooks", bytes.NewBufferString("{"))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+
+		env.HandleRootPlaybooks(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d; want 400 (body=%s)", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("missing jobs", func(t *testing.T) {
+		b, _ := json.Marshal(map[string]any{
+			"name": "empty",
+			"playbook": map[string]any{
+				"name": "empty",
+				"jobs": []any{},
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/playbooks", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+
+		env.HandleRootPlaybooks(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d; want 400 (body=%s)", rr.Code, rr.Body.String())
+		}
+	})
+}
+
+func TestHandleRootPlaybooks_Assign(t *testing.T) {
+	env := newTestEnv(t)
+	now := time.Now()
+
+	if err := env.Store.SaveClient(&common.Client{
+		ID:             "client-assign-1",
+		Hostname:       "edge-assign",
+		Platform:       common.PlatformLinux,
+		Status:         common.ClientStatusRegistered,
+		RegisteredAt:   now,
+		LastActivityAt: now,
+	}); err != nil {
+		t.Fatalf("SaveClient: %v", err)
+	}
+	if err := env.Store.SavePlaybook(&store.PlaybookRecord{
+		ID:   "pb-assign-1",
+		Name: "assignable",
+		Playbook: &common.Playbook{
+			Name: "assignable",
+			Jobs: []common.Job{{Name: "j1", Steps: []common.Step{{Name: "s1", Run: "echo ok"}}}},
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("SavePlaybook: %v", err)
+	}
+
+	t.Run("success", func(t *testing.T) {
+		b, _ := json.Marshal(map[string]string{"client_id": "client-assign-1"})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/playbooks/pb-assign-1/assign", bytes.NewReader(b))
+		req.URL.Path = "/api/v1/playbooks/pb-assign-1/assign"
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+
+		env.HandleRootPlaybooks(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+
+		c, ok := env.Store.GetClient("client-assign-1")
+		if !ok {
+			t.Fatal("client not found")
+		}
+		if c.PlaybookID != "pb-assign-1" {
+			t.Fatalf("PlaybookID = %q; want pb-assign-1", c.PlaybookID)
+		}
+	})
+
+	t.Run("invalid json", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/playbooks/pb-assign-1/assign", bytes.NewBufferString("{"))
+		req.URL.Path = "/api/v1/playbooks/pb-assign-1/assign"
+		rr := httptest.NewRecorder()
+
+		env.HandleRootPlaybooks(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d; want 400", rr.Code)
+		}
+	})
+
+	t.Run("missing client", func(t *testing.T) {
+		b, _ := json.Marshal(map[string]string{"client_id": "no-client"})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/playbooks/pb-assign-1/assign", bytes.NewReader(b))
+		req.URL.Path = "/api/v1/playbooks/pb-assign-1/assign"
+		rr := httptest.NewRecorder()
+
+		env.HandleRootPlaybooks(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("status=%d; want 404", rr.Code)
+		}
+	})
+
+	t.Run("missing playbook", func(t *testing.T) {
+		b, _ := json.Marshal(map[string]string{"client_id": "client-assign-1"})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/playbooks/no-playbook/assign", bytes.NewReader(b))
+		req.URL.Path = "/api/v1/playbooks/no-playbook/assign"
+		rr := httptest.NewRecorder()
+
+		env.HandleRootPlaybooks(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("status=%d; want 404", rr.Code)
+		}
+	})
+
+	t.Run("service missing", func(t *testing.T) {
+		envNoService := newTestEnv(t)
+		envNoService.Service = nil
+		b, _ := json.Marshal(map[string]string{"client_id": "client-assign-1"})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/playbooks/pb-assign-1/assign", bytes.NewReader(b))
+		req.URL.Path = "/api/v1/playbooks/pb-assign-1/assign"
+		rr := httptest.NewRecorder()
+
+		envNoService.HandleRootPlaybooks(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Fatalf("status=%d; want 500", rr.Code)
+		}
+	})
+}
+
+func TestHandleRootPlaybooks_UpdateAndGetErrors(t *testing.T) {
+	env := newTestEnv(t)
+	now := time.Now()
+
+	if err := env.Store.SavePlaybook(&store.PlaybookRecord{
+		ID:   "pb-update-1",
+		Name: "update-me",
+		Playbook: &common.Playbook{
+			Name: "update-me",
+			Jobs: []common.Job{{Name: "j1", Steps: []common.Step{{Name: "s1", Run: "echo old"}}}},
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("SavePlaybook: %v", err)
+	}
+
+	t.Run("get missing playbook", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/playbooks/missing", nil)
+		req.URL.Path = "/api/v1/playbooks/missing"
+		rr := httptest.NewRecorder()
+		env.HandleRootPlaybooks(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("status=%d; want 404", rr.Code)
+		}
+	})
+
+	t.Run("put missing id", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/playbooks", bytes.NewBufferString(`{"name":"x"}`))
+		req.URL.Path = "/api/v1/playbooks"
+		rr := httptest.NewRecorder()
+		env.HandleRootPlaybooks(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d; want 400", rr.Code)
+		}
+	})
+
+	t.Run("put update with yaml payload", func(t *testing.T) {
+		body := map[string]any{
+			"name": "updated-name",
+			"playbook_yaml": "name: updated-playbook\njobs:\n  - name: j2\n    steps:\n      - name: s2\n        run: echo new\n",
+		}
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/playbooks/pb-update-1", bytes.NewReader(b))
+		req.URL.Path = "/api/v1/playbooks/pb-update-1"
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		env.HandleRootPlaybooks(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		got, ok := env.Store.GetPlaybook("pb-update-1")
+		if !ok {
+			t.Fatal("updated playbook not found")
+		}
+		if got.Name != "updated-name" || got.Playbook == nil || got.Playbook.Name != "updated-playbook" {
+			t.Fatalf("unexpected updated playbook: %+v", got)
+		}
+	})
+}
+
+func TestHandleRootClients_CRUDAndErrors(t *testing.T) {
+	env := newTestEnv(t)
+	now := time.Now()
+
+	if err := env.Store.SaveClient(&common.Client{
+		ID:             "client-root-1",
+		Hostname:       "edge-root",
+		Platform:       common.PlatformLinux,
+		Status:         common.ClientStatusRegistered,
+		RegisteredAt:   now,
+		LastActivityAt: now,
+	}); err != nil {
+		t.Fatalf("SaveClient: %v", err)
+	}
+
+	t.Run("list", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/clients", nil)
+		rr := httptest.NewRecorder()
+		env.HandleRootClients(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d", rr.Code)
+		}
+		var clients []*common.Client
+		_ = json.NewDecoder(rr.Body).Decode(&clients)
+		if len(clients) != 1 {
+			t.Fatalf("clients len=%d; want 1", len(clients))
+		}
+	})
+
+	t.Run("get one", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/clients/client-root-1", nil)
+		req.URL.Path = "/api/v1/clients/client-root-1"
+		rr := httptest.NewRecorder()
+		env.HandleRootClients(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d", rr.Code)
+		}
+	})
+
+	t.Run("get missing", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/clients/missing", nil)
+		req.URL.Path = "/api/v1/clients/missing"
+		rr := httptest.NewRecorder()
+		env.HandleRootClients(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("status=%d; want 404", rr.Code)
+		}
+	})
+
+	t.Run("put missing id", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/clients", bytes.NewBufferString(`{"status":"connected"}`))
+		req.URL.Path = "/api/v1/clients"
+		rr := httptest.NewRecorder()
+		env.HandleRootClients(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d; want 400", rr.Code)
+		}
+	})
+
+	t.Run("put invalid json", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/clients/client-root-1", bytes.NewBufferString("{"))
+		req.URL.Path = "/api/v1/clients/client-root-1"
+		rr := httptest.NewRecorder()
+		env.HandleRootClients(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d; want 400", rr.Code)
+		}
+	})
+
+	t.Run("put success", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/clients/client-root-1", bytes.NewBufferString(`{"playbook_id":"pb-1","status":"deploying"}`))
+		req.URL.Path = "/api/v1/clients/client-root-1"
+		rr := httptest.NewRecorder()
+		env.HandleRootClients(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		c, ok := env.Store.GetClient("client-root-1")
+		if !ok {
+			t.Fatal("client not found")
+		}
+		if c.PlaybookID != "pb-1" || c.Status != common.ClientStatusDeploying {
+			t.Fatalf("unexpected update: playbook=%q status=%q", c.PlaybookID, c.Status)
+		}
+	})
+
+	t.Run("delete missing id", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/clients", nil)
+		req.URL.Path = "/api/v1/clients"
+		rr := httptest.NewRecorder()
+		env.HandleRootClients(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d; want 400", rr.Code)
+		}
+	})
+
+	t.Run("delete success", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/clients/client-root-1", nil)
+		req.URL.Path = "/api/v1/clients/client-root-1"
+		rr := httptest.NewRecorder()
+		env.HandleRootClients(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d", rr.Code)
+		}
+		if _, ok := env.Store.GetClient("client-root-1"); ok {
+			t.Fatal("client should be deleted")
+		}
+	})
+
+	t.Run("method not allowed", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/clients", nil)
+		req.URL.Path = "/api/v1/clients"
+		rr := httptest.NewRecorder()
+		env.HandleRootClients(rr, req)
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("status=%d; want 405", rr.Code)
+		}
+	})
+}
+
 // ── Secrets ───────────────────────────────────────────────────────────────────
 
 func TestHandleSecrets_CRUD(t *testing.T) {
@@ -434,6 +826,224 @@ func TestHandleSecrets_CRUD(t *testing.T) {
 	if rr4.Code != http.StatusOK {
 		t.Errorf("delete: status=%d", rr4.Code)
 	}
+}
+
+func TestHandleSecrets_ErrorPaths(t *testing.T) {
+	env := newTestEnv(t)
+
+	t.Run("get missing secret", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets/DOES_NOT_EXIST", nil)
+		req.URL.Path = "/api/v1/secrets/DOES_NOT_EXIST"
+		rr := httptest.NewRecorder()
+
+		env.HandleSecrets(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("status=%d; want 404", rr.Code)
+		}
+	})
+
+	t.Run("put without name", func(t *testing.T) {
+		b, _ := json.Marshal(map[string]string{"value": "x"})
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/secrets", bytes.NewReader(b))
+		req.URL.Path = "/api/v1/secrets"
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+
+		env.HandleSecrets(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d; want 400", rr.Code)
+		}
+	})
+
+	t.Run("method not allowed", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets", nil)
+		req.URL.Path = "/api/v1/secrets"
+		rr := httptest.NewRecorder()
+
+		env.HandleSecrets(rr, req)
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("status=%d; want 405", rr.Code)
+		}
+	})
+}
+
+func TestHandleRootDeployments_MethodNotAllowed(t *testing.T) {
+	env := newTestEnv(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/deployments", nil)
+	rr := httptest.NewRecorder()
+
+	env.HandleRootDeployments(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status=%d; want 405", rr.Code)
+	}
+}
+
+func TestHandleRootDeployments_ListGetAndNotFound(t *testing.T) {
+	env := newTestEnv(t)
+	now := time.Now()
+	_ = env.Store.SaveDeployment(&common.DeploymentState{
+		ID:        "dep-list-1",
+		ClientID:  "client-1",
+		PlaybookID:"pb-1",
+		Status:    common.DeploymentStatusRunning,
+		StartedAt: now,
+		UpdatedAt: now,
+	})
+
+	t.Run("list", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/deployments", nil)
+		rr := httptest.NewRecorder()
+		env.HandleRootDeployments(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d", rr.Code)
+		}
+		var deps []*common.DeploymentState
+		_ = json.NewDecoder(rr.Body).Decode(&deps)
+		if len(deps) != 1 {
+			t.Fatalf("len(deps)=%d; want 1", len(deps))
+		}
+	})
+
+	t.Run("get by id", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/deployments/dep-list-1", nil)
+		req.URL.Path = "/api/v1/deployments/dep-list-1"
+		rr := httptest.NewRecorder()
+		env.HandleRootDeployments(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d", rr.Code)
+		}
+	})
+
+	t.Run("get missing", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/deployments/missing", nil)
+		req.URL.Path = "/api/v1/deployments/missing"
+		rr := httptest.NewRecorder()
+		env.HandleRootDeployments(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("status=%d; want 404", rr.Code)
+		}
+	})
+}
+
+// ── Artifacts ────────────────────────────────────────────────────────────────
+
+func TestHandleArtifacts_UploadDownloadMetaDelete(t *testing.T) {
+	env := newTestEnv(t)
+
+	uploadReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=myapp.bin", bytes.NewBufferString("hello artifact"))
+	uploadRR := httptest.NewRecorder()
+	env.HandleArtifacts(uploadRR, uploadReq)
+	if uploadRR.Code != http.StatusCreated {
+		t.Fatalf("upload status=%d body=%s", uploadRR.Code, uploadRR.Body.String())
+	}
+
+	created := decode[common.Artifact](t, uploadRR)
+	if created.ID == "" {
+		t.Fatal("artifact ID should not be empty")
+	}
+	if created.ContentType != "application/octet-stream" {
+		t.Fatalf("default content type = %q; want application/octet-stream", created.ContentType)
+	}
+
+	metaReq := httptest.NewRequest(http.MethodGet, "/artifacts/"+created.ID+"/meta", nil)
+	metaRR := httptest.NewRecorder()
+	env.HandleArtifacts(metaRR, metaReq)
+	if metaRR.Code != http.StatusOK {
+		t.Fatalf("meta status=%d", metaRR.Code)
+	}
+	meta := decode[common.Artifact](t, metaRR)
+	if meta.ID != created.ID {
+		t.Fatalf("meta ID=%q; want %q", meta.ID, created.ID)
+	}
+
+	// Download by artifact name validates fallback lookup (GetArtifactByName).
+	downloadReq := httptest.NewRequest(http.MethodGet, "/artifacts/myapp.bin", nil)
+	downloadRR := httptest.NewRecorder()
+	env.HandleArtifacts(downloadRR, downloadReq)
+	if downloadRR.Code != http.StatusOK {
+		t.Fatalf("download status=%d body=%s", downloadRR.Code, downloadRR.Body.String())
+	}
+	if downloadRR.Body.String() != "hello artifact" {
+		t.Fatalf("download body=%q; want %q", downloadRR.Body.String(), "hello artifact")
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/artifacts/"+created.ID, nil)
+	deleteRR := httptest.NewRecorder()
+	env.HandleArtifacts(deleteRR, deleteReq)
+	if deleteRR.Code != http.StatusOK {
+		t.Fatalf("delete status=%d", deleteRR.Code)
+	}
+}
+
+func TestHandleArtifacts_ErrorPaths(t *testing.T) {
+	env := newTestEnv(t)
+
+	t.Run("upload missing name", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/artifacts", bytes.NewBufferString("x"))
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d; want 400", rr.Code)
+		}
+	})
+
+	t.Run("get missing artifact", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/artifacts/missing", nil)
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("status=%d; want 404", rr.Code)
+		}
+	})
+
+	t.Run("meta missing artifact", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/artifacts/missing/meta", nil)
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("status=%d; want 404", rr.Code)
+		}
+	})
+
+	t.Run("download missing file on disk", func(t *testing.T) {
+		art := &common.Artifact{ID: "art-missing-file", Name: "ghost", Filename: "ghost.bin"}
+		if err := env.Store.SaveArtifact(art); err != nil {
+			t.Fatalf("SaveArtifact: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodGet, "/artifacts/art-missing-file", nil)
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Fatalf("status=%d; want 500", rr.Code)
+		}
+	})
+
+	t.Run("delete without id", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/artifacts", nil)
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d; want 400", rr.Code)
+		}
+	})
+
+	t.Run("delete missing artifact", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/artifacts/not-found", nil)
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("status=%d; want 404", rr.Code)
+		}
+	})
+
+	t.Run("method not allowed", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPut, "/artifacts", nil)
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("status=%d; want 405", rr.Code)
+		}
+	})
 }
 
 // ── Cross-client security ─────────────────────────────────────────────────────

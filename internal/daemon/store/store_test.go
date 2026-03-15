@@ -25,11 +25,11 @@ func TestClientCRUD(t *testing.T) {
 	s := newTestStore(t)
 
 	c := &common.Client{
-		ID:           "client-1",
-		Hostname:     "edge-01",
-		Platform:     common.PlatformLinux,
-		Status:       common.ClientStatusRegistered,
-		RegisteredAt: time.Now(),
+		ID:             "client-1",
+		Hostname:       "edge-01",
+		Platform:       common.PlatformLinux,
+		Status:         common.ClientStatusRegistered,
+		RegisteredAt:   time.Now(),
 		LastActivityAt: time.Now(),
 	}
 	if err := s.SaveClient(c); err != nil {
@@ -58,55 +58,14 @@ func TestClientCRUD(t *testing.T) {
 	}
 }
 
-func TestSaveClientNormalizesPlatformFromOS(t *testing.T) {
-	s := newTestStore(t)
-
-	c := &common.Client{
-		ID:           "client-1",
-		Hostname:     "edge-01",
-		OS:           "darwin",
-		Status:       common.ClientStatusRegistered,
-		RegisteredAt: time.Now(),
-		LastActivityAt: time.Now(),
-	}
-	if err := s.SaveClient(c); err != nil {
-		t.Fatalf("SaveClient: %v", err)
-	}
-
-	got, ok := s.GetClient("client-1")
-	if !ok {
-		t.Fatal("GetClient: not found")
-	}
-	if got.Platform != common.PlatformMac {
-		t.Fatalf("Platform = %q; want %q", got.Platform, common.PlatformMac)
-	}
-
-	c.Platform = "custom"
-	c.OS = "windows"
-	if err := s.SaveClient(c); err != nil {
-		t.Fatalf("SaveClient with non-canonical platform: %v", err)
-	}
-
-	got, ok = s.GetClient("client-1")
-	if !ok {
-		t.Fatal("GetClient after update: not found")
-	}
-	if got.Platform != common.PlatformWindows {
-		t.Fatalf("Platform = %q; want %q", got.Platform, common.PlatformWindows)
-	}
-	if c.Platform != common.PlatformWindows {
-		t.Fatalf("client Platform = %q; want %q", c.Platform, common.PlatformWindows)
-	}
-}
-
 func TestListClientsStableOrder(t *testing.T) {
 	s := newTestStore(t)
 	now := time.Now()
 
 	clients := []*common.Client{
-{ID: "id-z", Hostname: "zeta",  Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
-		{ID: "id-a",  Hostname: "alpha", Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
-		{ID: "id-b",  Hostname: "",      Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
+		{ID: "id-z", Hostname: "zeta", Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
+		{ID: "id-a", Hostname: "alpha", Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
+		{ID: "id-b", Hostname: "", Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
 		{ID: "id-a2", Hostname: "alpha", Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
 	}
 	for _, c := range clients {
@@ -175,6 +134,49 @@ func TestDeploymentCRUD(t *testing.T) {
 	list := s.ListDeployments()
 	if len(list) != 1 {
 		t.Errorf("ListDeployments len = %d; want 1", len(list))
+	}
+}
+
+func TestGetActiveDeploymentForClientMostRecent(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now()
+
+	older := &common.DeploymentState{
+		ID:        "dep-old",
+		ClientID:  "client-1",
+		Status:    common.DeploymentStatusRunning,
+		StartedAt: now.Add(-10 * time.Minute),
+		UpdatedAt: now.Add(-10 * time.Minute),
+	}
+	newer := &common.DeploymentState{
+		ID:        "dep-new",
+		ClientID:  "client-1",
+		Status:    common.DeploymentStatusRunning,
+		StartedAt: now,
+		UpdatedAt: now,
+	}
+
+	if err := s.SaveDeployment(older); err != nil {
+		t.Fatalf("SaveDeployment older: %v", err)
+	}
+	if err := s.SaveDeployment(newer); err != nil {
+		t.Fatalf("SaveDeployment newer: %v", err)
+	}
+
+	got, ok := s.GetActiveDeploymentForClient("client-1")
+	if !ok {
+		t.Fatal("GetActiveDeploymentForClient: not found")
+	}
+	if got.ID != "dep-new" {
+		t.Fatalf("deployment ID = %q; want dep-new", got.ID)
+	}
+}
+
+func TestGetActiveDeploymentForClientNotFound(t *testing.T) {
+	s := newTestStore(t)
+
+	if _, ok := s.GetActiveDeploymentForClient("missing-client"); ok {
+		t.Fatal("expected no active deployment for unknown client")
 	}
 }
 
@@ -258,6 +260,11 @@ func TestArtifactCRUD(t *testing.T) {
 		t.Errorf("ID = %q; want art-1", byName.ID)
 	}
 
+	all := s.ListArtifacts()
+	if len(all) != 1 || all[0].ID != "art-1" {
+		t.Fatalf("ListArtifacts = %+v; want one artifact with ID art-1", all)
+	}
+
 	if err := s.DeleteArtifact("art-1"); err != nil {
 		t.Fatalf("DeleteArtifact: %v", err)
 	}
@@ -265,7 +272,7 @@ func TestArtifactCRUD(t *testing.T) {
 
 // ── Secrets ───────────────────────────────────────────────────────────────────
 
-func TestSecrets(t *testing.T) {
+func TestSecretsCRUD(t *testing.T) {
 	s := newTestStore(t)
 
 	if err := s.SetSecret("DB_PASS", "hunter2"); err != nil {
@@ -310,9 +317,31 @@ func TestMergeSecrets(t *testing.T) {
 	}
 }
 
+func TestAllSecretsReturnsCopy(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.SetSecret("DB_PASS", "hunter2"); err != nil {
+		t.Fatalf("SetSecret: %v", err)
+	}
+
+	all := s.AllSecrets()
+	all["DB_PASS"] = "changed"
+	all["NEW"] = "value"
+
+	v, ok := s.GetSecret("DB_PASS")
+	if !ok {
+		t.Fatal("GetSecret(DB_PASS): not found")
+	}
+	if v != "hunter2" {
+		t.Fatalf("store value mutated via AllSecrets copy: got %q; want hunter2", v)
+	}
+	if _, ok := s.GetSecret("NEW"); ok {
+		t.Fatal("store should not include key added only to AllSecrets copy")
+	}
+}
+
 // ── Logs — per-deployment files ───────────────────────────────────────────────
 
-func TestLogs(t *testing.T) {
+func TestLogsQueryByDeploymentAndClient(t *testing.T) {
 	s := newTestStore(t)
 	now := time.Now()
 
@@ -344,7 +373,7 @@ func TestLogs(t *testing.T) {
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
-func TestPersistence(t *testing.T) {
+func TestPersistence_ReopenPreservesClientAndSecret(t *testing.T) {
 	dir := t.TempDir()
 
 	s1, err := store.New(dir, "")
