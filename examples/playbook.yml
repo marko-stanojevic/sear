@@ -9,7 +9,7 @@ env:
   DEPLOY_ENV:  "production"
 
 jobs:
-  # ── Phase 1: OS preparation ────────────────────────────────────────────────
+  # -- Phase 1: OS preparation --
   - name: "os-prep"
     steps:
       - name: "Install dependencies"
@@ -30,7 +30,7 @@ jobs:
         with:
           reason: "Apply sysctl and kernel parameters"
 
-  # ── Phase 2: Application install (resumes here after reboot) ──────────────
+  # -- Phase 2: Application install (resumes here after reboot) --
   - name: "app-install"
     steps:
       - name: "Download application binary"
@@ -39,31 +39,9 @@ jobs:
           artifact: "myapp-v3.1.0"
           path: /opt/myapp
 
-      - name: "Install and configure app"
-        shell: bash
-        # Secrets are available as env vars AND via ${{ secrets.NAME }} syntax.
-        env:
-          DB_PASSWORD: "${{ secrets.DB_PASSWORD }}"
-          API_KEY:     "${{ secrets.API_KEY }}"
-        run: |
-          chmod +x /opt/myapp/myapp-v3.1.0
-          ln -sf /opt/myapp/myapp-v3.1.0 /usr/local/bin/myapp
-          cat > /etc/myapp/config.env <<EOF
-          DB_HOST=postgres.internal
-          DB_PASSWORD=${DB_PASSWORD}
-          API_KEY=${API_KEY}
-          DEPLOY_ENV=${DEPLOY_ENV}
-          EOF
-          systemctl enable --now myapp
-
-      - name: "Configure nginx reverse proxy"
-        shell: bash
-        continue-on-error: false
-        run: |
-          cp /opt/myapp/nginx.conf /etc/nginx/sites-available/myapp
-          ln -sf /etc/nginx/sites-available/myapp /etc/nginx/sites-enabled/myapp
-          nginx -t
-          systemctl reload nginx
+# Secrets can be injected into steps using ${{ secrets.NAME }} syntax.
+# Artifacts are distributed automatically during workflow execution.
+# The client resumes from the last confirmed step after reboot or crash.
 
   # ── Phase 3: Verification ─────────────────────────────────────────────────
   - name: "verify"
