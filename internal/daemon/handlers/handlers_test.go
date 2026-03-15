@@ -10,6 +10,7 @@ import (
 
 	"github.com/marko-stanojevic/sear/internal/common"
 	"github.com/marko-stanojevic/sear/internal/daemon/handlers"
+	"github.com/marko-stanojevic/sear/internal/daemon/service"
 	"github.com/marko-stanojevic/sear/internal/daemon/store"
 )
 
@@ -21,6 +22,7 @@ func newTestEnv(t *testing.T) *handlers.Env {
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
+	hub := handlers.NewHub()
 	return &handlers.Env{
 		Store:            st,
 		JWTSecret:        []byte("test-secret-key-32-bytes-padding!"),
@@ -28,7 +30,8 @@ func newTestEnv(t *testing.T) *handlers.Env {
 		TokenExpiryHours: 24,
 		ArtifactsDir:     t.TempDir(),
 		ServerURL:        "http://localhost:8080",
-		Hub:              handlers.NewHub(),
+		Hub:              hub,
+		Service:          &service.Manager{Store: st, Hub: hub, ServerURL: "http://localhost:8080"},
 		RegistrationSecrets: map[string]string{
 			"prod": "reg-secret-1",
 		},

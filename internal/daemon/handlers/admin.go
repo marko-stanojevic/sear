@@ -192,23 +192,18 @@ func (e *Env) assignPlaybook(w http.ResponseWriter, r *http.Request, playbookID 
 		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
-	client, ok := e.Store.GetClient(body.ClientID)
-	if !ok {
-		writeError(w, http.StatusNotFound, "client not found")
+	if e.Service == nil {
+		writeError(w, http.StatusInternalServerError, "service not configured")
 		return
 	}
-	if _, ok := e.Store.GetPlaybook(playbookID); !ok {
-		writeError(w, http.StatusNotFound, "playbook not found")
+	if err := e.Service.AssignPlaybookToClient(playbookID, body.ClientID); err != nil {
+		switch err.Error() {
+		case "client not found", "playbook not found":
+			writeError(w, http.StatusNotFound, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, err.Error())
+		}
 		return
-	}
-	client.PlaybookID = playbookID
-	if err := e.Store.SaveClient(client); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to save client")
-		return
-	}
-	// If the client is connected via WebSocket, push the playbook now.
-	if e.Hub.IsConnected(body.ClientID) {
-		e.pushPlaybookIfAssigned(body.ClientID)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "assigned"})
 }
