@@ -15,7 +15,7 @@ import (
 
 // Env bundles the dependencies shared by all handlers.
 type Env struct {
-	Store               ports.StorePort
+	Store               ports.Store
 	JWTSecret           []byte
 	RootPassword        string
 	TokenExpiryHours    int
@@ -31,11 +31,11 @@ type Env struct {
 // Hub manages all active WebSocket connections.
 type Hub struct {
 	mu    sync.RWMutex
-	conns map[string]*wsConn // clientID → connection
+	conns map[string]*WSConn // clientID → connection
 }
 
-// wsConn wraps a single client WebSocket connection with an outbound queue.
-type wsConn struct {
+// WSConn wraps a single client WebSocket connection with an outbound queue.
+type WSConn struct {
 	clientID string
 	ws       *websocket.Conn
 	send     chan []byte
@@ -44,11 +44,11 @@ type wsConn struct {
 
 // NewHub creates an empty Hub.
 func NewHub() *Hub {
-	return &Hub{conns: make(map[string]*wsConn)}
+	return &Hub{conns: make(map[string]*WSConn)}
 }
 
 // register adds (or replaces) the connection for a client.
-func (h *Hub) register(conn *wsConn) {
+func (h *Hub) register(conn *WSConn) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if old, ok := h.conns[conn.clientID]; ok {
@@ -93,9 +93,9 @@ func (h *Hub) Send(clientID string, msg common.WSMessage) bool {
 	}
 }
 
-// newWSConn creates a wsConn and starts its write pump goroutine.
-func newWSConn(clientID string, ws *websocket.Conn) *wsConn {
-	c := &wsConn{
+// newWSConn creates a WSConn and starts its write pump goroutine.
+func newWSConn(clientID string, ws *websocket.Conn) *WSConn {
+	c := &WSConn{
 		clientID: clientID,
 		ws:       ws,
 		send:     make(chan []byte, 64),
@@ -105,7 +105,7 @@ func newWSConn(clientID string, ws *websocket.Conn) *wsConn {
 	return c
 }
 
-func (c *wsConn) writePump() {
+func (c *WSConn) writePump() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {

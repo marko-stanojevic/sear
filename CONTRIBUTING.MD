@@ -160,5 +160,5 @@ Release packaging matrix is defined in [.goreleaser.yml](.goreleaser.yml).
 ## Documentation expectations
 
 - Keep README focused on operators and users of the tool.
-- Put contributor and maintenance guidance in CONTRIBUTING.MD.
+- Put contributor and maintenance guidance in CONTRIBUTING.md.
 - Update examples when changing config schema or workflow behavior.

@@ -57,7 +57,7 @@ func (e *Env) HandleRootPlaybooks(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "playbook not found")
 			return
 		}
-		pbYAML, err := yaml.Marshal(pb.Playbook)
+		playbookYAML, err := yaml.Marshal(pb.Playbook)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to render playbook YAML")
 			return
@@ -67,7 +67,7 @@ func (e *Env) HandleRootPlaybooks(w http.ResponseWriter, r *http.Request) {
 			"name":          pb.Name,
 			"description":   pb.Description,
 			"playbook":      pb.Playbook,
-			"playbook_yaml": string(pbYAML),
+			"playbook_yaml": string(playbookYAML),
 			"created_at":    pb.CreatedAt,
 			"updated_at":    pb.UpdatedAt,
 		})
@@ -170,11 +170,11 @@ func decodePlaybookWritePayload(r *http.Request) (store.PlaybookRecord, error) {
 	}
 
 	if strings.TrimSpace(in.PlaybookYAML) != "" {
-		var pb common.Playbook
-		if err := yaml.Unmarshal([]byte(in.PlaybookYAML), &pb); err != nil {
+		var playbook common.Playbook
+		if err := yaml.Unmarshal([]byte(in.PlaybookYAML), &playbook); err != nil {
 			return store.PlaybookRecord{}, fmt.Errorf("invalid YAML in playbook_yaml: %w", err)
 		}
-		out.Playbook = &pb
+		out.Playbook = &playbook
 	}
 
 	if out.Name == "" && out.Playbook != nil {
@@ -200,6 +200,8 @@ func (e *Env) assignPlaybook(w http.ResponseWriter, r *http.Request, playbookID 
 	}
 	if err := e.Service.AssignPlaybookToClient(playbookID, body.ClientID); err != nil {
 		if errors.Is(err, service.ErrClientNotFound) || errors.Is(err, service.ErrPlaybookNotFound) {
+		switch {
+		case errors.Is(err, service.ErrClientNotFound), errors.Is(err, service.ErrPlaybookNotFound):
 			writeError(w, http.StatusNotFound, err.Error())
 		} else {
 			writeError(w, http.StatusInternalServerError, err.Error())
