@@ -209,7 +209,8 @@ func (s *Store) SaveClient(c *common.Client) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c.Platform = normalizePlatform(c.Platform, c.OS, c.Metadata)
-	s.clients[c.ID] = c
+	cc := cloneClient(c)
+	s.clients[cc.ID] = cc
 	return s.save()
 }
 
@@ -217,7 +218,10 @@ func (s *Store) GetClient(id string) (*common.Client, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	c, ok := s.clients[id]
-	return c, ok
+	if !ok {
+		return nil, false
+	}
+	return cloneClient(c), true
 }
 
 func (s *Store) ListClients() []*common.Client {
@@ -225,7 +229,7 @@ func (s *Store) ListClients() []*common.Client {
 	defer s.mu.RUnlock()
 	out := make([]*common.Client, 0, len(s.clients))
 	for _, c := range s.clients {
-		out = append(out, c)
+		out = append(out, cloneClient(c))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		hi := strings.ToLower(strings.TrimSpace(out[i].Hostname))
@@ -256,7 +260,7 @@ func (s *Store) DeleteClient(id string) error {
 func (s *Store) SaveDeployment(d *common.DeploymentState) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.deployments[d.ID] = d
+	s.deployments[d.ID] = cloneDeployment(d)
 	return s.save()
 }
 
@@ -264,7 +268,10 @@ func (s *Store) GetDeployment(id string) (*common.DeploymentState, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	d, ok := s.deployments[id]
-	return d, ok
+	if !ok {
+		return nil, false
+	}
+	return cloneDeployment(d), true
 }
 
 // GetActiveDeploymentForClient returns the most recent non-terminal deployment
@@ -281,7 +288,10 @@ func (s *Store) GetActiveDeploymentForClient(clientID string) (*common.Deploymen
 			latest = d
 		}
 	}
-	return latest, latest != nil
+	if latest == nil {
+		return nil, false
+	}
+	return cloneDeployment(latest), true
 }
 
 func (s *Store) ListDeployments() []*common.DeploymentState {
@@ -289,7 +299,7 @@ func (s *Store) ListDeployments() []*common.DeploymentState {
 	defer s.mu.RUnlock()
 	out := make([]*common.DeploymentState, 0, len(s.deployments))
 	for _, d := range s.deployments {
-		out = append(out, d)
+		out = append(out, cloneDeployment(d))
 	}
 	return out
 }
@@ -299,7 +309,7 @@ func (s *Store) ListDeployments() []*common.DeploymentState {
 func (s *Store) SavePlaybook(p *PlaybookRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.playbooks[p.ID] = p
+	s.playbooks[p.ID] = clonePlaybookRecord(p)
 	return s.save()
 }
 
@@ -307,7 +317,10 @@ func (s *Store) GetPlaybook(id string) (*PlaybookRecord, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	p, ok := s.playbooks[id]
-	return p, ok
+	if !ok {
+		return nil, false
+	}
+	return clonePlaybookRecord(p), true
 }
 
 func (s *Store) ListPlaybooks() []*PlaybookRecord {
@@ -315,7 +328,7 @@ func (s *Store) ListPlaybooks() []*PlaybookRecord {
 	defer s.mu.RUnlock()
 	out := make([]*PlaybookRecord, 0, len(s.playbooks))
 	for _, p := range s.playbooks {
-		out = append(out, p)
+		out = append(out, clonePlaybookRecord(p))
 	}
 	return out
 }
@@ -332,7 +345,7 @@ func (s *Store) DeletePlaybook(id string) error {
 func (s *Store) SaveArtifact(a *common.Artifact) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.artifacts[a.ID] = a
+	s.artifacts[a.ID] = cloneArtifact(a)
 	return s.save()
 }
 
@@ -340,7 +353,10 @@ func (s *Store) GetArtifact(id string) (*common.Artifact, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	a, ok := s.artifacts[id]
-	return a, ok
+	if !ok {
+		return nil, false
+	}
+	return cloneArtifact(a), true
 }
 
 func (s *Store) GetArtifactByName(name string) (*common.Artifact, bool) {
@@ -348,7 +364,7 @@ func (s *Store) GetArtifactByName(name string) (*common.Artifact, bool) {
 	defer s.mu.RUnlock()
 	for _, a := range s.artifacts {
 		if a.Name == name {
-			return a, true
+			return cloneArtifact(a), true
 		}
 	}
 	return nil, false
@@ -359,9 +375,92 @@ func (s *Store) ListArtifacts() []*common.Artifact {
 	defer s.mu.RUnlock()
 	out := make([]*common.Artifact, 0, len(s.artifacts))
 	for _, a := range s.artifacts {
-		out = append(out, a)
+		out = append(out, cloneArtifact(a))
 	}
 	return out
+}
+
+func cloneClient(in *common.Client) *common.Client {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	if in.Metadata != nil {
+		out.Metadata = make(map[string]string, len(in.Metadata))
+		for k, v := range in.Metadata {
+			out.Metadata[k] = v
+		}
+	}
+	return &out
+}
+
+func cloneDeployment(in *common.DeploymentState) *common.DeploymentState {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	if in.FinishedAt != nil {
+		t := *in.FinishedAt
+		out.FinishedAt = &t
+	}
+	return &out
+}
+
+func clonePlaybookRecord(in *PlaybookRecord) *PlaybookRecord {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	out.Playbook = clonePlaybook(in.Playbook)
+	return &out
+}
+
+func clonePlaybook(in *common.Playbook) *common.Playbook {
+	if in == nil {
+		return nil
+	}
+	out := &common.Playbook{Name: in.Name}
+	if in.Env != nil {
+		out.Env = make(map[string]string, len(in.Env))
+		for k, v := range in.Env {
+			out.Env[k] = v
+		}
+	}
+	if len(in.Jobs) > 0 {
+		out.Jobs = make([]common.Job, len(in.Jobs))
+		for i, job := range in.Jobs {
+			out.Jobs[i].Name = job.Name
+			if len(job.Steps) > 0 {
+				out.Jobs[i].Steps = make([]common.Step, len(job.Steps))
+				for j, st := range job.Steps {
+					out.Jobs[i].Steps[j] = st
+					if st.With != nil {
+						m := make(map[string]string, len(st.With))
+						for k, v := range st.With {
+							m[k] = v
+						}
+						out.Jobs[i].Steps[j].With = m
+					}
+					if st.Env != nil {
+						m := make(map[string]string, len(st.Env))
+						for k, v := range st.Env {
+							m[k] = v
+						}
+						out.Jobs[i].Steps[j].Env = m
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+func cloneArtifact(in *common.Artifact) *common.Artifact {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	return &out
 }
 
 func (s *Store) DeleteArtifact(id string) error {

@@ -56,7 +56,7 @@ func NewServer(env *handlers.Env) http.Handler {
 	mux.Handle("/api/v1/secrets", root(http.HandlerFunc(env.HandleSecrets)))
 	mux.Handle("/api/v1/secrets/", root(http.HandlerFunc(env.HandleSecrets)))
 
-	return logging(cors(mux))
+	return logging(mux)
 }
 
 // dualAuth accepts requests authenticated with either a client JWT Bearer
@@ -70,20 +70,6 @@ func dualAuth(env *handlers.Env, next http.Handler) http.Handler {
 		} else {
 			clientMW.ServeHTTP(w, r)
 		}
-	})
-}
-
-// cors adds permissive CORS headers (appropriate for private network use).
-func cors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
 	})
 }
 

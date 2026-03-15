@@ -9,12 +9,13 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/marko-stanojevic/sear/internal/common"
-	"github.com/marko-stanojevic/sear/internal/daemon/store"
+	"github.com/marko-stanojevic/sear/internal/daemon/ports"
+	"github.com/marko-stanojevic/sear/internal/daemon/service"
 )
 
 // Env bundles the dependencies shared by all handlers.
 type Env struct {
-	Store               *store.Store
+	Store               ports.StorePort
 	JWTSecret           []byte
 	RootPassword        string
 	TokenExpiryHours    int
@@ -22,6 +23,7 @@ type Env struct {
 	ServerURL           string
 	RegistrationSecrets map[string]string // name→value from secrets.yml
 	Hub                 *Hub
+	Service             *service.Manager
 }
 
 // ── WebSocket Hub ─────────────────────────────────────────────────────────────

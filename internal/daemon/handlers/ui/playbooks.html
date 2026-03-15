@@ -1,0 +1,286 @@
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sear - Playbooks</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh}
+  header{background:#161b22;border-bottom:1px solid #30363d;padding:0 24px;display:flex;align-items:stretch;gap:0}
+  .header-brand{display:flex;align-items:center;gap:12px;padding:16px 0}
+  header h1{font-size:1.25rem;font-weight:600}
+  nav{display:flex;gap:2px;align-items:stretch;margin-left:24px}
+  nav a{color:#8b949e;text-decoration:none;padding:0 14px;display:flex;align-items:center;font-size:.875rem;border-bottom:2px solid transparent}
+  nav a:hover{color:#e6edf3}
+  nav a.active{color:#e6edf3;border-bottom-color:#f78166}
+  .header-right{margin-left:auto;display:flex;align-items:center}
+  .container{max-width:1200px;margin:0 auto;padding:24px}
+  .meta{color:#8b949e;font-size:.875rem;margin-bottom:16px;display:flex;align-items:center;gap:12px}
+  .meta .spacer{margin-left:auto}
+  .list{background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden}
+  .list-head,.list-row{display:grid;grid-template-columns:1.2fr 1.6fr .6fr .9fr auto;gap:12px;align-items:center;padding:10px 12px}
+  .list-head{background:#0d1117;color:#8b949e;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #30363d}
+  .list-row{border-bottom:1px solid #21262d;font-size:.875rem}
+  .list-row:last-child{border-bottom:none}
+  .name{font-weight:600}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem;color:#8b949e}
+  .actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+  .empty{text-align:center;color:#8b949e;padding:60px 20px}
+  button{background:#21262d;border:1px solid #30363d;color:#e6edf3;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem}
+  button:hover{background:#30363d}
+  .btn-add{background:#238636;border-color:#2ea043;color:#fff}
+  .btn-add:hover{background:#2ea043}
+  .btn-danger{background:transparent;border-color:transparent;color:#f85149}
+  .btn-danger:hover{background:#da363320;border-color:#da3633}
+  .btn-muted{background:transparent;border-color:transparent;color:#8b949e}
+  .btn-muted:hover{color:#e6edf3;background:#21262d;border-color:#30363d}
+  .modal-bg{display:none;position:fixed;inset:0;background:#0d1117cc;backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:60}
+  .modal-bg.show{display:flex}
+  .modal{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:24px;min-width:380px;max-width:900px;width:92%}
+  .modal h3{font-size:1rem;margin-bottom:16px}
+  .modal label{display:block;font-size:.8rem;color:#8b949e;margin-bottom:4px}
+  .modal input,.modal textarea,.modal select{width:100%;background:#0d1117;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:.875rem;margin-bottom:12px;outline:none}
+  .modal textarea{min-height:220px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.35}
+  .modal input:focus,.modal textarea:focus,.modal select:focus{border-color:#58a6ff}
+  .modal-err{color:#f85149;font-size:.8rem;margin-bottom:8px;min-height:1em}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px}
+  #login-overlay{display:none;position:fixed;inset:0;background:#0d1117cc;backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:100}
+  #login-overlay.show{display:flex}
+  #login-box{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:32px;min-width:320px}
+  #login-box h2{font-size:1.1rem;margin-bottom:20px}
+  #login-box label{display:block;font-size:.8rem;color:#8b949e;margin-bottom:4px}
+  #login-box input{width:100%;background:#0d1117;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:.9rem;margin-bottom:14px;outline:none}
+  #login-box input:focus{border-color:#58a6ff}
+  #login-error{color:#f85149;font-size:.8rem;margin-bottom:10px;min-height:1em}
+  #login-box .btn-login{width:100%;background:#238636;border:none;color:#fff;padding:9px;border-radius:6px;font-size:.9rem;cursor:pointer}
+  #login-box .btn-login:hover{background:#2ea043}
+</style>
+</head>
+<body>
+<div id="login-overlay">
+  <div id="login-box">
+    <h2>&#x1F512; Sear Root Login</h2>
+    <label>Username</label>
+    <input id="lu" type="text" value="root" readonly>
+    <label>Password</label>
+    <input id="lp" type="password" autocomplete="current-password" placeholder="root password">
+    <div id="login-error"></div>
+    <button class="btn-login" onclick="doLogin()">Sign in</button>
+  </div>
+</div>
+<div id="pb-modal-bg" class="modal-bg">
+  <div class="modal">
+    <h3 id="pb-modal-title">Create Playbook</h3>
+    <label>Name</label>
+    <input id="pb-name" type="text" placeholder="Deploy app" spellcheck="false">
+    <label>Description</label>
+    <input id="pb-desc" type="text" placeholder="Optional" spellcheck="false">
+    <label>Playbook YAML</label>
+    <textarea id="pb-yaml" spellcheck="false"></textarea>
+    <div class="modal-err" id="pb-modal-err"></div>
+    <div class="modal-actions">
+      <button onclick="closePBModal()">Cancel</button>
+      <button class="btn-add" onclick="savePlaybook()">Save</button>
+    </div>
+  </div>
+</div>
+<div id="assign-modal-bg" class="modal-bg">
+  <div class="modal" style="max-width:540px">
+    <h3>Assign Playbook</h3>
+    <label>Playbook</label>
+    <input id="assign-pb-name" type="text" readonly>
+    <label>Client</label>
+    <select id="assign-client"></select>
+    <div class="modal-err" id="assign-modal-err"></div>
+    <div class="modal-actions">
+      <button onclick="closeAssignModal()">Cancel</button>
+      <button class="btn-add" onclick="confirmAssign()">Assign</button>
+    </div>
+  </div>
+</div>
+<header>
+  <div class="header-brand"><h1>&#x26A1; Sear Daemon</h1></div>
+  <nav>
+    <a href="/ui">Clients</a>
+    <a href="/ui/secrets">Secrets</a>
+    <a href="/ui/playbooks" class="active">Playbooks</a>
+    <a href="/ui/deployments">Deployments</a>
+  </nav>
+  <div class="header-right"><button onclick="logout()">Sign out</button></div>
+</header>
+<div class="container">
+  <div class="meta">
+    <span id="counts">Loading...</span>
+    <span class="spacer"></span>
+    <button onclick="load()">Refresh</button>
+    <button class="btn-add" onclick="openCreate()">+ New Playbook</button>
+  </div>
+  <div id="root"></div>
+</div>
+<script>
+function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
+function authHeader(){var c=sessionStorage.getItem('sear_creds');return c?'Basic '+c:null;}
+function showLogin(msg){document.getElementById('login-error').textContent=msg||'';document.getElementById('lp').value='';document.getElementById('login-overlay').classList.add('show');setTimeout(function(){document.getElementById('lp').focus();},50);}
+function hideLogin(){document.getElementById('login-overlay').classList.remove('show');}
+function logout(){sessionStorage.removeItem('sear_creds');showLogin('');}
+async function doLogin(){
+  var u=document.getElementById('lu').value;
+  var p=document.getElementById('lp').value;
+  if(!p){document.getElementById('login-error').textContent='Password required';return;}
+  var creds=btoa(u+':'+p);
+  var r=await fetch('/api/v1/playbooks',{headers:{Authorization:'Basic '+creds}});
+  if(r.status===401){document.getElementById('login-error').textContent='Invalid password';return;}
+  sessionStorage.setItem('sear_creds',creds);
+  hideLogin();
+  load();
+}
+document.getElementById('lp').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
+
+var playbooks=[];
+var clients=[];
+var editingID='';
+var assigningID='';
+var templatePlaybookYAML=[
+  'name: hello-bash',
+  'jobs:',
+  '  - name: main',
+  '    steps:',
+  '      - name: print hello',
+  '        shell: bash',
+  '        run: echo "hello"',
+  ''
+].join('\n');
+
+function headersJSON(){var h={'Content-Type':'application/json'};var a=authHeader();if(a)h['Authorization']=a;return h;}
+function headersAuth(){var h={};var a=authHeader();if(a)h['Authorization']=a;return h;}
+
+function openCreate(){
+  editingID='';
+  document.getElementById('pb-modal-title').textContent='Create Playbook';
+  document.getElementById('pb-name').value='';
+  document.getElementById('pb-desc').value='';
+  document.getElementById('pb-yaml').value=templatePlaybookYAML;
+  document.getElementById('pb-modal-err').textContent='';
+  document.getElementById('pb-modal-bg').classList.add('show');
+}
+async function openEdit(i){
+  var pb=playbooks[i];
+  editingID=pb.id;
+  document.getElementById('pb-modal-title').textContent='Edit Playbook';
+  document.getElementById('pb-name').value=pb.name||'';
+  document.getElementById('pb-desc').value=pb.description||'';
+  document.getElementById('pb-yaml').value='';
+  document.getElementById('pb-modal-err').textContent='';
+  document.getElementById('pb-modal-bg').classList.add('show');
+
+  var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(pb.id),{headers:headersAuth()});
+  if(r.status===401){closePBModal();showLogin('Session expired - sign in again');return;}
+  if(!r.ok){document.getElementById('pb-modal-err').textContent='Failed to load playbook details';return;}
+  var full=await r.json();
+  document.getElementById('pb-yaml').value=full.playbook_yaml||templatePlaybookYAML;
+}
+function closePBModal(){document.getElementById('pb-modal-bg').classList.remove('show');}
+
+async function savePlaybook(){
+  var errEl=document.getElementById('pb-modal-err');
+  var name=document.getElementById('pb-name').value.trim();
+  var desc=document.getElementById('pb-desc').value.trim();
+  var raw=document.getElementById('pb-yaml').value;
+  if(!name){errEl.textContent='Name is required';return;}
+  if(!raw.trim()){errEl.textContent='Playbook YAML is required';return;}
+  var payload={name:name,description:desc,playbook_yaml:raw};
+  var url=editingID?('/api/v1/playbooks/'+encodeURIComponent(editingID)):'/api/v1/playbooks';
+  var method=editingID?'PUT':'POST';
+  var r=await fetch(url,{method:method,headers:headersJSON(),body:JSON.stringify(payload)});
+  if(r.status===401){closePBModal();showLogin('Session expired - sign in again');return;}
+  if(!r.ok){
+    var msg='Save failed ('+r.status+')';
+    try{var d=await r.json();if(d.error)msg=d.error;}catch(_e){}
+    errEl.textContent=msg;
+    return;
+  }
+  closePBModal();
+  load();
+}
+
+async function removePlaybook(i){
+  var pb=playbooks[i];
+  if(!confirm('Delete playbook "'+(pb.name||pb.id)+'"?'))return;
+  var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(pb.id),{method:'DELETE',headers:headersAuth()});
+  if(r.status===401){showLogin('Session expired - sign in again');return;}
+  if(!r.ok){alert('Delete failed: '+r.status);return;}
+  load();
+}
+
+function openAssign(i){
+  var pb=playbooks[i];
+  assigningID=pb.id;
+  document.getElementById('assign-pb-name').value=(pb.name||pb.id)+' ('+pb.id+')';
+  var sel=document.getElementById('assign-client');
+  var options=clients.map(function(c){return '<option value="'+esc(c.id)+'">'+esc((c.hostname||c.id)+' - '+(c.status||'unknown'))+'</option>';}).join('');
+  sel.innerHTML=options;
+  document.getElementById('assign-modal-err').textContent=clients.length?'':'No clients available';
+  document.getElementById('assign-modal-bg').classList.add('show');
+}
+function closeAssignModal(){document.getElementById('assign-modal-bg').classList.remove('show');}
+
+async function confirmAssign(){
+  var errEl=document.getElementById('assign-modal-err');
+  var clientID=document.getElementById('assign-client').value;
+  if(!clientID){errEl.textContent='Select a client';return;}
+  var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(assigningID)+'/assign',{method:'POST',headers:headersJSON(),body:JSON.stringify({client_id:clientID})});
+  if(r.status===401){closeAssignModal();showLogin('Session expired - sign in again');return;}
+  if(!r.ok){
+    var msg='Assign failed ('+r.status+')';
+    try{var d=await r.json();if(d.error)msg=d.error;}catch(_e){}
+    errEl.textContent=msg;
+    return;
+  }
+  closeAssignModal();
+  load();
+}
+
+function render(){
+  var root=document.getElementById('root');
+  document.getElementById('counts').textContent='Playbooks: '+playbooks.length;
+  if(!playbooks.length){root.innerHTML='<div class="empty">No playbooks yet.</div>';return;}
+  var rows=playbooks.map(function(pb,i){
+    var jobs=(pb.playbook && Array.isArray(pb.playbook.jobs))?pb.playbook.jobs.length:0;
+    var upd=pb.updated_at?new Date(pb.updated_at).toLocaleString():'-';
+    return '<div class="list-row">'+
+      '<div><div class="name">'+esc(pb.name||'-')+'</div><div class="mono">'+esc(pb.id||'-')+'</div></div>'+
+      '<div>'+esc(pb.description||'-')+'</div>'+
+      '<div>'+jobs+'</div>'+
+      '<div>'+esc(upd)+'</div>'+
+      '<div class="actions">'+
+        '<button class="btn-muted" onclick="openAssign('+i+')">Assign</button>'+
+        '<button onclick="openEdit('+i+')">Edit</button>'+
+        '<button class="btn-danger" onclick="removePlaybook('+i+')">Delete</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  root.innerHTML='<div class="list">'+
+    '<div class="list-head"><div>Playbook</div><div>Description</div><div>Jobs</div><div>Updated</div><div></div></div>'+
+    rows+
+  '</div>';
+}
+
+async function load(){
+  var auth=authHeader();
+  if(!auth){showLogin('');return;}
+  var p=await fetch('/api/v1/playbooks',{headers:headersAuth()});
+  if(p.status===401){showLogin('');return;}
+  if(!p.ok){document.getElementById('root').innerHTML='<div class="empty">Failed to load playbooks.</div>';return;}
+  var c=await fetch('/api/v1/clients',{headers:headersAuth()});
+  clients=c.ok?await c.json():[];
+  playbooks=await p.json()||[];
+  render();
+}
+
+document.getElementById('pb-modal-bg').addEventListener('click',function(e){if(e.target===this)closePBModal();});
+document.getElementById('assign-modal-bg').addEventListener('click',function(e){if(e.target===this)closeAssignModal();});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){closePBModal();closeAssignModal();}});
+load();
+</script>
+</body>
+</html>
