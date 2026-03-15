@@ -130,6 +130,20 @@ Release artifacts and matrix are configured in `.goreleaser.yml`.
 - **Auth split**: root endpoints use HTTP Basic auth, client endpoints use JWT.
 - **Logs storage**: deployment logs are persisted per deployment in `logsDir`, not inside `state.json`.
 
+## Available Skills
+
+The repository provides reusable Copilot skills in `.github/skills`:
+
+- `code-interpretation`: Read AI-generated code and understand unfamiliar codebase structure/flow.
+- `code-review`: Find bugs, regressions, and missing tests with severity-ranked findings.
+- `refactor`: Perform behavior-preserving restructuring and cleanup.
+- `security-audit`: Audit for security risks, insecure defaults, and hardening gaps.
+- `developer-experience`: Improve local workflow, CI, tasks, and onboarding setup.
+- `documentation`: Update documentation from code additions, changes, and deletions.
+- `design-compliance`: Verify design patterns, enforce SOLID/clean architecture, detect bad practices, and guide developers.
+- `test-driven-development`: Write unit tests, practice TDD red/green/refactor cycles, and close coverage gaps.
+- `architecture-awareness`: Understand project architecture, runtime usage, and how to add or modify features safely.
+
 ## Trust These Instructions
 
 Trust the information in this file. Only search the codebase if the information here is incomplete or appears incorrect.
