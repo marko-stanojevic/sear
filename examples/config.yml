@@ -16,3 +16,7 @@ jwt_secret: "dev-local-jwt-secret-change-in-production"
 
 # JWT lifetime in hours (default 720 = 30 days).
 token_expiry_hours: 720
+
+# All deployment logs are persisted in logs_dir.
+# Artifacts are distributed automatically during workflow execution.
+# Registration secrets are required for client onboarding.

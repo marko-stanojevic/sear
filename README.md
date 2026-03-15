@@ -52,9 +52,10 @@ Choose the archive for your OS/architecture and extract it.
 
 Create your config files using the examples in this repository:
 
-- examples/config.yml
-- examples/secrets.yml
-- examples/client.config.yml
+- examples/config.yml (daemon config)
+- examples/secrets.yml (daemon secrets)
+- examples/client.config.yml (client config)
+- examples/playbook.yml (sample workflow)
 
 If `root_password` or `registration_secrets` are missing, the daemon generates them on startup and prints them.
 
@@ -78,70 +79,25 @@ If `root_password` or `registration_secrets` are missing, the daemon generates t
 	- `/ui/secrets`
 	- `/ui/playbooks`
 	- `/ui/deployments`
-- Auth: sign in from the UI (HTTP Basic credentials used for API calls)
-- Username: `root`
-- Password: value from `root_password` in secrets file (or generated password printed at startup)
 
-## Configuration
+## Configuration tips
 
-Examples are available in `examples/config.yml`, `examples/secrets.yml`, and `examples/client.config.yml`.
+- Daemon and client configs are YAML files; see `examples/` for templates.
+- Secrets are injected into playbooks using `${{ secrets.NAME }}` syntax.
+- Artifacts are distributed automatically during workflow execution.
+- All deployment logs are persisted in the daemon's logs directory.
+- The client resumes from the last confirmed step after reboot or crash.
 
-### Daemon config fields
+## Troubleshooting
 
-- listen_addr
-- data_dir
-- artifacts_dir
-- logs_dir
-- tls_cert_file
-- tls_key_file
-- jwt_secret
-- token_expiry_hours
+- If the client cannot register, check `registration_secret` values in both client and daemon configs.
+- If JWT tokens expire, adjust `token_expiry_hours` in daemon config.
+- For artifact download errors, verify artifact paths and permissions.
 
-Defaults are applied for unset fields (for example `:8080`, `sear-data`, and 30-day token expiry).
+## Contributing
 
-### Daemon secrets fields
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and workflow.
 
-- root_password
-- registration_secrets (map of named pre-shared registration secrets)
-- client_secrets (map injected into playbook steps)
+## License
 
-### Client config fields
-
-- server_url (required)
-- registration_secret (required)
-- platform (`auto` by default)
-- state_file (OS-specific default if unset)
-- work_dir (OS-specific default if unset)
-- reconnect_interval_seconds (default 10)
-- log_batch_size (default 100)
-
-## Playbook model
-
-Playbooks are YAML documents with ordered jobs and ordered steps.
-
-Supported step forms:
-
-- `run`: execute shell script (`bash` default, plus `sh`, `pwsh`, `cmd`, `python`)
-- `uses: reboot`
-- `uses: download-artifact`
-- `uses: upload-artifact`
-- `uses: upload-logs` (no-op, logs already stream in real time)
-
-Step options:
-
-- `continue-on-error`
-- `timeout-minutes`
-- step-level `env`
-
-Example playbook: `examples/playbook.yml`
-
-## Documentation
-
-- API endpoints: [docs/api-endpoints.md](docs/api-endpoints.md)
-- Contributor and development guide: [CONTRIBUTING.md](CONTRIBUTING.md)
-
-## API route conventions
-
-- Public/client control endpoints are under `/api/v1` (for example `/api/v1/register`, `/api/v1/ws`).
-- Root management APIs are also under `/api/v1` (for example `/api/v1/status`, `/api/v1/secrets`, `/api/v1/playbooks`, `/api/v1/clients`, `/api/v1/deployments`).
-- Browser pages are under `/ui`.
+Sear is licensed under the MIT License. See [LICENSE](LICENSE) for details.
