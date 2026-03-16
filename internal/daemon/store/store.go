@@ -289,6 +289,9 @@ func (s *Store) GetActiveDeploymentForClient(clientID string) (*common.Deploymen
 			latest = d
 		}
 	}
+	if latest == nil {
+		return nil, false
+	}
 	d := cloneDeployment(latest)
 	s.enrichDeploymentLocked(d)
 	return d, true
@@ -307,6 +310,9 @@ func (s *Store) ListDeployments() []*common.DeploymentState {
 }
 
 func (s *Store) enrichDeploymentLocked(d *common.DeploymentState) {
+	if d == nil {
+		return
+	}
 	if c, ok := s.clients[d.ClientID]; ok {
 		d.Hostname = c.Hostname
 	} else {
