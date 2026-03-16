@@ -228,17 +228,26 @@ type LogBatch struct {
 	Entries []LogEntry `json:"entries"`
 }
 
-// ── Artifact types ────────────────────────────────────────────────────────────
-
 // Artifact is metadata for a file stored on the daemon.
 type Artifact struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Filename    string    `json:"filename"`
-	Size        int64     `json:"size"`
-	ContentType string    `json:"content_type"`
-	UploadedAt  time.Time `json:"uploaded_at"`
+	ID             string       `json:"id"`
+	Name           string       `json:"name"`
+	Filename       string       `json:"filename"`
+	Size           int64        `json:"size"`
+	ContentType    string       `json:"content_type"`
+	AccessPolicy   AccessPolicy `json:"access_policy"`
+	AllowedClients []string     `json:"allowed_clients,omitempty"`
+	UploadedAt     time.Time    `json:"uploaded_at"`
 }
+
+// AccessPolicy defines who can download an artifact.
+type AccessPolicy string
+
+const (
+	AccessPublic        AccessPolicy = "public"        // anyone
+	AccessAuthenticated AccessPolicy = "authenticated" // any client/user
+	AccessRestricted    AccessPolicy = "restricted"    // specific clients only
+)
 
 // ── WebSocket protocol types ──────────────────────────────────────────────────
 

@@ -57,6 +57,34 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+
+		// Enforce Access Policy
+		if a.AccessPolicy != common.AccessPublic {
+			// Check for root auth first
+			_, _, isRoot := r.BasicAuth()
+			if !isRoot {
+				// Check for client auth
+				clientID, err := e.clientIDFromToken(r)
+				if err != nil {
+					writeError(w, http.StatusUnauthorized, "authenticated access required")
+					return
+				}
+				if a.AccessPolicy == common.AccessRestricted {
+					allowed := false
+					for _, cid := range a.AllowedClients {
+						if cid == clientID {
+							allowed = true
+							break
+						}
+					}
+					if !allowed {
+						writeError(w, http.StatusForbidden, "access to this artifact is restricted")
+						return
+					}
+				}
+			}
+		}
+
 		filePath := filepath.Join(e.ArtifactsDir, a.ID, a.Filename)
 		f, err := os.Open(filePath)
 		if err != nil {
@@ -111,14 +139,22 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to write artifact")
 			return
 		}
-		   art := &common.Artifact{
-			   ID:          artID,
-			   Name:        name,
-			   Filename:    filename,
-			   Size:        size,
-			   ContentType: ct,
-			   UploadedAt:  time.Now(),
-		   }
+		art := &common.Artifact{
+			ID:             artID,
+			Name:           name,
+			Filename:       filename,
+			Size:           size,
+			ContentType:    ct,
+			AccessPolicy:   common.AccessPolicy(r.URL.Query().Get("access_policy")),
+			AllowedClients: strings.Split(r.URL.Query().Get("allowed_clients"), ","),
+			UploadedAt:     time.Now(),
+		}
+		if art.AccessPolicy == "" {
+			art.AccessPolicy = common.AccessAuthenticated // default
+		}
+		if len(art.AllowedClients) == 1 && art.AllowedClients[0] == "" {
+			art.AllowedClients = nil
+		}
 		if err := e.Store.SaveArtifact(art); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to save artifact metadata")
 			return

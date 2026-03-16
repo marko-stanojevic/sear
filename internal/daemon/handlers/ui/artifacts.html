@@ -48,6 +48,18 @@
         <label>File</label>
         <input id="artifact-file" type="file">
       </div>
+      <div class="form-group">
+        <label>Access Policy</label>
+        <select id="artifact-policy" onchange="toggleRestrictedUI()">
+          <option value="authenticated">Authenticated (all clients)</option>
+          <option value="public">Public (unauthenticated)</option>
+          <option value="restricted">Restricted (selected clients only)</option>
+        </select>
+      </div>
+      <div id="restricted-ui" class="form-group" style="display:none">
+        <label>Allowed Client IDs (comma separated)</label>
+        <input id="artifact-clients" type="text" placeholder="client-uuid-1, client-uuid-2">
+      </div>
     </div>
     <div class="modal-foot">
       <button class="btn-muted" onclick="hideUploadModal()">Cancel</button>
@@ -92,11 +104,16 @@ function render() {
     var size = (a.size / 1024).toFixed(1) + ' KB';
     if (a.size > 1024 * 1024) size = (a.size / (1024 * 1024)).toFixed(1) + ' MB';
     var upd = a.uploaded_at ? new Date(a.uploaded_at).toLocaleString() : '-';
-    
+    var policy = a.access_policy || 'authenticated';
+    var policyLabel = '<span class="badge badge-muted">Authenticated</span>';
+    if (policy === 'public') policyLabel = '<span class="badge badge-success">Public</span>';
+    if (policy === 'restricted') policyLabel = '<span class="badge badge-warning" title="' + esc(a.allowed_clients ? a.allowed_clients.join(', ') : '') + '">Restricted</span>';
+
     return '<div class="list-row">' +
       '<div class="cell-main"><strong>' + esc(a.name) + '</strong><div class="mono">' + esc(a.id) + '</div></div>' +
       '<div class="mono">' + esc(a.filename) + '</div>' +
       '<div>' + esc(size) + '</div>' +
+      '<div>' + policyLabel + '</div>' +
       '<div>' + esc(upd) + '</div>' +
       '<div class="card-top-right"><div class="card-menu">' +
         '<button class="menu-btn" title="Actions">⋮</button>' +
@@ -109,7 +126,7 @@ function render() {
   }).join('');
 
   root.innerHTML = '<div class="list list-artifacts">' +
-    '<div class="list-head"><div>Artifact</div><div>Filename</div><div>Size</div><div>Uploaded</div><div></div></div>' +
+    '<div class="list-head"><div>Artifact</div><div>Filename</div><div>Size</div><div>Access Policy</div><div>Uploaded</div><div></div></div>' +
     rows +
     '</div>';
 
@@ -138,9 +155,17 @@ async function load() {
 function showUploadModal() {
   document.getElementById('artifact-name').value = '';
   document.getElementById('artifact-file').value = '';
+  document.getElementById('artifact-policy').value = 'authenticated';
+  document.getElementById('artifact-clients').value = '';
+  document.getElementById('restricted-ui').style.display = 'none';
   document.getElementById('upload-modal').style.display = 'flex';
 }
 function hideUploadModal() { document.getElementById('upload-modal').style.display = 'none'; }
+
+function toggleRestrictedUI() {
+  var policy = document.getElementById('artifact-policy').value;
+  document.getElementById('restricted-ui').style.display = (policy === 'restricted' ? 'block' : 'none');
+}
 
 async function uploadArtifact() {
   var fileInput = document.getElementById('artifact-file');
@@ -155,9 +180,17 @@ async function uploadArtifact() {
 
   try {
     var h = headersAuth();
+    var policy = document.getElementById('artifact-policy').value;
+    var clients = document.getElementById('artifact-clients').value.trim();
+
     // Raw body upload as expected by HandleArtifacts
     var params = '?filename=' + encodeURIComponent(filename);
     if (name) params += '&name=' + encodeURIComponent(name);
+    params += '&access_policy=' + encodeURIComponent(policy);
+    if (policy === 'restricted' && clients) {
+        params += '&allowed_clients=' + encodeURIComponent(clients);
+    }
+
     var r = await fetch('/artifacts' + params, {
       method: 'POST',
       headers: h,

@@ -958,6 +958,7 @@ func TestHandleArtifacts_UploadDownloadMetaDelete(t *testing.T) {
 
 	// Download by artifact name validates fallback lookup (GetArtifactByName).
 	downloadReq := httptest.NewRequest(http.MethodGet, "/artifacts/myapp.bin", nil)
+	downloadReq.SetBasicAuth("root", env.RootPassword)
 	downloadRR := httptest.NewRecorder()
 	env.HandleArtifacts(downloadRR, downloadReq)
 	if downloadRR.Code != http.StatusOK {
@@ -1011,6 +1012,7 @@ func TestHandleArtifacts_ErrorPaths(t *testing.T) {
 			t.Fatalf("SaveArtifact: %v", err)
 		}
 		req := httptest.NewRequest(http.MethodGet, "/artifacts/art-missing-file", nil)
+		req.SetBasicAuth("root", env.RootPassword)
 		rr := httptest.NewRecorder()
 		env.HandleArtifacts(rr, req)
 		if rr.Code != http.StatusInternalServerError {
@@ -1042,6 +1044,88 @@ func TestHandleArtifacts_ErrorPaths(t *testing.T) {
 		env.HandleArtifacts(rr, req)
 		if rr.Code != http.StatusMethodNotAllowed {
 			t.Fatalf("status=%d; want 405", rr.Code)
+		}
+	})
+}
+
+func TestHandleArtifacts_AccessPolicy(t *testing.T) {
+	env := newTestEnv(t)
+	_, token := registerClient(t, env, "client-1", "host-1")
+	_, otherToken := registerClient(t, env, "client-2", "host-2")
+
+	// 1. Upload Public Artifact
+	pubReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=pub.bin&access_policy=public", bytes.NewBufferString("public content"))
+	pubRR := httptest.NewRecorder()
+	env.HandleArtifacts(pubRR, pubReq)
+	pubArt := decode[common.Artifact](t, pubRR)
+
+	// 2. Upload Authenticated Artifact
+	authReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=auth.bin&access_policy=authenticated", bytes.NewBufferString("auth content"))
+	authRR := httptest.NewRecorder()
+	env.HandleArtifacts(authRR, authReq)
+	authArt := decode[common.Artifact](t, authRR)
+
+	// 3. Upload Restricted Artifact for client-1
+	restReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=rest.bin&access_policy=restricted&allowed_clients=client-1", bytes.NewBufferString("rest content"))
+	restRR := httptest.NewRecorder()
+	env.HandleArtifacts(restRR, restReq)
+	restArt := decode[common.Artifact](t, restRR)
+
+	t.Run("public download no auth", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/artifacts/"+pubArt.ID, nil)
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d; want 200", rr.Code)
+		}
+	})
+
+	t.Run("auth download no auth", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/artifacts/"+authArt.ID, nil)
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("status=%d; want 401", rr.Code)
+		}
+	})
+
+	t.Run("auth download with auth", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/artifacts/"+authArt.ID, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d; want 200", rr.Code)
+		}
+	})
+
+	t.Run("restricted download other client", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/artifacts/"+restArt.ID, nil)
+		req.Header.Set("Authorization", "Bearer "+otherToken)
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("status=%d; want 403", rr.Code)
+		}
+	})
+
+	t.Run("restricted download allowed client", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/artifacts/"+restArt.ID, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d; want 200", rr.Code)
+		}
+	})
+
+	t.Run("restricted download root", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/artifacts/"+restArt.ID, nil)
+		req.SetBasicAuth("root", env.RootPassword)
+		rr := httptest.NewRecorder()
+		env.HandleArtifacts(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d; want 200", rr.Code)
 		}
 	})
 }
