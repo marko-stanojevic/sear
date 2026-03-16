@@ -290,27 +290,40 @@ func (e *Env) HandleRootClients(w http.ResponseWriter, r *http.Request) {
 //	GET /api/v1/deployments/{id}         – get one
 //	GET /api/v1/deployments/{id}/logs    – get logs for deployment
 func (e *Env) HandleRootDeployments(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/deployments")
 	path = strings.TrimPrefix(path, "/")
 	parts := strings.SplitN(path, "/", 2)
 	id := parts[0]
 
-	if id == "" {
-		writeJSON(w, http.StatusOK, e.Store.ListDeployments())
-		return
+	switch r.Method {
+	case http.MethodGet:
+		if id == "" {
+			writeJSON(w, http.StatusOK, e.Store.ListDeployments())
+			return
+		}
+		if len(parts) == 2 && parts[1] == "logs" {
+			writeJSON(w, http.StatusOK, e.Store.GetLogsForDeployment(id))
+			return
+		}
+		dep, ok := e.Store.GetDeployment(id)
+		if !ok {
+			writeError(w, http.StatusNotFound, "deployment not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, dep)
+
+	case http.MethodDelete:
+		if id == "" {
+			writeError(w, http.StatusBadRequest, "deployment ID required in path")
+			return
+		}
+		if err := e.Store.DeleteDeployment(id); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to delete deployment: "+err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
-	if len(parts) == 2 && parts[1] == "logs" {
-		writeJSON(w, http.StatusOK, e.Store.GetLogsForDeployment(id))
-		return
-	}
-	dep, ok := e.Store.GetDeployment(id)
-	if !ok {
-		writeError(w, http.StatusNotFound, "deployment not found")
-		return
-	}
-	writeJSON(w, http.StatusOK, dep)
 }
