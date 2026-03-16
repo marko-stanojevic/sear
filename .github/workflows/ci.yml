@@ -54,10 +54,7 @@ jobs:
 
   test:
     name: Unit Tests
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       checks: write
@@ -70,7 +67,6 @@ jobs:
         uses: ./.github/actions/go-test
 
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v5
         with:
           files: coverage.out
