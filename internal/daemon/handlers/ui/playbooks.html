@@ -205,9 +205,9 @@ function render(){
       '<div class="card-top-right"><div class="card-menu">' +
         '<button class="menu-btn" title="Actions">⋮</button>' +
         '<div class="menu-dropdown">' +
-          '<button class="menu-item" onclick="openAssign('+i+')">Assign</button>' +
-          '<button class="menu-item" onclick="openEdit('+i+')">Edit</button>' +
-          '<button class="menu-item danger" onclick="removePlaybook('+i+')">Delete</button>' +
+          '<button class="menu-item" onclick="openAssign('+i+')"><span class="m-icon" data-lucide="target"></span> Assign</button>' +
+          '<button class="menu-item" onclick="openEdit('+i+')"><span class="m-icon" data-lucide="pencil"></span> Edit</button>' +
+          '<button class="menu-item" onclick="removePlaybook('+i+')"><span class="m-icon" data-lucide="trash-2"></span> Delete</button>' +
         '</div>' +
       '</div></div>' +
     '</div>';
@@ -216,6 +216,7 @@ function render(){
     '<div class="list-head"><div>Playbook</div><div>Description</div><div>Jobs</div><div>Steps</div><div>Updated</div><div></div></div>'+
     rows+
   '</div>';
+  updateIcons();
 }
 
 async function load(){

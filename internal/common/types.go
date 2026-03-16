@@ -191,7 +191,9 @@ const (
 type DeploymentState struct {
 	ID              string           `json:"id"`
 	ClientID        string           `json:"client_id"`
+	Hostname        string           `json:"hostname,omitempty"`
 	PlaybookID      string           `json:"playbook_id"`
+	PlaybookName    string           `json:"playbook_name,omitempty"`
 	Status          DeploymentStatus `json:"status"`
 	ResumeStepIndex int              `json:"resume_step_index"`
 	StartedAt       time.Time        `json:"started_at"`

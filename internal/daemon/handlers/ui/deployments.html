@@ -52,9 +52,14 @@ function filtered(){
   });
 }
 
-function rowStatus(status){
-  var s=(status||'pending').toLowerCase();
-  return '<span class="pill '+esc(s)+'"><span class="dot"></span>'+esc(s)+'</span>';
+function statusClass(s) {
+  switch((s||'').toLowerCase()) {
+    case 'done': return 'success';
+    case 'failed': return 'warning';
+    case 'running': return 'success';
+    case 'rebooting': return 'warning';
+    default: return 'muted';
+  }
 }
 
 function render(){
@@ -67,17 +72,17 @@ function render(){
     var upd=d.updated_at?new Date(d.updated_at).toLocaleString():'-';
     var finished=d.finished_at?new Date(d.finished_at).toLocaleString():'-';
     return '<div class="list-row">'+
-      '<div><div>'+esc(d.id||'-')+'</div><div class="mono">resume: '+esc(d.resume_step_index||0)+'</div></div>'+
-      '<div class="mono">'+esc(d.client_id||'-')+'</div>'+
-      '<div class="mono">'+esc(d.playbook_id||'-')+'</div>'+
-      '<div>'+rowStatus(d.status)+'</div>'+
-      '<div>'+esc(upd)+'</div>'+
-      '<div>'+esc(finished)+'</div>'+
-      '<div class="card-top-right"><div class="card-menu">'+
-        '<button class="menu-btn" title="Actions">⋮</button>'+
-        '<div class="menu-dropdown">'+
-          '<button class="menu-item" onclick="openLogs(\''+esc(d.id)+'\')">Logs</button>'+
-          '<button class="menu-item danger" onclick="removeDeployment(\''+esc(d.id)+'\')">✕ Remove</button>'+
+      '<div><div class="sub mono">' + esc(d.id || '-') + '</div><div class="sub mono" style="font-size:10px">Step: ' + (d.resume_step_index||0) + '</div></div>'+
+      '<div class="cell-main"><div>' + esc(d.hostname || '-') + '</div><div class="sub mono">' + esc(d.client_id || '-') + '</div></div>'+
+      '<div class="cell-main"><div>' + esc(d.playbook_name || '-') + '</div><div class="sub mono">' + esc(d.playbook_id || '-') + '</div></div>'+
+      '<div><span class="badge badge-'+statusClass(d.status)+'">'+esc(d.status)+'</span></div>'+
+      '<div>'+upd+'</div>'+
+      '<div>'+finished+'</div>'+
+      '<div class="card-top-right"><div class="card-menu">' +
+        '<button class="menu-btn" title="Actions">⋮</button>' +
+        '<div class="menu-dropdown">' +
+          '<button class="menu-item" onclick="openLogs(\''+esc(d.id)+'\')"><span class="m-icon" data-lucide="file-text"></span> View Logs</button>'+
+          '<button class="menu-item" onclick="removeDeployment(\''+esc(d.id)+'\')"><span class="m-icon" data-lucide="trash-2"></span> Remove Deployment</button>'+
         '</div>'+
       '</div></div>'+
     '</div>';
@@ -86,6 +91,7 @@ function render(){
     '<div class="list-head"><div>Deployment</div><div>Client</div><div>Playbook</div><div>Status</div><div>Updated</div><div>Finished</div><div></div></div>'+
     rows+
   '</div>';
+  updateIcons();
   // Click outside to close menus
   document.addEventListener('click', function(e) {
     if (!e.target.classList.contains('menu-btn')) {

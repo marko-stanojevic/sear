@@ -1,3 +1,17 @@
+// Lucide Icons Integration (Local)
+(function() {
+  const script = document.createElement('script');
+  script.src = '/ui/assets/lucide.min.js';
+  script.onload = () => window.updateIcons && window.updateIcons();
+  document.head.appendChild(script);
+})();
+
+window.updateIcons = function() {
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
+};
+
 function ensureLoginOverlay() {
   if (document.getElementById('login-overlay')) return;
   const overlay = document.createElement('div');
