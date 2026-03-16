@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sear — Dashboard</title>
+<link rel="stylesheet" href="/ui/assets/style.css">
+<style>
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+  }
+  .stat-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: transform 0.2s, border-color 0.2s;
+    text-decoration: none;
+    color: inherit;
+  }
+  .stat-card:hover {
+    transform: translateY(-2px);
+    border-color: #58a6ff;
+  }
+  .stat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #8b949e;
+  }
+  .stat-value {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #e6edf3;
+  }
+  .stat-label {
+    font-size: 0.875rem;
+    color: #8b949e;
+  }
+  .stat-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #58a6ff;
+  }
+  .stat-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+  .welcome-section {
+    margin-bottom: 32px;
+  }
+  .welcome-section h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .welcome-section p {
+    color: #8b949e;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-brand">
+    <h1><span class="m-icon" data-lucide="zap" style="color:#f78166"></span> Sear</h1>
+    <span class="badge">DASHBOARD</span>
+  </div>
+  <nav id="main-nav">
+  </nav>
+  <div class="header-right">
+    <button onclick="logout()">Sign out</button>
+  </div>
+</header>
+<div class="container">
+  <div class="welcome-section">
+    <h2>Welcome to Sear</h2>
+    <p>Simplified Execution and Artifact Repository. Manage your infrastructure with ease.</p>
+  </div>
+
+  <div class="dashboard-grid">
+    <a href="/ui/clients" class="stat-card">
+      <div class="stat-header">
+        <div class="stat-icon" data-lucide="monitor"></div>
+        <div class="stat-label">Connected Clients</div>
+      </div>
+      <div class="stat-value" id="count-clients">-</div>
+      <div class="stat-label">Active nodes in your fleet</div>
+    </a>
+
+    <a href="/ui/playbooks" class="stat-card">
+      <div class="stat-header">
+        <div class="stat-icon" data-lucide="book-open"></div>
+        <div class="stat-label">Playbooks</div>
+      </div>
+      <div class="stat-value" id="count-playbooks">-</div>
+      <div class="stat-label">Automation blueprints</div>
+    </a>
+
+    <a href="/ui/deployments" class="stat-card">
+      <div class="stat-header">
+        <div class="stat-icon" data-lucide="rocket"></div>
+        <div class="stat-label">Ongoing Deployments</div>
+      </div>
+      <div class="stat-value" id="count-deployments">-</div>
+      <div class="stat-label">Real-time execution status</div>
+    </a>
+
+    <a href="/ui/artifacts" class="stat-card">
+      <div class="stat-header">
+        <div class="stat-icon" data-lucide="package"></div>
+        <div class="stat-label">Artifacts</div>
+      </div>
+      <div class="stat-value" id="count-artifacts">-</div>
+      <div class="stat-label">Static files and binaries</div>
+    </a>
+  </div>
+</div>
+
+<script src="/ui/assets/layout.js"></script>
+<script>
+// Build common navigation
+const nav = document.getElementById('main-nav');
+nav.innerHTML = `
+  <a href="/ui" class="active">Home</a>
+  <a href="/ui/clients">Clients</a>
+  <a href="/ui/secrets">Secrets</a>
+  <a href="/ui/playbooks">Playbooks</a>
+  <a href="/ui/deployments">Deployments</a>
+  <a href="/ui/artifacts">Artifacts</a>
+`;
+
+async function loadCounts() {
+  const h = headersAuth();
+  
+  // Fetch status (clients + deployments)
+  try {
+    const resStatus = await fetch('/api/v1/status', { headers: h });
+    if (resStatus.ok) {
+      const data = await resStatus.json();
+      document.getElementById('count-clients').textContent = (data.clients || []).length;
+      document.getElementById('count-deployments').textContent = (data.deployments || []).filter(d => d.status === 'running').length;
+    }
+  } catch (e) {
+    console.error('Failed to load status', e);
+  }
+
+  // Fetch playbooks
+  try {
+    const resPb = await fetch('/api/v1/playbooks', { headers: h });
+    if (resPb.ok) {
+      const data = await resPb.json();
+      document.getElementById('count-playbooks').textContent = (data || []).length;
+    }
+  } catch (e) {
+    console.error('Failed to load playbooks', e);
+  }
+
+  // Fetch artifacts
+  try {
+    const resArt = await fetch('/artifacts', { headers: h }); // This is the list artifacts endpoint
+    if (resArt.ok) {
+      const data = await resArt.json();
+      document.getElementById('count-artifacts').textContent = (data || []).length;
+    }
+  } catch (e) {
+    console.error('Failed to load artifacts', e);
+  }
+}
+
+initLogin('/api/v1/status', loadCounts);
+</script>
+</body>
+</html>

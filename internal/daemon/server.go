@@ -35,8 +35,9 @@ func NewServer(env *handlers.Env) http.Handler {
 
 	// HTML UI pages are served without Basic auth; in-page JS handles auth for API calls.
 	mux.Handle("/ui/assets/", http.HandlerFunc(handlers.ServeUIAsset))
-	mux.Handle("/ui", http.HandlerFunc(env.HandleStatusUI))
-	mux.Handle("/ui/", http.HandlerFunc(env.HandleStatusUI))
+	mux.Handle("/ui", http.HandlerFunc(env.HandleHomeUI))
+	mux.Handle("/ui/", http.HandlerFunc(env.HandleHomeUI))
+	mux.Handle("/ui/clients", http.HandlerFunc(env.HandleStatusUI))
 	mux.Handle("/ui/secrets", http.HandlerFunc(env.HandleSecretsUI))
 	mux.Handle("/ui/playbooks", http.HandlerFunc(env.HandlePlaybooksUI))
 	mux.Handle("/ui/deployments", http.HandlerFunc(env.HandleDeploymentsUI))
