@@ -1139,6 +1139,60 @@ func TestHandleArtifacts_AccessPolicy(t *testing.T) {
 	})
 }
 
+func TestHandleArtifacts_ModifyPolicy(t *testing.T) {
+	env := newTestEnv(t)
+	_, token := registerClient(t, env, "client-1", "host-1")
+
+	// 1. Upload Authenticated Artifact
+	req := httptest.NewRequest(http.MethodPost, "/artifacts?name=mod.bin&access_policy=authenticated", bytes.NewBufferString("content"))
+	req.SetBasicAuth("root", env.RootPassword)
+	rr := httptest.NewRecorder()
+	env.HandleArtifacts(rr, req)
+	art := decode[common.Artifact](t, rr)
+
+	// 2. Verify it's authenticated (cannot download without auth)
+	dlReq := httptest.NewRequest(http.MethodGet, "/artifacts/"+art.ID, nil)
+	dlRR := httptest.NewRecorder()
+	env.HandleArtifacts(dlRR, dlReq)
+	if dlRR.Code != http.StatusUnauthorized {
+		t.Fatalf("initial dl: status=%d; want 401", dlRR.Code)
+	}
+
+	// 3. Modify to Public
+	modReq := httptest.NewRequest(http.MethodPatch, "/artifacts/"+art.ID+"?access_policy=public", nil)
+	modReq.SetBasicAuth("root", env.RootPassword)
+	modRR := httptest.NewRecorder()
+	env.HandleArtifacts(modRR, modReq)
+	if modRR.Code != http.StatusOK {
+		t.Fatalf("patch status=%d; body=%s", modRR.Code, modRR.Body.String())
+	}
+
+	// 4. Verify it's now public
+	pubRR := httptest.NewRecorder()
+	env.HandleArtifacts(pubRR, dlReq) // reused dlReq
+	if pubRR.Code != http.StatusOK {
+		t.Fatalf("after patch dl: status=%d; want 200", pubRR.Code)
+	}
+
+	// 5. Modify to Restricted for client-2
+	modReq2 := httptest.NewRequest(http.MethodPatch, "/artifacts/"+art.ID+"?access_policy=restricted&allowed_clients=client-2", nil)
+	modReq2.SetBasicAuth("root", env.RootPassword)
+	modRR2 := httptest.NewRecorder()
+	env.HandleArtifacts(modRR2, modReq2)
+	if modRR2.Code != http.StatusOK {
+		t.Fatalf("patch2 status=%d", modRR2.Code)
+	}
+
+	// 6. Verify client-1 (from token) cannot download it
+	c1Req := httptest.NewRequest(http.MethodGet, "/artifacts/"+art.ID, nil)
+	c1Req.Header.Set("Authorization", "Bearer "+token)
+	c1RR := httptest.NewRecorder()
+	env.HandleArtifacts(c1RR, c1Req)
+	if c1RR.Code != http.StatusForbidden {
+		t.Fatalf("restricted c1: status=%d; want 403", c1RR.Code)
+	}
+}
+
 // ── Cross-client security ─────────────────────────────────────────────────────
 
 func TestCrossClientDeploymentForbidden(t *testing.T) {

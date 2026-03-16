@@ -76,8 +76,8 @@ function render(){
       '<div class="card-top-right"><div class="card-menu">'+
         '<button class="menu-btn" title="Actions">⋮</button>'+
         '<div class="menu-dropdown">'+
-          '<button class="menu-item" onclick="openLogs(\''+esc(d.id)+'\')">Logs</button>'+
-          '<button class="menu-item danger" onclick="removeDeployment(\''+esc(d.id)+'\')">✕ Remove</button>'+
+          '<button class="menu-item" onclick="openLogs(\''+esc(d.id)+'\')"><span class="m-icon">📜</span> View Logs</button>'+
+          '<button class="menu-item" onclick="removeDeployment(\''+esc(d.id)+'\')"><span class="m-icon">🗑️</span> Remove Deployment</button>'+
         '</div>'+
       '</div></div>'+
     '</div>';

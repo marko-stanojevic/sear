@@ -177,6 +177,51 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusCreated, art)
 
+	case http.MethodPatch:
+		// Update metadata requires authentication (root or any client)
+		_, _, isRoot := r.BasicAuth()
+		if !isRoot {
+			if _, err := e.clientIDFromToken(r); err != nil {
+				writeError(w, http.StatusUnauthorized, "authentication required to modify artifacts")
+				return
+			}
+		}
+		if id == "" {
+			writeError(w, http.StatusBadRequest, "artifact ID required in path")
+			return
+		}
+		a, ok := e.Store.GetArtifact(id)
+		if !ok {
+			writeError(w, http.StatusNotFound, "artifact not found")
+			return
+		}
+
+		policy := r.URL.Query().Get("access_policy")
+		allowedClients := r.URL.Query().Get("allowed_clients")
+
+		if policy != "" {
+			a.AccessPolicy = common.AccessPolicy(policy)
+		}
+		if allowedClients != "" {
+			clients := strings.Split(allowedClients, ",")
+			var filtered []string
+			for _, c := range clients {
+				c = strings.TrimSpace(c)
+				if c != "" {
+					filtered = append(filtered, c)
+				}
+			}
+			a.AllowedClients = filtered
+		} else if r.URL.Query().Has("allowed_clients") {
+			a.AllowedClients = nil
+		}
+
+		if err := e.Store.SaveArtifact(a); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to update artifact: "+err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+
 	case http.MethodDelete:
 		// Delete requires authentication (root or any client)
 		_, _, isRoot := r.BasicAuth()

@@ -106,7 +106,7 @@ function render() {
 			'<div class="card-top-right"><div class="card-menu">' +
 				'<button class="menu-btn" title="Actions">⋮</button>' +
 				'<div class="menu-dropdown">' +
-					'<button class="menu-item danger" onclick="removeClient(\'' + esc(c.id) + '\', \'' + esc(c.hostname || c.id) + '\')">✕ Remove client</button>' +
+					'<button class="menu-item" onclick="removeClient(\'' + esc(c.id) + '\', \'' + esc(c.hostname || c.id) + '\')"><span class="m-icon">🗑️</span> Remove Client</button>' +
 				'</div>' +
 			'</div></div>' +
 		'</div>';
