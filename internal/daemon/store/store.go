@@ -304,6 +304,24 @@ func (s *Store) ListDeployments() []*common.DeploymentState {
 	return out
 }
 
+func (s *Store) DeleteDeployment(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.deployments, id)
+
+	// Clean up log file
+	path := s.logPath(id)
+	_ = os.Remove(path)
+	_ = os.Remove(path + ".tmp")
+
+	// Clean up mutex
+	s.logMutexesMu.Lock()
+	delete(s.logMutexes, id)
+	s.logMutexesMu.Unlock()
+
+	return s.save()
+}
+
 // ── Playbooks ─────────────────────────────────────────────────────────────────
 
 func (s *Store) SavePlaybook(p *PlaybookRecord) error {

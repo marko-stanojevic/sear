@@ -16,6 +16,7 @@ type Store interface {
 	GetDeployment(id string) (*common.DeploymentState, bool)
 	GetActiveDeploymentForClient(clientID string) (*common.DeploymentState, bool)
 	ListDeployments() []*common.DeploymentState
+	DeleteDeployment(id string) error
 
 	SavePlaybook(p *store.PlaybookRecord) error
 	GetPlaybook(id string) (*store.PlaybookRecord, bool)

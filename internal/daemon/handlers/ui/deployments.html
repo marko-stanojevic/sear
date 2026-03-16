@@ -72,22 +72,46 @@ function render(){
       '<div>'+rowStatus(d.status)+'</div>'+
       '<div>'+esc(upd)+'</div>'+
       '<div>'+esc(finished)+'</div>'+
-      '<div><button class="logs-btn" data-id="'+encodeURIComponent(String(d.id||''))+'">Logs</button></div>'+
+      '<div class="card-top-right"><div class="card-menu">'+
+        '<button class="menu-btn" title="Actions">⋮</button>'+
+        '<div class="menu-dropdown">'+
+          '<button class="menu-item" onclick="openLogs(\''+esc(d.id)+'\')">Logs</button>'+
+          '<button class="menu-item danger" onclick="removeDeployment(\''+esc(d.id)+'\')">✕ Remove</button>'+
+        '</div>'+
+      '</div></div>'+
     '</div>';
   }).join('');
   root.innerHTML='<div class="list list-deployments">'+
     '<div class="list-head"><div>Deployment</div><div>Client</div><div>Playbook</div><div>Status</div><div>Updated</div><div>Finished</div><div></div></div>'+
     rows+
   '</div>';
-  var buttons=root.querySelectorAll('.logs-btn');
-  buttons.forEach(function(btn){
-    btn.addEventListener('click',function(){
-      var encodedId=btn.getAttribute('data-id')||'';
-      var id='';
-      try{id=decodeURIComponent(encodedId);}catch(e){id=encodedId;}
-      openLogs(id);
+  // Click outside to close menus
+  document.addEventListener('click', function(e) {
+    if (!e.target.classList.contains('menu-btn')) {
+      document.querySelectorAll('.menu-dropdown.open').forEach(d => d.classList.remove('open'));
+    }
+  });
+
+  // Toggle menus
+  root.querySelectorAll('.menu-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const menu = this.nextElementSibling;
+      const isOpen = menu.classList.contains('open');
+      document.querySelectorAll('.menu-dropdown.open').forEach(d => d.classList.remove('open'));
+      if (!isOpen) menu.classList.add('open');
     });
   });
+}
+
+async function removeDeployment(id) {
+  if (!confirm('Remove deployment "' + id + '"?\nThis will remove it from state and delete its logs.')) return;
+  const auth = (typeof authHeader === 'function') ? authHeader() : null;
+  const h = {}; if (auth) h['Authorization'] = auth;
+  const r = await fetch('/api/v1/deployments/' + encodeURIComponent(id), { method: 'DELETE', headers: h });
+  if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
+  if (!r.ok) { alert('Delete failed: ' + r.status); return; }
+  load();
 }
 
 async function openLogs(id){
