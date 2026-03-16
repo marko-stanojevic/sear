@@ -40,6 +40,8 @@ func NewServer(env *handlers.Env) http.Handler {
 	mux.Handle("/ui/secrets", http.HandlerFunc(env.HandleSecretsUI))
 	mux.Handle("/ui/playbooks", http.HandlerFunc(env.HandlePlaybooksUI))
 	mux.Handle("/ui/deployments", http.HandlerFunc(env.HandleDeploymentsUI))
+	mux.Handle("/ui/artifacts", http.HandlerFunc(env.HandleArtifactsUI))
+	mux.Handle("/ui/artifacts/", http.HandlerFunc(env.HandleArtifactsUI))
 
 	mux.Handle("/api/v1/playbooks", root(http.HandlerFunc(env.HandleRootPlaybooks)))
 	mux.Handle("/api/v1/playbooks/", root(http.HandlerFunc(env.HandleRootPlaybooks)))
@@ -51,9 +53,9 @@ func NewServer(env *handlers.Env) http.Handler {
 	mux.Handle("/api/v1/deployments/", root(http.HandlerFunc(env.HandleRootDeployments)))
 
 	// Artifacts are accessible by both clients (JWT) and root (Basic auth).
-	// We use a dual-auth wrapper that accepts either credential type.
-	mux.Handle("/artifacts", dualAuth(env, http.HandlerFunc(env.HandleArtifacts)))
-	mux.Handle("/artifacts/", dualAuth(env, http.HandlerFunc(env.HandleArtifacts)))
+	// We now handle granular access (Public/Restricted) inside HandleArtifacts.
+	mux.HandleFunc("/artifacts", env.HandleArtifacts)
+	mux.HandleFunc("/artifacts/", env.HandleArtifacts)
 
 	mux.Handle("/api/v1/secrets", root(http.HandlerFunc(env.HandleSecrets)))
 	mux.Handle("/api/v1/secrets/", root(http.HandlerFunc(env.HandleSecrets)))

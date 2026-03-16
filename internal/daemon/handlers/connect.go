@@ -58,7 +58,7 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 
 	// Push playbook immediately if one is assigned.
 	if e.Service != nil {
-		e.Service.PushPlaybookIfAssigned(clientID)
+		e.Service.PushPlaybookIfAssigned(clientID, false)
 	}
 
 	// Read loop.

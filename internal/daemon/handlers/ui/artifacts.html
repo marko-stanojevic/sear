@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sear - Artifacts</title>
+  <link rel="stylesheet" href="/ui/assets/style.css">
+</head>
+<body>
+<header>
+  <div class="header-brand"><h1>&#x26A1; Sear Daemon</h1></div>
+  <nav>
+    <a href="/ui">Clients</a>
+    <a href="/ui/secrets">Secrets</a>
+    <a href="/ui/playbooks">Playbooks</a>
+    <a href="/ui/deployments">Deployments</a>
+    <a href="/ui/artifacts" class="active">Artifacts</a>
+  </nav>
+  <div class="header-search">
+    <input id="f-query" type="text" placeholder="Search artifacts..." autocomplete="off">
+    <button id="f-clear" class="btn-clear btn-muted" onclick="clearSearch()" title="Clear search">✕</button>
+  </div>
+  <div class="header-right"><button onclick="logout()">Sign out</button></div>
+</header>
+<div class="container">
+  <div class="meta">
+    <span id="counts">Loading...</span>
+    <span class="spacer"></span>
+    <button class="btn-add" onclick="showUploadModal()">+ Add artifact</button>
+    <button onclick="load()">Refresh</button>
+  </div>
+  <div id="root"></div>
+</div>
+
+<!-- Upload Modal -->
+<div id="upload-modal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modal-title">Add artifact</h2>
+      <button class="btn-icon" onclick="hideUploadModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>File Name (optional)</label>
+        <input id="artifact-name" type="text" placeholder="Artifact name (defaults to filename)">
+      </div>
+      <div class="form-group">
+        <label>File</label>
+        <input id="artifact-file" type="file">
+      </div>
+      <div class="form-group">
+        <label>Access Policy</label>
+        <select id="artifact-policy" onchange="toggleRestrictedUI()">
+          <option value="authenticated">Authenticated (all clients)</option>
+          <option value="public">Public (unauthenticated)</option>
+          <option value="restricted">Restricted (selected clients only)</option>
+        </select>
+      </div>
+      <div id="restricted-ui" class="form-group" style="display:none">
+        <label>Allowed Client IDs (comma separated)</label>
+        <input id="artifact-clients" type="text" placeholder="client-uuid-1, client-uuid-2">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-muted" onclick="hideUploadModal()">Cancel</button>
+      <button class="btn-add" id="btn-save" onclick="uploadArtifact()">Add</button>
+    </div>
+  </div>
+</div>
+
+<script src="/ui/assets/layout.js"></script>
+<script>
+var artifacts = [];
+
+function clearSearch() { document.getElementById('f-query').value = ''; updateClearBtn(); render(); }
+function updateClearBtn() {
+  var q = document.getElementById('f-query').value;
+  document.getElementById('f-clear').classList.toggle('show', !!q);
+}
+
+function filtered() {
+  var q = (document.getElementById('f-query').value || '').trim().toLowerCase();
+  return artifacts.filter(function(a) {
+    var hay = (a.id || '') + ' ' + (a.name || '') + ' ' + (a.filename || '');
+    return !q || hay.toLowerCase().indexOf(q) !== -1;
+  });
+}
+
+function render() {
+  var root = document.getElementById('root');
+  if (!artifacts.length) {
+    root.innerHTML = '<div class="empty">No artifacts found.</div>';
+    document.getElementById('counts').textContent = 'Artifacts: 0';
+    return;
+  }
+  var rowsData = filtered();
+  document.getElementById('counts').textContent = 'Shown: ' + rowsData.length + ' / ' + artifacts.length;
+  if (!rowsData.length) {
+    root.innerHTML = '<div class="empty">No artifacts match your search.</div>';
+    return;
+  }
+
+  var rows = rowsData.map(function(a) {
+    var size = (a.size / 1024).toFixed(1) + ' KB';
+    if (a.size > 1024 * 1024) size = (a.size / (1024 * 1024)).toFixed(1) + ' MB';
+    var upd = a.uploaded_at ? new Date(a.uploaded_at).toLocaleString() : '-';
+    var policy = a.access_policy || 'authenticated';
+    var policyLabel = '<span class="badge badge-muted">Authenticated</span>';
+    if (policy === 'public') policyLabel = '<span class="badge badge-success">Public</span>';
+    if (policy === 'restricted') policyLabel = '<span class="badge badge-warning" title="' + esc(a.allowed_clients ? a.allowed_clients.join(', ') : '') + '">Restricted</span>';
+
+    return '<div class="list-row">' +
+      '<div class="cell-main"><strong>' + esc(a.name) + '</strong><div class="mono">' + esc(a.id) + '</div></div>' +
+      '<div class="mono">' + esc(a.filename) + '</div>' +
+      '<div>' + esc(size) + '</div>' +
+      '<div>' + policyLabel + '</div>' +
+      '<div>' + esc(upd) + '</div>' +
+      '<div class="card-top-right"><div class="card-menu">' +
+        '<button class="menu-btn" title="Actions">⋮</button>' +
+        '<div class="menu-dropdown">' +
+          '<a class="menu-item" href="/artifacts/' + encodeURIComponent(a.id) + '" download="' + esc(a.filename) + '">Download</a>' +
+          '<button class="menu-item danger" onclick="removeArtifact(\'' + esc(a.id) + '\')">✕ Remove</button>' +
+        '</div>' +
+      '</div></div>' +
+    '</div>';
+  }).join('');
+
+  root.innerHTML = '<div class="list list-artifacts">' +
+    '<div class="list-head"><div>Artifact</div><div>Filename</div><div>Size</div><div>Access Policy</div><div>Uploaded</div><div></div></div>' +
+    rows +
+    '</div>';
+
+  // Toggle menus
+  root.querySelectorAll('.menu-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const menu = this.nextElementSibling;
+      const isOpen = menu.classList.contains('open');
+      document.querySelectorAll('.menu-dropdown.open').forEach(d => d.classList.remove('open'));
+      if (!isOpen) menu.classList.add('open');
+    });
+  });
+}
+
+async function load() {
+  var r = await fetch('/artifacts', { headers: headersAuth() });
+  if (r.status === 401) { showLogin(''); return; }
+  if (!r.ok) { document.getElementById('root').innerHTML = '<div class="empty">Failed to load artifacts.</div>'; return; }
+  artifacts = await r.json() || [];
+  artifacts.sort((a, b) => new Date(b.uploaded_at || 0) - new Date(a.uploaded_at || 0));
+  render();
+  updateClearBtn();
+}
+
+function showUploadModal() {
+  document.getElementById('artifact-name').value = '';
+  document.getElementById('artifact-file').value = '';
+  document.getElementById('artifact-policy').value = 'authenticated';
+  document.getElementById('artifact-clients').value = '';
+  document.getElementById('restricted-ui').style.display = 'none';
+  document.getElementById('upload-modal').style.display = 'flex';
+}
+function hideUploadModal() { document.getElementById('upload-modal').style.display = 'none'; }
+
+function toggleRestrictedUI() {
+  var policy = document.getElementById('artifact-policy').value;
+  document.getElementById('restricted-ui').style.display = (policy === 'restricted' ? 'block' : 'none');
+}
+
+async function uploadArtifact() {
+  var fileInput = document.getElementById('artifact-file');
+  if (!fileInput.files.length) { alert('Please select a file'); return; }
+  var file = fileInput.files[0];
+  var name = document.getElementById('artifact-name').value.trim();
+  var filename = file.name;
+
+  var btn = document.getElementById('btn-save');
+  btn.disabled = true;
+  btn.textContent = 'Uploading...';
+
+  try {
+    var h = headersAuth();
+    var policy = document.getElementById('artifact-policy').value;
+    var clients = document.getElementById('artifact-clients').value.trim();
+
+    // Raw body upload as expected by HandleArtifacts
+    var params = '?filename=' + encodeURIComponent(filename);
+    if (name) params += '&name=' + encodeURIComponent(name);
+    params += '&access_policy=' + encodeURIComponent(policy);
+    if (policy === 'restricted' && clients) {
+        params += '&allowed_clients=' + encodeURIComponent(clients);
+    }
+
+    var r = await fetch('/artifacts' + params, {
+      method: 'POST',
+      headers: h,
+      body: file
+    });
+    if (r.status === 401) { showLogin('Session expired - sign in again'); return; }
+    if (!r.ok) { alert('Upload failed: ' + r.status); return; }
+    hideUploadModal();
+    load();
+  } catch (e) {
+    alert('Upload error: ' + e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Upload';
+  }
+}
+
+async function removeArtifact(id) {
+  if (!confirm('Delete artifact?')) return;
+  var r = await fetch('/artifacts/' + encodeURIComponent(id), {
+    method: 'DELETE',
+    headers: headersAuth()
+  });
+  if (r.status === 401) { showLogin('Session expired - sign in again'); return; }
+  if (!r.ok) { alert('Delete failed: ' + r.status); return; }
+  load();
+}
+
+// Click outside to close menus
+document.addEventListener('click', function(e) {
+  if (!e.target.classList.contains('menu-btn')) {
+    document.querySelectorAll('.menu-dropdown.open').forEach(d => d.classList.remove('open'));
+  }
+});
+
+document.getElementById('f-query').addEventListener('input', function() { render(); updateClearBtn(); });
+initLogin('/api/v1/status', load);
+</script>
+</body>
+</html>

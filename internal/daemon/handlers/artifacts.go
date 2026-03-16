@@ -36,6 +36,14 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if id == "" {
+			// Listing requires authentication (root or any client)
+			_, _, isRoot := r.BasicAuth()
+			if !isRoot {
+				if _, err := e.clientIDFromToken(r); err != nil {
+					writeError(w, http.StatusUnauthorized, "authentication required to list artifacts")
+					return
+				}
+			}
 			writeJSON(w, http.StatusOK, e.Store.ListArtifacts())
 			return
 		}
@@ -57,6 +65,34 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+
+		// Enforce Access Policy
+		if a.AccessPolicy != common.AccessPublic {
+			// Check for root auth first
+			_, _, isRoot := r.BasicAuth()
+			if !isRoot {
+				// Check for client auth
+				clientID, err := e.clientIDFromToken(r)
+				if err != nil {
+					writeError(w, http.StatusUnauthorized, "authenticated access required")
+					return
+				}
+				if a.AccessPolicy == common.AccessRestricted {
+					allowed := false
+					for _, cid := range a.AllowedClients {
+						if cid == clientID {
+							allowed = true
+							break
+						}
+					}
+					if !allowed {
+						writeError(w, http.StatusForbidden, "access to this artifact is restricted")
+						return
+					}
+				}
+			}
+		}
+
 		filePath := filepath.Join(e.ArtifactsDir, a.ID, a.Filename)
 		f, err := os.Open(filePath)
 		if err != nil {
@@ -73,11 +109,26 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		http.ServeContent(w, r, a.Filename, time.Now(), f)
 
 	case http.MethodPost:
-		name := r.URL.Query().Get("name")
-		if name == "" {
-			writeError(w, http.StatusBadRequest, "'name' query parameter is required")
-			return
+		// Upload requires authentication (root or any client)
+		_, _, isRoot := r.BasicAuth()
+		if !isRoot {
+			if _, err := e.clientIDFromToken(r); err != nil {
+				writeError(w, http.StatusUnauthorized, "authentication required to upload artifacts")
+				return
+			}
 		}
+		   name := r.URL.Query().Get("name")
+		   filename := r.URL.Query().Get("filename")
+		   if filename == "" {
+			   filename = name
+		   }
+		   if name == "" {
+			   name = filename // fallback: if no user-supplied name, use filename
+		   }
+		   if filename == "" {
+			   writeError(w, http.StatusBadRequest, "'filename' query parameter is required")
+			   return
+		   }
 		ct := r.Header.Get("Content-Type")
 		if ct == "" {
 			ct = "application/octet-stream"
@@ -88,7 +139,7 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to create artifact directory")
 			return
 		}
-		destPath := filepath.Join(artDir, name)
+		destPath := filepath.Join(artDir, filename)
 		f, err := os.Create(destPath)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to create artifact file")
@@ -105,12 +156,20 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		art := &common.Artifact{
-			ID:          artID,
-			Name:        name,
-			Filename:    name,
-			Size:        size,
-			ContentType: ct,
-			UploadedAt:  time.Now(),
+			ID:             artID,
+			Name:           name,
+			Filename:       filename,
+			Size:           size,
+			ContentType:    ct,
+			AccessPolicy:   common.AccessPolicy(r.URL.Query().Get("access_policy")),
+			AllowedClients: strings.Split(r.URL.Query().Get("allowed_clients"), ","),
+			UploadedAt:     time.Now(),
+		}
+		if art.AccessPolicy == "" {
+			art.AccessPolicy = common.AccessAuthenticated // default
+		}
+		if len(art.AllowedClients) == 1 && art.AllowedClients[0] == "" {
+			art.AllowedClients = nil
 		}
 		if err := e.Store.SaveArtifact(art); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to save artifact metadata")
@@ -119,6 +178,14 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, art)
 
 	case http.MethodDelete:
+		// Delete requires authentication (root or any client)
+		_, _, isRoot := r.BasicAuth()
+		if !isRoot {
+			if _, err := e.clientIDFromToken(r); err != nil {
+				writeError(w, http.StatusUnauthorized, "authentication required to delete artifacts")
+				return
+			}
+		}
 		if id == "" {
 			writeError(w, http.StatusBadRequest, "artifact ID required in path")
 			return

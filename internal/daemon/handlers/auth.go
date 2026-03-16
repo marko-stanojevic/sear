@@ -42,7 +42,7 @@ func (e *Env) clientIDFromToken(r *http.Request) (string, error) {
 		// cannot set headers during the handshake).
 		token := r.URL.Query().Get("token")
 		if token == "" {
-			return "", fmt.Errorf("missing bearer token")
+			return "", fmt.Errorf("authentication token is missing or invalid")
 		}
 		return e.parseToken(token)
 	}

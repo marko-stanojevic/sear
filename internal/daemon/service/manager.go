@@ -42,13 +42,14 @@ func (m *Manager) AssignPlaybookToClient(playbookID, clientID string) error {
 		return fmt.Errorf("failed to save client: %w", err)
 	}
 	if m.Hub.IsConnected(clientID) {
-		m.PushPlaybookIfAssigned(clientID)
+		m.PushPlaybookIfAssigned(clientID, true)
 	}
 	return nil
 }
 
 // PushPlaybookIfAssigned sends an assigned playbook to a connected client.
-func (m *Manager) PushPlaybookIfAssigned(clientID string) {
+// If force is false, it skips if the latest deployment for this playbook is already Done.
+func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
 	client, ok := m.Store.GetClient(clientID)
 	if !ok || client.PlaybookID == "" {
 		return
@@ -63,10 +64,18 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string) {
 	var deploymentID string
 	resumeStep := 0
 
-	if hasDep &&
-		(dep.Status == common.DeploymentStatusPending ||
-			dep.Status == common.DeploymentStatusRunning ||
-			dep.Status == common.DeploymentStatusRebooting) {
+	// Logic check:
+	// 1. If latest deployment is for a DIFFERENT playbook, always start new.
+	// 2. If latest deployment is for the SAME playbook:
+	//    - If Running/Rebooting: resume (ignore force).
+	//    - If Done/Failed: start new if force, otherwise skip.
+
+	isSamePlaybook := hasDep && dep.PlaybookID == client.PlaybookID
+
+	if isSamePlaybook && (dep.Status == common.DeploymentStatusPending ||
+		dep.Status == common.DeploymentStatusRunning ||
+		dep.Status == common.DeploymentStatusRebooting) {
+		// Resume existing
 		deploymentID = dep.ID
 		resumeStep = dep.ResumeStepIndex
 		dep.Status = common.DeploymentStatusRunning
@@ -75,9 +84,8 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string) {
 			fmt.Printf("failed to save deployment %s for client %s: %v\n", dep.ID, clientID, err)
 			return
 		}
-	} else if !hasDep ||
-		dep.Status == common.DeploymentStatusDone ||
-		dep.Status == common.DeploymentStatusFailed {
+	} else if !isSamePlaybook || force {
+		// Start new deployment
 		deploymentID = uuid.New().String()
 		newDep := &common.DeploymentState{
 			ID:              deploymentID,
@@ -93,6 +101,9 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string) {
 			return
 		}
 	} else {
+		// !force and (Done/Failed) and same playbook -> Skip
+		m.AppendDeploymentLog(dep.ID, "", 0, common.LogLevelInfo,
+			fmt.Sprintf("skipping playbook %q: already in status %q and force=false", pb.Name, dep.Status))
 		return
 	}
 

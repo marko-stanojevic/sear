@@ -33,6 +33,7 @@ nav a.active{color:#e6edf3;border-bottom-color:#f78166}
 
 /* Page-specific Grid Layouts */
 .list-deployments .list-head, .list-deployments .list-row { display: grid; grid-template-columns: 1fr 1fr 1fr 120px 150px 150px 46px; gap: 12px; align-items: center; padding: 12px 16px; }
+.list-artifacts .list-head, .list-artifacts .list-row { display: grid; grid-template-columns: 1.4fr 1fr 0.8fr 1.1fr 1.2fr 46px; gap: 12px; align-items: center; padding: 10px 14px; }
 .list-playbooks .list-head, .list-playbooks .list-row { display: grid; grid-template-columns: 1.2fr 1.6fr .6fr .6fr .9fr 46px; gap: 12px; align-items: center; padding: 10px 12px; }
 .list-secrets .list-head, .list-secrets .list-row { display: grid; grid-template-columns: 1fr 1.8fr 46px; gap: 12px; align-items: center; padding: 10px 14px; }
 .list-clients .list-head, .list-clients .list-row { display: grid; grid-template-columns: 1.2fr 1fr .7fr .9fr .9fr .8fr .8fr 1fr 46px; gap: 10px; align-items: center; padding: 10px 12px; }
