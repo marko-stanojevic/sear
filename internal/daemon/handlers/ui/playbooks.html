@@ -8,7 +8,7 @@
 <body>
 <div id="pb-modal-bg" class="modal-bg">
   <div class="modal">
-    <h3 id="pb-modal-title">Create Playbook</h3>
+    <h3 id="pb-modal-title">Add playbook</h3>
     <label>Name</label>
     <input id="pb-name" type="text" placeholder="Deploy app" spellcheck="false">
     <label>Description</label>
@@ -18,7 +18,7 @@
     <div class="modal-err" id="pb-modal-err"></div>
     <div class="modal-actions">
       <button onclick="closePBModal()">Cancel</button>
-      <button class="btn-add" onclick="savePlaybook()">Save</button>
+      <button class="btn-add" onclick="savePlaybook()">Add</button>
     </div>
   </div>
 </div>
@@ -43,6 +43,7 @@
     <a href="/ui/secrets">Secrets</a>
     <a href="/ui/playbooks" class="active">Playbooks</a>
     <a href="/ui/deployments">Deployments</a>
+    <a href="/ui/artifacts">Artifacts</a>
   </nav>
   <div class="header-search">
     <input id="f-query" type="text" placeholder="Search playbooks..." autocomplete="off">
@@ -55,7 +56,7 @@
     <span id="counts">Loading...</span>
     <span class="spacer"></span>
   <div class="filters">
-    <button class="btn-add" onclick="openCreate()">+ New Playbook</button>
+    <button class="btn-add" onclick="openCreate()">+ Add playbook</button>
     <button onclick="load()">Refresh</button>
   </div>
   </div>
@@ -82,7 +83,7 @@ var templatePlaybookYAML=[
 
 function openCreate(){
   editingID='';
-  document.getElementById('pb-modal-title').textContent='Create Playbook';
+  document.getElementById('pb-modal-title').textContent='Add playbook';
   document.getElementById('pb-name').value='';
   document.getElementById('pb-desc').value='';
   document.getElementById('pb-yaml').value=templatePlaybookYAML;

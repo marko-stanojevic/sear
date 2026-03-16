@@ -40,6 +40,8 @@ func NewServer(env *handlers.Env) http.Handler {
 	mux.Handle("/ui/secrets", http.HandlerFunc(env.HandleSecretsUI))
 	mux.Handle("/ui/playbooks", http.HandlerFunc(env.HandlePlaybooksUI))
 	mux.Handle("/ui/deployments", http.HandlerFunc(env.HandleDeploymentsUI))
+	mux.Handle("/ui/artifacts", http.HandlerFunc(env.HandleArtifactsUI))
+	mux.Handle("/ui/artifacts/", http.HandlerFunc(env.HandleArtifactsUI))
 
 	mux.Handle("/api/v1/playbooks", root(http.HandlerFunc(env.HandleRootPlaybooks)))
 	mux.Handle("/api/v1/playbooks/", root(http.HandlerFunc(env.HandleRootPlaybooks)))
