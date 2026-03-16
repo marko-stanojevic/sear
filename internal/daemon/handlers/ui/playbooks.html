@@ -44,14 +44,20 @@
     <a href="/ui/playbooks" class="active">Playbooks</a>
     <a href="/ui/deployments">Deployments</a>
   </nav>
+  <div class="header-search">
+    <input id="f-query" type="text" placeholder="Search playbooks..." autocomplete="off">
+    <button id="f-clear" class="btn-clear btn-muted" onclick="clearSearch()" title="Clear search">✕</button>
+  </div>
   <div class="header-right"><button onclick="logout()">Sign out</button></div>
 </header>
 <div class="container">
   <div class="meta">
     <span id="counts">Loading...</span>
     <span class="spacer"></span>
+  <div class="filters">
     <button class="btn-add" onclick="openCreate()">+ New Playbook</button>
     <button onclick="load()">Refresh</button>
+  </div>
   </div>
   <div id="root"></div>
 </div>
@@ -160,17 +166,40 @@ async function confirmAssign(){
   load();
 }
 
+function filteredPlaybooks() {
+  var q = (document.getElementById('f-query').value || '').trim().toLowerCase();
+  if (!q) return playbooks;
+  return playbooks.filter(function(pb) {
+    var hay = (pb.name || '') + ' ' + (pb.description || '') + ' ' + (pb.id || '');
+    return hay.toLowerCase().indexOf(q) !== -1;
+  });
+}
+
+function clearSearch() {
+  document.getElementById('f-query').value = '';
+  updateClearBtn();
+  render();
+}
+
 function render(){
   var root=document.getElementById('root');
-  document.getElementById('counts').textContent='Playbooks: '+playbooks.length;
+  var shown = filteredPlaybooks();
+  document.getElementById('counts').textContent='Shown: '+shown.length+' / '+playbooks.length;
   if(!playbooks.length){root.innerHTML='<div class="empty">No playbooks yet.</div>';return;}
-  var rows=playbooks.map(function(pb,i){
+  if(!shown.length){root.innerHTML='<div class="empty">No playbooks match your search.</div>';return;}
+  var rows=shown.map(function(pb){
+    var i = playbooks.indexOf(pb);
     var jobs=(pb.playbook && Array.isArray(pb.playbook.jobs))?pb.playbook.jobs.length:0;
+    var steps = 0;
+    if (pb.playbook && Array.isArray(pb.playbook.jobs)) {
+      pb.playbook.jobs.forEach(function(j) { if (Array.isArray(j.steps)) steps += j.steps.length; });
+    }
     var upd=pb.updated_at?new Date(pb.updated_at).toLocaleString():'-';
     return '<div class="list-row">'+
       '<div class="cell-main"><div class="name">'+esc(pb.name||'-')+'</div><div class="sub mono">'+esc(pb.id||'-')+'</div></div>'+
       '<div><span class="mobile-label">Description</span><span>'+esc(pb.description||'-')+'</span></div>'+
       '<div><span class="mobile-label">Jobs</span><span>'+jobs+'</span></div>'+
+      '<div><span class="mobile-label">Steps</span><span>'+steps+'</span></div>'+
       '<div><span class="mobile-label">Updated</span><span>'+esc(upd)+'</span></div>'+
       '<div class="card-top-right"><div class="card-menu">' +
         '<button class="menu-btn" title="Actions">⋮</button>' +
@@ -183,7 +212,7 @@ function render(){
     '</div>';
   }).join('');
   root.innerHTML='<div class="list list-playbooks">'+
-    '<div class="list-head"><div>Playbook</div><div>Description</div><div>Jobs</div><div>Updated</div><div></div></div>'+
+    '<div class="list-head"><div>Playbook</div><div>Description</div><div>Jobs</div><div>Steps</div><div>Updated</div><div></div></div>'+
     rows+
   '</div>';
 }
@@ -196,11 +225,17 @@ async function load(){
   clients=c.ok?await c.json():[];
   playbooks=await p.json()||[];
   render();
+  updateClearBtn();
+}
+function updateClearBtn() {
+  var q = document.getElementById('f-query').value;
+  document.getElementById('f-clear').classList.toggle('show', !!q);
 }
 
 document.getElementById('pb-modal-bg').addEventListener('click',function(e){if(e.target===this)closePBModal();});
 document.getElementById('assign-modal-bg').addEventListener('click',function(e){if(e.target===this)closeAssignModal();});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){closePBModal();closeAssignModal();}});
+document.getElementById('f-query').addEventListener('input', function(){render();updateClearBtn();});
 initLogin('/api/v1/playbooks', load);
 </script>
 </body>

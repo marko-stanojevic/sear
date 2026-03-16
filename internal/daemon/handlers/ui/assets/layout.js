@@ -97,3 +97,13 @@ document.addEventListener('click', function(e) {
   }
   document.querySelectorAll('.menu-dropdown.open').forEach(d => d.classList.remove('open'));
 });
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+    const q = document.getElementById('f-query');
+    if (q) {
+      e.preventDefault();
+      q.focus();
+    }
+  }
+});
