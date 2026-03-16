@@ -163,7 +163,7 @@ func TestPushPlaybookIfAssignedResumesActiveDeployment(t *testing.T) {
 		UpdatedAt:       now.Add(-time.Minute),
 	})
 
-	mgr.PushPlaybookIfAssigned("c1")
+	mgr.PushPlaybookIfAssigned("c1", false)
 
 	if len(hub.sent) != 1 {
 		t.Fatalf("sent messages = %d; want 1", len(hub.sent))
@@ -177,6 +177,41 @@ func TestPushPlaybookIfAssignedResumesActiveDeployment(t *testing.T) {
 	}
 	if data.ResumeStepIndex != 3 {
 		t.Fatalf("resume_step_index = %d; want 3", data.ResumeStepIndex)
+	}
+}
+
+func TestPushPlaybookIfAssignedSkipsCompleted(t *testing.T) {
+	mgr, st, hub := newTestManager(t)
+	saveClientAndPlaybook(t, st, "c1", "pb-1")
+
+	client, _ := st.GetClient("c1")
+	client.PlaybookID = "pb-1"
+	_ = st.SaveClient(client)
+
+	now := time.Now()
+	_ = st.SaveDeployment(&common.DeploymentState{
+		ID:         "dep-done",
+		ClientID:   "c1",
+		PlaybookID: "pb-1",
+		Status:     common.DeploymentStatusDone,
+		StartedAt:  now.Add(-time.Hour),
+		FinishedAt: &now,
+	})
+
+	// 1. Reconnect (force=false) -> Should skip
+	mgr.PushPlaybookIfAssigned("c1", false)
+	if len(hub.sent) != 0 {
+		t.Fatalf("sent messages = %d; want 0 (skipped)", len(hub.sent))
+	}
+
+	// 2. Manual re-run (force=true) -> Should start new
+	mgr.PushPlaybookIfAssigned("c1", true)
+	if len(hub.sent) != 1 {
+		t.Fatalf("sent messages = %d; want 1 (new deployment)", len(hub.sent))
+	}
+	data := hub.sent[0].msg.Data.(common.WSPlaybookData)
+	if data.DeploymentID == "dep-done" {
+		t.Fatal("expected new deployment ID, got the old one")
 	}
 }
 

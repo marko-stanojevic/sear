@@ -73,11 +73,18 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		http.ServeContent(w, r, a.Filename, time.Now(), f)
 
 	case http.MethodPost:
-		name := r.URL.Query().Get("name")
-		if name == "" {
-			writeError(w, http.StatusBadRequest, "'name' query parameter is required")
-			return
-		}
+		   name := r.URL.Query().Get("name")
+		   filename := r.URL.Query().Get("filename")
+		   if filename == "" {
+			   filename = name
+		   }
+		   if name == "" {
+			   name = filename // fallback: if no user-supplied name, use filename
+		   }
+		   if filename == "" {
+			   writeError(w, http.StatusBadRequest, "'filename' query parameter is required")
+			   return
+		   }
 		ct := r.Header.Get("Content-Type")
 		if ct == "" {
 			ct = "application/octet-stream"
@@ -88,7 +95,7 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to create artifact directory")
 			return
 		}
-		destPath := filepath.Join(artDir, name)
+		destPath := filepath.Join(artDir, filename)
 		f, err := os.Create(destPath)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to create artifact file")
@@ -104,14 +111,14 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to write artifact")
 			return
 		}
-		art := &common.Artifact{
-			ID:          artID,
-			Name:        name,
-			Filename:    name,
-			Size:        size,
-			ContentType: ct,
-			UploadedAt:  time.Now(),
-		}
+		   art := &common.Artifact{
+			   ID:          artID,
+			   Name:        name,
+			   Filename:    filename,
+			   Size:        size,
+			   ContentType: ct,
+			   UploadedAt:  time.Now(),
+		   }
 		if err := e.Store.SaveArtifact(art); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to save artifact metadata")
 			return

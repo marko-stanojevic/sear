@@ -95,6 +95,7 @@ function render() {
     
     return '<div class="list-row">' +
       '<div class="cell-main"><strong>' + esc(a.name) + '</strong><div class="mono">' + esc(a.id) + '</div></div>' +
+      '<div class="mono">' + esc(a.filename) + '</div>' +
       '<div>' + esc(size) + '</div>' +
       '<div>' + esc(upd) + '</div>' +
       '<div class="card-top-right"><div class="card-menu">' +
@@ -108,7 +109,7 @@ function render() {
   }).join('');
 
   root.innerHTML = '<div class="list list-artifacts">' +
-    '<div class="list-head"><div>Artifact</div><div>Size</div><div>Uploaded</div><div></div></div>' +
+    '<div class="list-head"><div>Artifact</div><div>Filename</div><div>Size</div><div>Uploaded</div><div></div></div>' +
     rows +
     '</div>';
 
@@ -145,7 +146,8 @@ async function uploadArtifact() {
   var fileInput = document.getElementById('artifact-file');
   if (!fileInput.files.length) { alert('Please select a file'); return; }
   var file = fileInput.files[0];
-  var name = document.getElementById('artifact-name').value.trim() || file.name;
+  var name = document.getElementById('artifact-name').value.trim();
+  var filename = file.name;
 
   var btn = document.getElementById('btn-save');
   btn.disabled = true;
@@ -154,7 +156,9 @@ async function uploadArtifact() {
   try {
     var h = headersAuth();
     // Raw body upload as expected by HandleArtifacts
-    var r = await fetch('/artifacts?name=' + encodeURIComponent(name), {
+    var params = '?filename=' + encodeURIComponent(filename);
+    if (name) params += '&name=' + encodeURIComponent(name);
+    var r = await fetch('/artifacts' + params, {
       method: 'POST',
       headers: h,
       body: file
