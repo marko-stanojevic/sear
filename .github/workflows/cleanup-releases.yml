@@ -1,0 +1,53 @@
+name: Cleanup Old Releases
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Every 24 hours at midnight
+  workflow_dispatch:   # Allow manual trigger
+
+jobs:
+  cleanup:
+    name: Prune Old Releases
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to delete releases and tags
+    steps:
+      - name: Delete old releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          echo "Fetching releases..."
+          # Get all non-draft release tags, sorted by date (newest first)
+          # We keep the list to 100 to avoid excessive processing, 
+          # but normally we only care about the top ones.
+          RELEASES=$(gh release list --limit 100 --json tagName,isDraft --jq '.[] | select(.isDraft == false) | .tagName')
+          
+          # Count them
+          COUNT=$(echo "$RELEASES" | grep -c . || echo 0)
+          echo "Found $COUNT non-draft releases."
+          
+          if [ "$COUNT" -gt 5 ]; then
+            # Get tags to process (everything starting from the 6th newest)
+            TO_CLEAN=$(echo "$RELEASES" | tail -n +6)
+            
+            echo "Pruning assets from older releases, keeping the 5 most recent..."
+            for TAG in $TO_CLEAN; do
+              echo "Processing release: $TAG"
+              # Get all asset IDs for this release
+              ASSETS=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+              
+              if [ -n "$ASSETS" ]; then
+                for ASSET in $ASSETS; do
+                  echo "  Deleting asset: $ASSET"
+                  gh release delete-asset "$TAG" "$ASSET" --yes
+                done
+              else
+                echo "  No assets found for $TAG."
+              fi
+            done
+            echo "Cleanup complete."
+          else
+            echo "Only $COUNT releases found. No cleanup needed (keeping up to 5)."
+          fi
