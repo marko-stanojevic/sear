@@ -53,9 +53,9 @@ func NewServer(env *handlers.Env) http.Handler {
 	mux.Handle("/api/v1/deployments/", root(http.HandlerFunc(env.HandleRootDeployments)))
 
 	// Artifacts are accessible by both clients (JWT) and root (Basic auth).
-	// We use a dual-auth wrapper that accepts either credential type.
-	mux.Handle("/artifacts", dualAuth(env, http.HandlerFunc(env.HandleArtifacts)))
-	mux.Handle("/artifacts/", dualAuth(env, http.HandlerFunc(env.HandleArtifacts)))
+	// We now handle granular access (Public/Restricted) inside HandleArtifacts.
+	mux.HandleFunc("/artifacts", env.HandleArtifacts)
+	mux.HandleFunc("/artifacts/", env.HandleArtifacts)
 
 	mux.Handle("/api/v1/secrets", root(http.HandlerFunc(env.HandleSecrets)))
 	mux.Handle("/api/v1/secrets/", root(http.HandlerFunc(env.HandleSecrets)))

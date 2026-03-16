@@ -931,6 +931,7 @@ func TestHandleArtifacts_UploadDownloadMetaDelete(t *testing.T) {
 	env := newTestEnv(t)
 
 	uploadReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=myapp.bin", bytes.NewBufferString("hello artifact"))
+	uploadReq.SetBasicAuth("root", env.RootPassword)
 	uploadRR := httptest.NewRecorder()
 	env.HandleArtifacts(uploadRR, uploadReq)
 	if uploadRR.Code != http.StatusCreated {
@@ -946,6 +947,7 @@ func TestHandleArtifacts_UploadDownloadMetaDelete(t *testing.T) {
 	}
 
 	metaReq := httptest.NewRequest(http.MethodGet, "/artifacts/"+created.ID+"/meta", nil)
+	metaReq.SetBasicAuth("root", env.RootPassword)
 	metaRR := httptest.NewRecorder()
 	env.HandleArtifacts(metaRR, metaReq)
 	if metaRR.Code != http.StatusOK {
@@ -969,6 +971,7 @@ func TestHandleArtifacts_UploadDownloadMetaDelete(t *testing.T) {
 	}
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/artifacts/"+created.ID, nil)
+	deleteReq.SetBasicAuth("root", env.RootPassword)
 	deleteRR := httptest.NewRecorder()
 	env.HandleArtifacts(deleteRR, deleteReq)
 	if deleteRR.Code != http.StatusOK {
@@ -981,6 +984,7 @@ func TestHandleArtifacts_ErrorPaths(t *testing.T) {
 
 	t.Run("upload missing name", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/artifacts", bytes.NewBufferString("x"))
+		req.SetBasicAuth("root", env.RootPassword)
 		rr := httptest.NewRecorder()
 		env.HandleArtifacts(rr, req)
 		if rr.Code != http.StatusBadRequest {
@@ -1022,6 +1026,7 @@ func TestHandleArtifacts_ErrorPaths(t *testing.T) {
 
 	t.Run("delete without id", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodDelete, "/artifacts", nil)
+		req.SetBasicAuth("root", env.RootPassword)
 		rr := httptest.NewRecorder()
 		env.HandleArtifacts(rr, req)
 		if rr.Code != http.StatusBadRequest {
@@ -1031,6 +1036,7 @@ func TestHandleArtifacts_ErrorPaths(t *testing.T) {
 
 	t.Run("delete missing artifact", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodDelete, "/artifacts/not-found", nil)
+		req.SetBasicAuth("root", env.RootPassword)
 		rr := httptest.NewRecorder()
 		env.HandleArtifacts(rr, req)
 		if rr.Code != http.StatusNotFound {
@@ -1055,18 +1061,21 @@ func TestHandleArtifacts_AccessPolicy(t *testing.T) {
 
 	// 1. Upload Public Artifact
 	pubReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=pub.bin&access_policy=public", bytes.NewBufferString("public content"))
+	pubReq.SetBasicAuth("root", env.RootPassword)
 	pubRR := httptest.NewRecorder()
 	env.HandleArtifacts(pubRR, pubReq)
 	pubArt := decode[common.Artifact](t, pubRR)
 
 	// 2. Upload Authenticated Artifact
 	authReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=auth.bin&access_policy=authenticated", bytes.NewBufferString("auth content"))
+	authReq.SetBasicAuth("root", env.RootPassword)
 	authRR := httptest.NewRecorder()
 	env.HandleArtifacts(authRR, authReq)
 	authArt := decode[common.Artifact](t, authRR)
 
 	// 3. Upload Restricted Artifact for client-1
 	restReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=rest.bin&access_policy=restricted&allowed_clients=client-1", bytes.NewBufferString("rest content"))
+	restReq.SetBasicAuth("root", env.RootPassword)
 	restRR := httptest.NewRecorder()
 	env.HandleArtifacts(restRR, restReq)
 	restArt := decode[common.Artifact](t, restRR)

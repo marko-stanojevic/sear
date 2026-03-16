@@ -36,6 +36,14 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if id == "" {
+			// Listing requires authentication (root or any client)
+			_, _, isRoot := r.BasicAuth()
+			if !isRoot {
+				if _, err := e.clientIDFromToken(r); err != nil {
+					writeError(w, http.StatusUnauthorized, "authentication required to list artifacts")
+					return
+				}
+			}
 			writeJSON(w, http.StatusOK, e.Store.ListArtifacts())
 			return
 		}
@@ -101,6 +109,14 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		http.ServeContent(w, r, a.Filename, time.Now(), f)
 
 	case http.MethodPost:
+		// Upload requires authentication (root or any client)
+		_, _, isRoot := r.BasicAuth()
+		if !isRoot {
+			if _, err := e.clientIDFromToken(r); err != nil {
+				writeError(w, http.StatusUnauthorized, "authentication required to upload artifacts")
+				return
+			}
+		}
 		   name := r.URL.Query().Get("name")
 		   filename := r.URL.Query().Get("filename")
 		   if filename == "" {
@@ -162,6 +178,14 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, art)
 
 	case http.MethodDelete:
+		// Delete requires authentication (root or any client)
+		_, _, isRoot := r.BasicAuth()
+		if !isRoot {
+			if _, err := e.clientIDFromToken(r); err != nil {
+				writeError(w, http.StatusUnauthorized, "authentication required to delete artifacts")
+				return
+			}
+		}
 		if id == "" {
 			writeError(w, http.StatusBadRequest, "artifact ID required in path")
 			return
