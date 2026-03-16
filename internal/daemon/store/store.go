@@ -267,11 +267,12 @@ func (s *Store) SaveDeployment(d *common.DeploymentState) error {
 func (s *Store) GetDeployment(id string) (*common.DeploymentState, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	d, ok := s.deployments[id]
-	if !ok {
+	d := cloneDeployment(s.deployments[id])
+	if d == nil {
 		return nil, false
 	}
-	return cloneDeployment(d), true
+	s.enrichDeploymentLocked(d)
+	return d, true
 }
 
 // GetActiveDeploymentForClient returns the most recent non-terminal deployment
@@ -288,10 +289,9 @@ func (s *Store) GetActiveDeploymentForClient(clientID string) (*common.Deploymen
 			latest = d
 		}
 	}
-	if latest == nil {
-		return nil, false
-	}
-	return cloneDeployment(latest), true
+	d := cloneDeployment(latest)
+	s.enrichDeploymentLocked(d)
+	return d, true
 }
 
 func (s *Store) ListDeployments() []*common.DeploymentState {
@@ -299,9 +299,24 @@ func (s *Store) ListDeployments() []*common.DeploymentState {
 	defer s.mu.RUnlock()
 	out := make([]*common.DeploymentState, 0, len(s.deployments))
 	for _, d := range s.deployments {
-		out = append(out, cloneDeployment(d))
+		cp := cloneDeployment(d)
+		s.enrichDeploymentLocked(cp)
+		out = append(out, cp)
 	}
 	return out
+}
+
+func (s *Store) enrichDeploymentLocked(d *common.DeploymentState) {
+	if c, ok := s.clients[d.ClientID]; ok {
+		d.Hostname = c.Hostname
+	} else {
+		d.Hostname = "Deleted Client"
+	}
+	if p, ok := s.playbooks[d.PlaybookID]; ok {
+		d.PlaybookName = p.Name
+	} else {
+		d.PlaybookName = "Deleted Playbook"
+	}
 }
 
 func (s *Store) DeleteDeployment(id string) error {

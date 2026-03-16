@@ -47,15 +47,16 @@ nav a.active{color:#e6edf3;border-bottom-color:#f78166}
 .card-menu { position: relative; }
 .menu-btn { background: transparent; border: none; color: #8b949e; padding: 2px 7px; border-radius: 4px; cursor: pointer; font-size: 1.1rem; line-height: 1; }
 .menu-btn:hover { background: #30363d; color: #e6edf3; }
-.menu-dropdown { display: none; position: absolute; right: 0; top: calc(100% + 4px); background: #161b22; border: 1px solid #30363d; border-radius: 8px; min-width: 180px; z-index: 10; box-shadow: 0 8px 24px #010409cc; padding: 4px; }
+.menu-dropdown { display: none; position: absolute; right: 0; top: calc(100% + 4px); background: #161b22; border: 1px solid #30363d; border-radius: 8px; min-width: 200px; z-index: 10; box-shadow: 0 8px 24px #010409cc; padding: 6px; }
 .menu-dropdown.open { display: block; }
-.menu-item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: transparent; border: none; color: #e6edf3; padding: 10px 12px; cursor: pointer; font-size: .85rem; border-radius: 6px; text-decoration: none; transition: background .2s; line-height: 1; }
+.menu-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: transparent; border: none; color: #e6edf3; padding: 8px 12px; cursor: pointer; font-size: .85rem; border-radius: 6px; text-decoration: none; transition: background .2s; line-height: 1.4; white-space: nowrap; }
 .menu-item:hover { background: #21262d; color: #e6edf3; }
-.menu-item .m-icon { display: inline-flex; width: 16px; justify-content: center; color: #8b949e; font-size: 1.1rem; }
+.menu-item .m-icon { display: inline-flex; width: 16px; height: 16px; justify-content: center; align-items: center; color: #8b949e; }
+.menu-item .m-icon svg { width: 16px; height: 16px; stroke-width: 2px; }
 .menu-item:hover .m-icon { color: #e6edf3; }
 .list-secrets .row-actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
 .list-secrets .sname, .list-secrets .sval { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; word-break: break-all; }
-.list-secrets .sname { font-weight: 500; }
+.list-secrets .sname { font-weight: normal; }
 .list-secrets .sval { color: #8b949e; white-space: pre-wrap; }
 .list-secrets .sval.revealed { color: #e6edf3; }
 .list-playbooks .actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
@@ -88,7 +89,7 @@ nav a.active{color:#e6edf3;border-bottom-color:#f78166}
 }
 
 /* Text */
-.name{font-weight:600;}
+.name{font-weight:normal;}
 .sub{font-size:.75rem;color:#8b949e;}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem;color:#8b949e;word-break:break-all}
 .empty{text-align:center;color:#8b949e;padding:60px 20px}

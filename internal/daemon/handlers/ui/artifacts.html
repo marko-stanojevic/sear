@@ -143,7 +143,7 @@ function render() {
     if (policy === 'restricted') policyLabel = '<span class="badge badge-warning" title="' + esc(a.allowed_clients ? a.allowed_clients.join(', ') : '') + '">Restricted</span>';
 
     return '<div class="list-row">' +
-      '<div class="cell-main"><strong>' + esc(a.name) + '</strong><div class="mono">' + esc(a.id) + '</div></div>' +
+      '<div class="cell-main"><div>' + esc(a.name) + '</div><div class="mono">' + esc(a.id) + '</div></div>' +
       '<div class="mono">' + esc(a.filename) + '</div>' +
       '<div>' + esc(size) + '</div>' +
       '<div>' + policyLabel + '</div>' +
@@ -151,9 +151,9 @@ function render() {
       '<div class="card-top-right"><div class="card-menu">' +
         '<button class="menu-btn" title="Actions">⋮</button>' +
         '<div class="menu-dropdown">' +
-          '<a class="menu-item" href="/artifacts/' + encodeURIComponent(a.id) + '" download="' + esc(a.filename) + '"><span class="m-icon">📩</span> Download</a>' +
-          '<button class="menu-item" onclick="modifyPolicy(\'' + esc(a.id) + '\', \'' + esc(a.name) + '\', \'' + esc(policy) + '\', \'' + esc(a.allowed_clients ? a.allowed_clients.join(',') : '') + '\')"><span class="m-icon">🛡️</span> Modify Policy</button>' +
-          '<button class="menu-item" onclick="removeArtifact(\'' + esc(a.id) + '\')"><span class="m-icon">🗑️</span> Remove</button>' +
+          '<a class="menu-item" href="/artifacts/' + encodeURIComponent(a.id) + '" download="' + esc(a.filename) + '"><span class="m-icon" data-lucide="download"></span> Download</a>' +
+          '<button class="menu-item" onclick="modifyPolicy(\'' + esc(a.id) + '\', \'' + esc(a.name) + '\', \'' + esc(policy) + '\', \'' + esc(a.allowed_clients ? a.allowed_clients.join(',') : '') + '\')"><span class="m-icon" data-lucide="shield"></span> Modify Policy</button>' +
+          '<button class="menu-item" onclick="removeArtifact(\'' + esc(a.id) + '\')"><span class="m-icon" data-lucide="trash-2"></span> Remove</button>' +
         '</div>' +
       '</div></div>' +
     '</div>';
@@ -174,6 +174,7 @@ function render() {
       if (!isOpen) menu.classList.add('open');
     });
   });
+  updateIcons();
 }
 
 async function load() {
