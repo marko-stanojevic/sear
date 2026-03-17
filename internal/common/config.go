@@ -31,11 +31,16 @@ type ServerConfig struct {
 	TLSCertFile string `yaml:"tls_cert_file"`
 	TLSKeyFile  string `yaml:"tls_key_file"`
 
-	// JWTSecret is used to sign client tokens.
-	// If empty, a random secret is generated on startup.
-	JWTSecret string `yaml:"jwt_secret"`
+	// AgentJWTSecret is used to sign agent tokens.
+	// If empty, a secret is auto-generated and persisted in DataDir.
+	AgentJWTSecret string `yaml:"agent_jwt_secret"`
 
-	// TokenExpiryHours is the JWT token lifetime in hours (default 720 = 30 days).
+	// UserJWTSecret is used to sign UI session tokens, kept separate from
+	// agent tokens so rotating one does not invalidate the other.
+	// If empty, a secret is auto-generated and persisted in DataDir.
+	UserJWTSecret string `yaml:"user_jwt_secret"`
+
+	// TokenExpiryHours is the agent JWT token lifetime in hours (default 720 = 30 days).
 	TokenExpiryHours int `yaml:"token_expiry_hours"`
 }
 

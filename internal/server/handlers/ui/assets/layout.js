@@ -113,9 +113,11 @@ function stopAutoRefresh() {
 // Purge stale credential keys from older builds
 sessionStorage.removeItem('kompakt_creds');
 sessionStorage.removeItem('sear_creds');
+localStorage.removeItem('kompakt_creds');
+localStorage.removeItem('sear_creds');
 
 function authHeader() {
-  var t = sessionStorage.getItem('kompakt_token');
+  var t = localStorage.getItem('kompakt_token');
   return t ? 'Bearer ' + t : null;
 }
 
@@ -163,7 +165,7 @@ function hideLogin() {
   if (overlay) overlay.classList.remove('show');
 }
 
-function logout() { sessionStorage.removeItem('kompakt_token'); showLogin(''); }
+function logout() { localStorage.removeItem('kompakt_token'); showLogin(''); }
 
 function initLogin(apiPath, onSuccess) {
   var cb = onSuccess || function() { if (typeof load === 'function') load(); };
@@ -181,7 +183,7 @@ function initLogin(apiPath, onSuccess) {
       if (r.status === 401) { document.getElementById('login-error').textContent = 'Invalid password'; return; }
       if (!r.ok) { document.getElementById('login-error').textContent = 'Error: ' + r.status; return; }
       var data = await r.json();
-      sessionStorage.setItem('kompakt_token', data.token);
+      localStorage.setItem('kompakt_token', data.token);
       hideLogin();
       cb();
     } catch (e) {
@@ -193,7 +195,19 @@ function initLogin(apiPath, onSuccess) {
   if (pwField) pwField.addEventListener('keydown', function(e) { if (e.key === 'Enter') doLogin(); });
   window.doLogin = doLogin;
 
-  if (authHeader()) { hideLogin(); cb(); } else { showLogin(''); }
+  if (authHeader()) {
+    fetch(apiPath, {headers: headersAuth()}).then(function(r) {
+      if (r.status === 401) {
+        localStorage.removeItem('kompakt_token');
+        showLogin('Session expired, please sign in again');
+      } else {
+        hideLogin();
+        cb();
+      }
+    }).catch(function() { showLogin(''); });
+  } else {
+    showLogin('');
+  }
 }
 
 // ── Confirm modal ─────────────────────────────────────────────────────────────

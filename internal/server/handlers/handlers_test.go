@@ -26,7 +26,7 @@ func newTestEnv(t *testing.T) *handlers.Handler {
 	hub := handlers.NewHub()
 	return &handlers.Handler{
 		Store:            st,
-		JWTSecret:        []byte("test-secret-key-32-bytes-padding!"),
+		AgentJWTSecret:        []byte("test-secret-key-32-bytes-padding!"),
 		RootPassword:     "admin123",
 		TokenExpiryHours: 24,
 		ArtifactsDir:     t.TempDir(),
