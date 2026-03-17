@@ -1,8 +1,9 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sear - Playbooks</title>
+<title>Kompakt — Playbooks</title>
   <link rel="stylesheet" href="/ui/assets/style.css">
   <style>html,body{background:#0d1117;color:#e6edf3}</style>
 </head>
@@ -38,7 +39,7 @@
   </div>
 </div>
 <header>
-  <div class="header-brand"><h1><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f78166" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom;margin-right:4px"><path d="M13 2 L3 14 h9 l-1 8 10-12 h-9 l1-8z"></path></svg> Sear</h1> <span class="badge">DASHBOARD</span></div>
+  <div class="header-brand"><h1><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f78166" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom;margin-right:4px"><path d="M13 2 L3 14 h9 l-1 8 10-12 h-9 l1-8z"></path></svg> Kompakt</h1> <span class="badge">DASHBOARD</span></div>
     <nav>
       <a href="/ui">Home</a>
       <a href="/ui/clients">Clients</a>
@@ -135,10 +136,14 @@ async function savePlaybook(){
 async function removePlaybook(i){
   var pb=playbooks[i];
   if(!confirm('Delete playbook "'+(pb.name||pb.id)+'"?'))return;
-  var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(pb.id),{method:'DELETE',headers:headersAuth()});
-  if(r.status===401){showLogin('Session expired - sign in again');return;}
-  if(!r.ok){alert('Delete failed: '+r.status);return;}
-  load();
+  try {
+    var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(pb.id),{method:'DELETE',headers:headersAuth()});
+    if(r.status===401){showLogin('Session expired — sign in again');return;}
+    if(!r.ok){document.getElementById('counts').textContent='Delete failed ('+r.status+')';return;}
+    load();
+  } catch(e) {
+    document.getElementById('counts').textContent='Network error';
+  }
 }
 
 function openAssign(i){
@@ -222,14 +227,20 @@ function render(){
 }
 
 async function load(){
-  var p=await fetch('/api/v1/playbooks',{headers:headersAuth()});
-  if(p.status===401){showLogin('');return;}
-  if(!p.ok){document.getElementById('root').innerHTML='<div class="empty">Failed to load playbooks.</div>';return;}
-  var c=await fetch('/api/v1/clients',{headers:headersAuth()});
-  clients=c.ok?await c.json():[];
-  playbooks=await p.json()||[];
-  render();
-  updateClearBtn();
+  try {
+    const [p, c] = await Promise.all([
+      fetch('/api/v1/playbooks', {headers:headersAuth()}),
+      fetch('/api/v1/clients', {headers:headersAuth()})
+    ]);
+    if(p.status===401){showLogin('');return;}
+    if(!p.ok){document.getElementById('root').innerHTML='<div class="empty">Failed to load playbooks.</div>';return;}
+    clients = c.ok ? await c.json() : [];
+    playbooks = await p.json() || [];
+    render();
+    updateClearBtn();
+  } catch(e) {
+    document.getElementById('root').innerHTML='<div class="empty">Network error. Retrying&#x2026;</div>';
+  }
 }
 function updateClearBtn() {
   var q = document.getElementById('f-query').value;

@@ -27,7 +27,6 @@ function ensureLoginOverlay() {
       <button class="btn-login" onclick="window.doLogin()">Sign in</button>
     </div>
   `;
-  overlay.style.display = 'none'; // Ensure it's hidden during construction
   document.body.appendChild(overlay);
 }
 
