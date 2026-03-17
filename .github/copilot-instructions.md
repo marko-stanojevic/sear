@@ -13,25 +13,29 @@
 ```
 kompakt/
 ├── cmd/
-│   ├── kompakt/            # Server/daemon entry point (main.go)
-│   └── kompakt-agent/      # Client CLI entry point (main.go)
+│   ├── kompakt/              # Server/daemon entry point (main.go)
+│   └── kompakt-agent/        # Client CLI entry point (main.go)
 ├── internal/
-│   ├── common/             # Shared types used by both daemon and client
+│   ├── common/               # Shared types used by both daemon and client
 │   ├── daemon/
-│   │   ├── handlers/       # HTTP and WebSocket handlers for the daemon
-│   │   └── store/          # Persistent storage layer
-│   └── client/             # Client-side logic and communication
+│   │   ├── handlers/         # HTTP and WebSocket handlers; auth middleware
+│   │   ├── service/          # Business logic (deployment dispatch, hub management)
+│   │   └── store/            # JSON-file persistence layer
+│   └── client/               # Agent run loop: registration, WebSocket, playbook execution
+│       ├── executor/         # Step execution engine (shell, reboot, artifact ops)
+│       └── identity/         # Hardware/platform identifier collection
 ├── examples/
-│   ├── config.yml          # Example daemon config
-│   ├── secrets.yml         # Example daemon secrets
-│   ├── client.config.yml   # Example client config
-│   └── playbook.yml        # Example playbook
-├── .goreleaser.yml         # Release packaging config
+│   ├── config.yml            # Example daemon config
+│   ├── secrets.yml           # Example daemon secrets
+│   ├── client.config.yml     # Example client config
+│   └── playbook.yml          # Example playbook
+├── docs/                     # API reference and playbook model docs
+├── .goreleaser.yml           # Release packaging config
 ├── go.mod
 ├── go.sum
-├── .github/
-│   └── copilot-instructions.md
-└── README.md
+└── .github/
+    ├── workflows/            # CI and release workflows
+    └── copilot-instructions.md
 ```
 
 ## Build Instructions
@@ -107,7 +111,7 @@ go mod tidy
 Local snapshot check:
 
 ```bash
-go run github.com/goreleaser/goreleaser/v2@latest release --snapshot --clean --skip=validate --skip=publish
+go run github.com/goreleaser/goreleaser/v2@v2.14.3 release --snapshot --clean --skip=validate --skip=publish
 ```
 
 Release artifacts and matrix are configured in `.goreleaser.yml`.
@@ -126,8 +130,8 @@ Release artifacts and matrix are configured in `.goreleaser.yml`.
 
 - **Workflows persist across reboots**: the storage layer (`internal/daemon/store`) is responsible for durable state.
 - **Client registration**: clients register with the daemon; the daemon assigns them identities (UUIDs) and tracks their state.
-- **Dashboard**: real-time monitoring is served at `/status/ui`; keep handler logic in `internal/daemon/handlers`.
-- **Auth split**: root endpoints use HTTP Basic auth, client endpoints use JWT.
+- **Dashboard**: served at `/ui`; individual pages at `/ui/clients`, `/ui/secrets`, `/ui/playbooks`, `/ui/deployments`, `/ui/artifacts`. Keep handler logic in `internal/daemon/handlers`.
+- **Auth split**: root API endpoints use HTTP Basic auth or a short-lived UI JWT (issued by `POST /api/v1/ui/login`); client endpoints use JWT Bearer tokens.
 - **Logs storage**: deployment logs are persisted per deployment in `logsDir`, not inside `state.json`.
 
 ## Available Skills

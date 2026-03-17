@@ -47,7 +47,7 @@ The project is a two-binary deployment automation system:
 ### Key packages
 
 | Package | Role |
-|---|---|
+| --- | --- |
 | `internal/common` | Shared types, config loading, playbook model, secret resolution |
 | `internal/daemon` | HTTP server wiring, route definitions |
 | `internal/daemon/handlers` | All HTTP/WebSocket handlers; auth middleware (JWT for agents, HTTP Basic for root) |
@@ -59,7 +59,7 @@ The project is a two-binary deployment automation system:
 
 ### Auth model
 
-- **Root/admin**: HTTP Basic auth (`root` + configured root password) for `/api/v1/*` management endpoints and the web UI calls.
+- **Root/admin**: HTTP Basic auth (`root` + configured root password) for direct `/api/v1/*` API access. The web UI obtains a short-lived JWT from `POST /api/v1/ui/login`; root-protected endpoints accept either Basic auth or that Bearer token.
 - **Agent**: JWT Bearer token issued at `/api/v1/register`, passed via `?token=` on WebSocket upgrade.
 
 ### Playbook model
