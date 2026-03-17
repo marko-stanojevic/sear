@@ -89,13 +89,18 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
 		// Start new deployment
 		deploymentID = uuid.New().String()
 		newDep := &common.DeploymentState{
-			ID:              deploymentID,
-			ClientID:        clientID,
-			PlaybookID:      client.PlaybookID,
+			ID:           deploymentID,
+			ClientID:     clientID,
+			Hostname:     client.Hostname,
+			PlaybookID:   client.PlaybookID,
+			PlaybookName: pb.Name,
 			Status:          common.DeploymentStatusRunning,
 			ResumeStepIndex: 0,
 			StartedAt:       time.Now(),
 			UpdatedAt:       time.Now(),
+		}
+		if pb.Playbook != nil && pb.Playbook.Name != "" {
+			newDep.PlaybookName = pb.Playbook.Name
 		}
 		if err := m.Store.SaveDeployment(newDep); err != nil {
 			slog.Error("failed to save new deployment", "deployment_id", deploymentID, "client_id", clientID, "err", err)

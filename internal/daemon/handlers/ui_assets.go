@@ -25,6 +25,9 @@ func ServeUIAsset(w http.ResponseWriter, r *http.Request) {
 	} else if len(importPath) > 4 && importPath[len(importPath)-4:] == ".css" {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	}
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)

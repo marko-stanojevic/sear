@@ -1,15 +1,16 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sear — Deployment Status</title>
+<title>Kompakt — Clients</title>
   <link rel="stylesheet" href="/ui/assets/style.css">
   <style>html,body{background:#0d1117;color:#e6edf3}</style>
 </head>
 <body>
 <header>
 	<div class="header-brand">
-		<h1><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f78166" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom;margin-right:4px"><path d="M13 2 L3 14 h9 l-1 8 10-12 h-9 l1-8z"></path></svg> Sear</h1>
+		<h1><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f78166" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom;margin-right:4px"><path d="M13 2 L3 14 h9 l-1 8 10-12 h-9 l1-8z"></path></svg> Kompakt</h1>
 		<span class="badge">DASHBOARD</span>
 	</div>
 	<nav>
@@ -41,13 +42,14 @@
 <script>
 async function removeClient(id, hostname) {
   if (!confirm('Remove client "' + hostname + '"?\nThis cannot be undone.')) return;
-  const creds = sessionStorage.getItem('kompakt_creds');
-  const headers = {'Content-Type':'application/json'};
-  if (creds) headers['Authorization'] = 'Basic ' + creds;
-	const r = await fetch('/api/v1/clients/' + encodeURIComponent(id), {method:'DELETE', headers});
-  if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
-  if (!r.ok) { alert('Failed to remove client: ' + r.status); return; }
-  load();
+  try {
+    const r = await fetch('/api/v1/clients/' + encodeURIComponent(id), {method:'DELETE', headers: headersAuth()});
+    if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
+    if (!r.ok) { document.getElementById('counts').textContent = 'Remove failed (' + r.status + ')'; return; }
+    load();
+  } catch (e) {
+    document.getElementById('counts').textContent = 'Network error';
+  }
 }
 let latestClients = [];
 let latestDeps = {};
@@ -133,28 +135,37 @@ function clearFilters() {
 }
 
 async function load() {
-	const auth = (typeof authHeader === 'function') ? authHeader() : null;
-	const headers = auth ? { 'Authorization': auth } : {};
-	const r = await fetch('/api/v1/status', { headers });
-  if (r.status === 401) {
-    const root = document.getElementById('root');
-    root.innerHTML = '<div class="empty">Unauthorized. Reload the page to sign in.</div>';
-    return;
-  }
-  const d = await r.json();
-  latestDeps = {};
-  (d.deployments||[]).forEach(dep => { latestDeps[dep.client_id] = dep; });
-  latestClients = d.clients || [];
-  render();
-  updateClearBtn();
+	try {
+		const r = await fetch('/api/v1/status', { headers: headersAuth() });
+		if (r.status === 401) { showLogin(''); return; }
+		if (!r.ok) { document.getElementById('root').innerHTML = '<div class="empty">Failed to load.</div>'; return; }
+		const d = await r.json();
+		latestDeps = {};
+		(d.deployments||[]).forEach(dep => { latestDeps[dep.client_id] = dep; });
+		latestClients = d.clients || [];
+		render();
+		updateClearBtn();
+	} catch (e) {
+		document.getElementById('root').innerHTML = '<div class="empty">Network error. Retrying&#x2026;</div>';
+	}
 }
+
 function updateClearBtn() {
 	const q = document.getElementById('f-query').value;
 	document.getElementById('f-clear').classList.toggle('show', !!q);
 }
+
 document.getElementById('f-query').addEventListener('input', () => { render(); updateClearBtn(); });
+
+var _autoRefreshTimer = null;
+function startAutoRefresh() { _autoRefreshTimer = setInterval(load, 10000); }
+function stopAutoRefresh() { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) { stopAutoRefresh(); } else { load(); startAutoRefresh(); }
+});
+
 initLogin('/api/v1/status', load);
-setInterval(load, 10000);
+startAutoRefresh();
 </script>
 </body>
 </html>

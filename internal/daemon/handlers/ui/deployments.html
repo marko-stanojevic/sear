@@ -1,14 +1,15 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sear - Deployments</title>
+<title>Kompakt — Deployments</title>
   <link rel="stylesheet" href="/ui/assets/style.css">
   <style>html,body{background:#0d1117;color:#e6edf3}</style>
 </head>
 <body>
 <header>
-  <div class="header-brand"><h1><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f78166" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom;margin-right:4px"><path d="M13 2 L3 14 h9 l-1 8 10-12 h-9 l1-8z"></path></svg> Sear</h1> <span class="badge">DASHBOARD</span></div>
+  <div class="header-brand"><h1><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f78166" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom;margin-right:4px"><path d="M13 2 L3 14 h9 l-1 8 10-12 h-9 l1-8z"></path></svg> Kompakt</h1> <span class="badge">DASHBOARD</span></div>
   <nav>
     <a href="/ui">Home</a>
     <a href="/ui/clients">Clients</a>
@@ -94,33 +95,18 @@ function render(){
     rows+
   '</div>';
   updateIcons();
-  // Click outside to close menus
-  document.addEventListener('click', function(e) {
-    if (!e.target.classList.contains('menu-btn')) {
-      document.querySelectorAll('.menu-dropdown.open').forEach(d => d.classList.remove('open'));
-    }
-  });
-
-  // Toggle menus
-  root.querySelectorAll('.menu-btn').forEach(btn => {
-    btn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      const menu = this.nextElementSibling;
-      const isOpen = menu.classList.contains('open');
-      document.querySelectorAll('.menu-dropdown.open').forEach(d => d.classList.remove('open'));
-      if (!isOpen) menu.classList.add('open');
-    });
-  });
 }
 
 async function removeDeployment(id) {
   if (!confirm('Remove deployment "' + id + '"?\nThis will remove it from state and delete its logs.')) return;
-  const auth = (typeof authHeader === 'function') ? authHeader() : null;
-  const h = {}; if (auth) h['Authorization'] = auth;
-  const r = await fetch('/api/v1/deployments/' + encodeURIComponent(id), { method: 'DELETE', headers: h });
-  if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
-  if (!r.ok) { alert('Delete failed: ' + r.status); return; }
-  load();
+  try {
+    const r = await fetch('/api/v1/deployments/' + encodeURIComponent(id), { method: 'DELETE', headers: headersAuth() });
+    if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
+    if (!r.ok) { document.getElementById('counts').textContent = 'Delete failed (' + r.status + ')'; return; }
+    load();
+  } catch(e) {
+    document.getElementById('counts').textContent = 'Network error';
+  }
 }
 
 async function openLogs(id){
@@ -164,13 +150,17 @@ async function openLogs(id){
 function closeLogs(){document.getElementById('logs-panel').style.display='none';}
 
 async function load(){
-  var r=await fetch('/api/v1/deployments',{headers:headersAuth()});
-  if(r.status===401){showLogin('');return;}
-  if(!r.ok){document.getElementById('root').innerHTML='<div class="empty">Failed to load deployments.</div>';return;}
-  deployments=await r.json()||[];
-  deployments.sort(function(a,b){return new Date(b.updated_at||0)-new Date(a.updated_at||0);});
-  render();
-  updateClearBtn();
+  try {
+    var r=await fetch('/api/v1/deployments',{headers:headersAuth()});
+    if(r.status===401){showLogin('');return;}
+    if(!r.ok){document.getElementById('root').innerHTML='<div class="empty">Failed to load deployments.</div>';return;}
+    deployments=await r.json()||[];
+    deployments.sort(function(a,b){return new Date(b.updated_at||0)-new Date(a.updated_at||0);});
+    render();
+    updateClearBtn();
+  } catch(e) {
+    document.getElementById('root').innerHTML='<div class="empty">Network error. Retrying&#x2026;</div>';
+  }
 }
 function updateClearBtn() {
   var q = document.getElementById('f-query').value;
@@ -178,8 +168,16 @@ function updateClearBtn() {
 }
 
 document.getElementById('f-query').addEventListener('input',function(){render();updateClearBtn();});
+
+var _autoRefreshTimer = null;
+function startAutoRefresh() { _autoRefreshTimer = setInterval(load, 10000); }
+function stopAutoRefresh() { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) { stopAutoRefresh(); } else { load(); startAutoRefresh(); }
+});
+
 initLogin('/api/v1/deployments', load);
-setInterval(load,10000);
+startAutoRefresh();
 </script>
 </body>
 </html>
