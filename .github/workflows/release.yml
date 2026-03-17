@@ -23,25 +23,6 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create and push release tag
-        id: tag
-        shell: bash
-        env:
-          TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists."
-            echo "created=false" >> "$GITHUB_OUTPUT"
-          else
-            git tag -a "$TAG" -m "Release $TAG"
-            git push origin "$TAG"
-            echo "created=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Check if GitHub release exists
         id: release-check
         shell: bash
@@ -119,7 +100,7 @@ jobs:
         shell: bash
         env:
           TAG: ${{ steps.release.outputs.tag }}
-          TAG_CREATED: ${{ steps.tag.outputs.created }}
+          TAG_CREATED: ${{ steps.release.outputs.tag-created }}
           RELEASE_EXISTS: ${{ steps.release-check.outputs.exists }}
           PREVIOUS_TAG: ${{ steps.notes.outputs.previous_tag }}
         run: |
