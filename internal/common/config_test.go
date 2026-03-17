@@ -8,16 +8,16 @@ import (
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
-func TestLoadDaemonConfig(t *testing.T) {
+func TestLoadServerConfig(t *testing.T) {
 	content := `
 listen_addr: ":9090"
 data_dir: "/tmp/test-data"
 token_expiry_hours: 48
 `
 	path := writeTempFile(t, "config.yml", content)
-	cfg, err := common.LoadDaemonConfig(path)
+	cfg, err := common.LoadServerConfig(path)
 	if err != nil {
-		t.Fatalf("LoadDaemonConfig: %v", err)
+		t.Fatalf("LoadServerConfig: %v", err)
 	}
 	if cfg.ListenAddr != ":9090" {
 		t.Errorf("ListenAddr = %q; want :9090", cfg.ListenAddr)
@@ -30,7 +30,7 @@ token_expiry_hours: 48
 	}
 }
 
-func TestLoadDaemonSecrets(t *testing.T) {
+func TestLoadServerSecrets(t *testing.T) {
 	content := `
 root_password: "s3cr3t"
 registration_secrets:
@@ -41,9 +41,9 @@ client_secrets:
   API_KEY: "key-abc"
 `
 	path := writeTempFile(t, "secrets.yml", content)
-	sec, err := common.LoadDaemonSecrets(path)
+	sec, err := common.LoadServerSecrets(path)
 	if err != nil {
-		t.Fatalf("LoadDaemonSecrets: %v", err)
+		t.Fatalf("LoadServerSecrets: %v", err)
 	}
 	if sec.RootPassword != "s3cr3t" {
 		t.Errorf("RootPassword = %q; want s3cr3t", sec.RootPassword)
@@ -56,7 +56,7 @@ client_secrets:
 	}
 }
 
-func TestLoadClientConfig(t *testing.T) {
+func TestLoadAgentConfig(t *testing.T) {
 	content := `
 server_url: "http://kompakt:8080"
 registration_secret: "reg-secret"
@@ -65,9 +65,9 @@ reconnect_interval_seconds: 5
 log_batch_size: 50
 `
 	path := writeTempFile(t, "client.yml", content)
-	cfg, err := common.LoadClientConfig(path)
+	cfg, err := common.LoadAgentConfig(path)
 	if err != nil {
-		t.Fatalf("LoadClientConfig: %v", err)
+		t.Fatalf("LoadAgentConfig: %v", err)
 	}
 	if cfg.ServerURL != "http://kompakt:8080" {
 		t.Errorf("ServerURL = %q", cfg.ServerURL)
@@ -201,7 +201,7 @@ func TestResolveEnvSecrets(t *testing.T) {
 }
 
 func TestLoadConfigMissing(t *testing.T) {
-	_, err := common.LoadDaemonConfig("/nonexistent/path/config.yml")
+	_, err := common.LoadServerConfig("/nonexistent/path/config.yml")
 	if err == nil {
 		t.Error("expected error for missing file, got nil")
 	}
@@ -209,45 +209,45 @@ func TestLoadConfigMissing(t *testing.T) {
 
 // ── Negative path: corrupted / missing YAML ───────────────────────────────────
 
-func TestLoadDaemonConfig_CorruptedYAML(t *testing.T) {
+func TestLoadServerConfig_CorruptedYAML(t *testing.T) {
 	path := writeTempFile(t, "config.yml", "listen_addr: [unclosed")
-	_, err := common.LoadDaemonConfig(path)
+	_, err := common.LoadServerConfig(path)
 	if err == nil {
 		t.Error("expected error for corrupted YAML, got nil")
 	}
 }
 
-func TestLoadDaemonSecrets_MissingFile(t *testing.T) {
-	_, err := common.LoadDaemonSecrets("/nonexistent/path/secrets.yml")
+func TestLoadServerSecrets_MissingFile(t *testing.T) {
+	_, err := common.LoadServerSecrets("/nonexistent/path/secrets.yml")
 	if err == nil {
 		t.Error("expected error for missing file, got nil")
 	}
 }
 
-func TestLoadDaemonSecrets_CorruptedYAML(t *testing.T) {
+func TestLoadServerSecrets_CorruptedYAML(t *testing.T) {
 	path := writeTempFile(t, "secrets.yml", "root_password: [unclosed")
-	_, err := common.LoadDaemonSecrets(path)
+	_, err := common.LoadServerSecrets(path)
 	if err == nil {
 		t.Error("expected error for corrupted YAML, got nil")
 	}
 }
 
-func TestLoadClientConfig_MissingFile(t *testing.T) {
-	_, err := common.LoadClientConfig("/nonexistent/path/client.yml")
+func TestLoadAgentConfig_MissingFile(t *testing.T) {
+	_, err := common.LoadAgentConfig("/nonexistent/path/client.yml")
 	if err == nil {
 		t.Error("expected error for missing file, got nil")
 	}
 }
 
-func TestLoadClientConfig_CorruptedYAML(t *testing.T) {
+func TestLoadAgentConfig_CorruptedYAML(t *testing.T) {
 	path := writeTempFile(t, "client.yml", "server_url: [unclosed")
-	_, err := common.LoadClientConfig(path)
+	_, err := common.LoadAgentConfig(path)
 	if err == nil {
 		t.Error("expected error for corrupted YAML, got nil")
 	}
 }
 
-func TestLoadClientConfig_MissingRequiredFields(t *testing.T) {
+func TestLoadAgentConfig_MissingRequiredFields(t *testing.T) {
 	tests := []struct {
 		name    string
 		content string
@@ -268,7 +268,7 @@ func TestLoadClientConfig_MissingRequiredFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := writeTempFile(t, "client.yml", tt.content)
-			_, err := common.LoadClientConfig(path)
+			_, err := common.LoadAgentConfig(path)
 			if err == nil {
 				t.Errorf("expected validation error for %q, got nil", tt.name)
 			}

@@ -10,7 +10,7 @@ import (
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
-func writeClientConfig(t *testing.T, path string) {
+func writeAgentConfig(t *testing.T, path string) {
 	t.Helper()
 	content := "server_url: \"http://localhost:8080\"\nregistration_secret: \"reg-secret\"\nplatform: \"auto\"\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -20,14 +20,14 @@ func writeClientConfig(t *testing.T, path string) {
 
 func TestRunWithConfig(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "client.config.yml")
-	writeClientConfig(t, cfgPath)
+	writeAgentConfig(t, cfgPath)
 
-	oldRunClient := runClient
-	defer func() { runClient = oldRunClient }()
+	oldRunAgent := runAgent
+	defer func() { runAgent = oldRunAgent }()
 
 	t.Run("success", func(t *testing.T) {
 		called := false
-		runClient = func(ctx context.Context, cfg *common.ClientConfig) error {
+		runAgent = func(ctx context.Context, cfg *common.AgentConfig) error {
 			called = true
 			if ctx == nil {
 				t.Fatal("expected non-nil context")
@@ -38,12 +38,12 @@ func TestRunWithConfig(t *testing.T) {
 			t.Fatalf("runWithConfig: %v", err)
 		}
 		if !called {
-			t.Fatal("expected runClient to be called")
+			t.Fatal("expected runAgent to be called")
 		}
 	})
 
 	t.Run("context canceled is ignored", func(t *testing.T) {
-		runClient = func(ctx context.Context, cfg *common.ClientConfig) error {
+		runAgent = func(ctx context.Context, cfg *common.AgentConfig) error {
 			return context.Canceled
 		}
 		if err := runWithConfig(cfgPath); err != nil {
@@ -52,7 +52,7 @@ func TestRunWithConfig(t *testing.T) {
 	})
 
 	t.Run("runner error is returned", func(t *testing.T) {
-		runClient = func(ctx context.Context, cfg *common.ClientConfig) error {
+		runAgent = func(ctx context.Context, cfg *common.AgentConfig) error {
 			return errors.New("boom")
 		}
 		err := runWithConfig(cfgPath)

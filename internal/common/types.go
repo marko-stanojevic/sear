@@ -230,7 +230,7 @@ type LogBatch struct {
 	Entries []LogEntry `json:"entries"`
 }
 
-// Artifact is metadata for a file stored on the daemon.
+// Artifact is metadata for a file stored on the server.
 type Artifact struct {
 	ID             string       `json:"id"`
 	Name           string       `json:"name"`

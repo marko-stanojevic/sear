@@ -9,7 +9,7 @@ import (
 )
 
 func TestApplyConfigDefaults(t *testing.T) {
-	cfg := &common.DaemonConfig{}
+	cfg := &common.ServerConfig{}
 	applyConfigDefaults(cfg)
 
 	if cfg.ListenAddr != ":8080" {
@@ -27,12 +27,12 @@ func TestApplyConfigDefaults(t *testing.T) {
 }
 
 func TestServerURL(t *testing.T) {
-	httpURL := serverURL(&common.DaemonConfig{ListenAddr: ":8080"})
+	httpURL := serverURL(&common.ServerConfig{ListenAddr: ":8080"})
 	if httpURL != "http://localhost:8080" {
 		t.Fatalf("http serverURL = %q; want http://localhost:8080", httpURL)
 	}
 
-	httpsURL := serverURL(&common.DaemonConfig{ListenAddr: ":8443", TLSCertFile: "cert.pem"})
+	httpsURL := serverURL(&common.ServerConfig{ListenAddr: ":8443", TLSCertFile: "cert.pem"})
 	if httpsURL != "https://localhost:8443" {
 		t.Fatalf("https serverURL = %q; want https://localhost:8443", httpsURL)
 	}

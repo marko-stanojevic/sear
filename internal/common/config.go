@@ -1,4 +1,4 @@
-// Package common defines shared types used by both the daemon and client.
+// Package common defines shared types used by both the server and agent.
 package common
 
 import (
@@ -9,14 +9,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ── Daemon config (config.yml) ────────────────────────────────────────────────
+// ── Server config (config.yml) ────────────────────────────────────────────────
 
-// DaemonConfig is the main daemon configuration file.
-type DaemonConfig struct {
+// ServerConfig is the main server configuration file.
+type ServerConfig struct {
 	// ListenAddr is the address to bind the HTTP server (default ":8080").
 	ListenAddr string `yaml:"listen_addr"`
 
-	// DataDir is the directory where the daemon stores its state.
+	// DataDir is the directory where the server stores its state.
 	DataDir string `yaml:"data_dir"`
 
 	// ArtifactsDir is the directory where uploaded artifacts are stored.
@@ -39,10 +39,10 @@ type DaemonConfig struct {
 	TokenExpiryHours int `yaml:"token_expiry_hours"`
 }
 
-// ── Daemon secrets (secrets.yml) ─────────────────────────────────────────────
+// ── Server secrets (secrets.yml) ─────────────────────────────────────────────
 
-// DaemonSecrets holds sensitive configuration loaded from secrets.yml.
-type DaemonSecrets struct {
+// ServerSecrets holds sensitive configuration loaded from secrets.yml.
+type ServerSecrets struct {
 	// RootPassword authenticates admin API calls.
 	// If empty, a random password is generated on startup and printed.
 	RootPassword string `yaml:"root_password"`
@@ -58,21 +58,21 @@ type DaemonSecrets struct {
 	ClientSecrets map[string]string `yaml:"client_secrets"`
 }
 
-// ── Client config (client.config.yml) ────────────────────────────────────────
+// ── Agent config (client.config.yml) ────────────────────────────────────────
 
-// ClientConfig is the configuration file used by kompakt-agent.
-type ClientConfig struct {
-	// ServerURL is the base URL of the kompakt daemon (e.g. "http://kompakt:8080").
+// AgentConfig is the configuration file used by kompakt-agent.
+type AgentConfig struct {
+	// ServerURL is the base URL of the kompakt server (e.g. "http://kompakt:8080").
 	ServerURL string `yaml:"server_url"`
 
-	// RegistrationSecret must match one of the daemon's registration_secrets values.
+	// RegistrationSecret must match one of the server's registration_secrets values.
 	RegistrationSecret string `yaml:"registration_secret"`
 
 	// Platform hint: linux | mac | windows | auto (default).
-	// When "auto", the client detects the platform from the OS.
+	// When "auto", the agent detects the platform from the OS.
 	Platform string `yaml:"platform"`
 
-	// StateFile is where the client persists its token and resume position
+	// StateFile is where the agent persists its token and resume position
 	// so that deployment can be resumed after a reboot.
 	// Default: /var/lib/kompakt/state.json (Linux), C:\ProgramData\kompakt\state.json (Windows).
 	StateFile string `yaml:"state_file"`
@@ -80,7 +80,7 @@ type ClientConfig struct {
 	// WorkDir is the directory where shell steps are executed.
 	WorkDir string `yaml:"work_dir"`
 
-	// ReconnectIntervalSeconds is how long the client waits before retrying
+	// ReconnectIntervalSeconds is how long the agent waits before retrying
 	// a failed WebSocket connection (default 10).
 	ReconnectIntervalSeconds int `yaml:"reconnect_interval_seconds"`
 
@@ -91,19 +91,19 @@ type ClientConfig struct {
 
 // ── Generic YAML loader ───────────────────────────────────────────────────────
 
-// LoadDaemonConfig reads and unmarshals a DaemonConfig from path.
-func LoadDaemonConfig(path string) (*DaemonConfig, error) {
-	return loadYAML[DaemonConfig](path)
+// LoadServerConfig reads and unmarshals a ServerConfig from path.
+func LoadServerConfig(path string) (*ServerConfig, error) {
+	return loadYAML[ServerConfig](path)
 }
 
-// LoadDaemonSecrets reads and unmarshals DaemonSecrets from path.
-func LoadDaemonSecrets(path string) (*DaemonSecrets, error) {
-	return loadYAML[DaemonSecrets](path)
+// LoadServerSecrets reads and unmarshals ServerSecrets from path.
+func LoadServerSecrets(path string) (*ServerSecrets, error) {
+	return loadYAML[ServerSecrets](path)
 }
 
-// LoadClientConfig reads and unmarshals a ClientConfig from path.
-func LoadClientConfig(path string) (*ClientConfig, error) {
-	cfg, err := loadYAML[ClientConfig](path)
+// LoadAgentConfig reads and unmarshals an AgentConfig from path.
+func LoadAgentConfig(path string) (*AgentConfig, error) {
+	cfg, err := loadYAML[AgentConfig](path)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func loadYAML[T any](path string) (*T, error) {
 
 // Validate checks that the client config contains the required fields and
 // uses a supported platform hint.
-func (c *ClientConfig) Validate() error {
+func (c *AgentConfig) Validate() error {
 	if strings.TrimSpace(c.ServerURL) == "" {
 		return fmt.Errorf("server_url is required")
 	}
