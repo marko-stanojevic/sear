@@ -103,11 +103,15 @@ async function openEdit(i){
   document.getElementById('pb-modal-err').textContent='';
   document.getElementById('pb-modal-bg').classList.add('show');
 
-  var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(pb.id),{headers:headersAuth()});
-  if(r.status===401){closePBModal();showLogin('Session expired - sign in again');return;}
-  if(!r.ok){document.getElementById('pb-modal-err').textContent='Failed to load playbook details';return;}
-  var full=await r.json();
-  document.getElementById('pb-yaml').value=full.playbook_yaml||templatePlaybookYAML;
+  try {
+    var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(pb.id),{headers:headersAuth()});
+    if(r.status===401){closePBModal();showLogin('Session expired — sign in again');return;}
+    if(!r.ok){document.getElementById('pb-modal-err').textContent='Failed to load playbook details';return;}
+    var full=await r.json();
+    document.getElementById('pb-yaml').value=full.playbook_yaml||templatePlaybookYAML;
+  } catch(e) {
+    document.getElementById('pb-modal-err').textContent='Network error';
+  }
 }
 function closePBModal(){document.getElementById('pb-modal-bg').classList.remove('show');}
 
@@ -121,29 +125,34 @@ async function savePlaybook(){
   var payload={name:name,description:desc,playbook_yaml:raw};
   var url=editingID?('/api/v1/playbooks/'+encodeURIComponent(editingID)):'/api/v1/playbooks';
   var method=editingID?'PUT':'POST';
-  var r=await fetch(url,{method:method,headers:headersJSON(),body:JSON.stringify(payload)});
-  if(r.status===401){closePBModal();showLogin('Session expired - sign in again');return;}
-  if(!r.ok){
-    var msg='Save failed ('+r.status+')';
-    try{var d=await r.json();if(d.error)msg=d.error;}catch(_e){}
-    errEl.textContent=msg;
-    return;
+  try {
+    var r=await fetch(url,{method:method,headers:headersJSON(),body:JSON.stringify(payload)});
+    if(r.status===401){closePBModal();showLogin('Session expired — sign in again');return;}
+    if(!r.ok){
+      var msg='Save failed ('+r.status+')';
+      try{var d=await r.json();if(d.error)msg=d.error;}catch(_e){}
+      errEl.textContent=msg;
+      return;
+    }
+    closePBModal();
+    load();
+  } catch(e) {
+    errEl.textContent='Network error';
   }
-  closePBModal();
-  load();
 }
 
 async function removePlaybook(i){
   var pb=playbooks[i];
-  if(!confirm('Delete playbook "'+(pb.name||pb.id)+'"?'))return;
-  try {
-    var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(pb.id),{method:'DELETE',headers:headersAuth()});
-    if(r.status===401){showLogin('Session expired — sign in again');return;}
-    if(!r.ok){document.getElementById('counts').textContent='Delete failed ('+r.status+')';return;}
-    load();
-  } catch(e) {
-    document.getElementById('counts').textContent='Network error';
-  }
+  showConfirm('Delete Playbook', 'Delete "' + (pb.name || pb.id) + '"?', async function() {
+    try {
+      var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(pb.id),{method:'DELETE',headers:headersAuth()});
+      if(r.status===401){showLogin('Session expired — sign in again');return;}
+      if(!r.ok){document.getElementById('counts').textContent='Delete failed ('+r.status+')';return;}
+      load();
+    } catch(e) {
+      document.getElementById('counts').textContent='Network error';
+    }
+  });
 }
 
 function openAssign(i){
@@ -162,16 +171,20 @@ async function confirmAssign(){
   var errEl=document.getElementById('assign-modal-err');
   var clientID=document.getElementById('assign-client').value;
   if(!clientID){errEl.textContent='Select a client';return;}
-  var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(assigningID)+'/assign',{method:'POST',headers:headersJSON(),body:JSON.stringify({client_id:clientID})});
-  if(r.status===401){closeAssignModal();showLogin('Session expired - sign in again');return;}
-  if(!r.ok){
-    var msg='Assign failed ('+r.status+')';
-    try{var d=await r.json();if(d.error)msg=d.error;}catch(_e){}
-    errEl.textContent=msg;
-    return;
+  try {
+    var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(assigningID)+'/assign',{method:'POST',headers:headersJSON(),body:JSON.stringify({client_id:clientID})});
+    if(r.status===401){closeAssignModal();showLogin('Session expired — sign in again');return;}
+    if(!r.ok){
+      var msg='Assign failed ('+r.status+')';
+      try{var d=await r.json();if(d.error)msg=d.error;}catch(_e){}
+      errEl.textContent=msg;
+      return;
+    }
+    closeAssignModal();
+    load();
+  } catch(e) {
+    errEl.textContent='Network error';
   }
-  closeAssignModal();
-  load();
 }
 
 function filteredPlaybooks() {
@@ -189,13 +202,17 @@ function clearSearch() {
   render();
 }
 
+var currentPage = 1;
+function setPage(n) { currentPage = n; render(); }
 function render(){
   var root=document.getElementById('root');
   var shown = filteredPlaybooks();
   document.getElementById('counts').textContent='Shown: '+shown.length+' / '+playbooks.length;
   if(!playbooks.length){root.innerHTML='<div class="empty">No playbooks yet.</div>';return;}
   if(!shown.length){root.innerHTML='<div class="empty">No playbooks match your search.</div>';return;}
-  var rows=shown.map(function(pb){
+  var start=(currentPage-1)*PAGE_SIZE;
+  var pageItems=shown.slice(start,start+PAGE_SIZE);
+  var rows=pageItems.map(function(pb){
     var i = playbooks.indexOf(pb);
     var jobs=(pb.playbook && Array.isArray(pb.playbook.jobs))?pb.playbook.jobs.length:0;
     var steps = 0;
@@ -222,11 +239,12 @@ function render(){
   root.innerHTML='<div class="list list-playbooks">'+
     '<div class="list-head"><div>Playbook</div><div>Description</div><div>Jobs</div><div>Steps</div><div>Updated</div><div></div></div>'+
     rows+
-  '</div>';
+  '</div>' + buildPagination(shown.length, currentPage);
   updateIcons();
 }
 
 async function load(){
+  document.getElementById('root').innerHTML='<div class="spinner"></div>';
   try {
     const [p, c] = await Promise.all([
       fetch('/api/v1/playbooks', {headers:headersAuth()}),
@@ -250,7 +268,7 @@ function updateClearBtn() {
 document.getElementById('pb-modal-bg').addEventListener('click',function(e){if(e.target===this)closePBModal();});
 document.getElementById('assign-modal-bg').addEventListener('click',function(e){if(e.target===this)closeAssignModal();});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){closePBModal();closeAssignModal();}});
-document.getElementById('f-query').addEventListener('input', function(){render();updateClearBtn();});
+document.getElementById('f-query').addEventListener('input', function(){currentPage=1;render();updateClearBtn();});
 initLogin('/api/v1/playbooks', load);
 </script>
 </body>

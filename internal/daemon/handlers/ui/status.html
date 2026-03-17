@@ -41,18 +41,21 @@
 <script src="/ui/assets/layout.js"></script>
 <script>
 async function removeClient(id, hostname) {
-  if (!confirm('Remove client "' + hostname + '"?\nThis cannot be undone.')) return;
-  try {
-    const r = await fetch('/api/v1/clients/' + encodeURIComponent(id), {method:'DELETE', headers: headersAuth()});
-    if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
-    if (!r.ok) { document.getElementById('counts').textContent = 'Remove failed (' + r.status + ')'; return; }
-    load();
-  } catch (e) {
-    document.getElementById('counts').textContent = 'Network error';
-  }
+  showConfirm('Remove Client', 'Remove "' + hostname + '"? This cannot be undone.', async function() {
+    try {
+      const r = await fetch('/api/v1/clients/' + encodeURIComponent(id), {method:'DELETE', headers: headersAuth()});
+      if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
+      if (!r.ok) { document.getElementById('counts').textContent = 'Remove failed (' + r.status + ')'; return; }
+      load();
+    } catch (e) {
+      document.getElementById('counts').textContent = 'Network error';
+    }
+  });
 }
 let latestClients = [];
 let latestDeps = {};
+var currentPage = 1;
+function setPage(n) { currentPage = n; render(); }
 
 function filterClients(clients, deps) {
 	const q = (document.getElementById('f-query').value || '').trim().toLowerCase();
@@ -90,7 +93,9 @@ function render() {
 		return;
 	}
 
-	const rows = filtered.map(c => {
+	const start = (currentPage - 1) * PAGE_SIZE;
+	const pageItems = filtered.slice(start, start + PAGE_SIZE);
+	const rows = pageItems.map(c => {
 		const dep = latestDeps[c.id];
 		const s = dep ? dep.status : c.status;
 		const os = c.os || (c.metadata && c.metadata.os) || (c.metadata && c.metadata.type) || (c.metadata && c.metadata.os_type) || '-';
@@ -121,7 +126,7 @@ function render() {
 			'<div>Client</div><div>OS</div><div>Platform</div><div>Vendor</div><div>Model</div><div>IP</div><div>Status</div><div>Last Activity</div><div></div>' +
 		'</div>' +
 		rows +
-	'</div>';
+	'</div>' + buildPagination(filtered.length, currentPage);
 	updateIcons();
 
 	document.getElementById('counts').textContent =
@@ -135,6 +140,7 @@ function clearFilters() {
 }
 
 async function load() {
+	document.getElementById('root').innerHTML = '<div class="spinner"></div>';
 	try {
 		const r = await fetch('/api/v1/status', { headers: headersAuth() });
 		if (r.status === 401) { showLogin(''); return; }
@@ -155,7 +161,7 @@ function updateClearBtn() {
 	document.getElementById('f-clear').classList.toggle('show', !!q);
 }
 
-document.getElementById('f-query').addEventListener('input', () => { render(); updateClearBtn(); });
+document.getElementById('f-query').addEventListener('input', () => { currentPage = 1; render(); updateClearBtn(); });
 
 var _autoRefreshTimer = null;
 function startAutoRefresh() { _autoRefreshTimer = setInterval(load, 10000); }

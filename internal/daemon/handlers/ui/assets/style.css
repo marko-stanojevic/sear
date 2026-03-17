@@ -144,3 +144,12 @@ button:hover{background:#30363d}
 /* Panels */
 .panel{margin-top:16px;background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden}
 .panel-head{background:#0d1117;border-bottom:1px solid #30363d;padding:10px 12px;color:#8b949e;font-size:.8rem;display:flex;justify-content:space-between;align-items:center}
+
+/* Loading Spinner */
+.spinner{display:flex;justify-content:center;padding:60px 20px}
+.spinner::after{content:'';width:32px;height:32px;border:3px solid #30363d;border-top-color:#58a6ff;border-radius:50%;animation:kompakt-spin .8s linear infinite}
+@keyframes kompakt-spin{to{transform:rotate(360deg)}}
+
+/* Pagination */
+.pagination{display:flex;align-items:center;justify-content:center;gap:12px;padding:14px 16px;border-top:1px solid #21262d}
+.pagination span{color:#8b949e;font-size:.85rem}
