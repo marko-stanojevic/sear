@@ -1,0 +1,60 @@
+{{define "layout"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kompakt — {{.Title}}</title>
+  <link rel="stylesheet" href="/ui/assets/style.css">
+  <script src="/ui/assets/htmx.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="header-brand">
+    <img src="/ui/assets/kompakt-logo.png" height="62" alt="Kompakt" style="vertical-align:middle;margin-right:8px">
+    <span class="badge">DASHBOARD</span>
+  </div>
+  <nav>
+    {{range .NavItems}}<a href="{{.URL}}"{{if .Active}} class="active"{{end}}>{{.Label}}</a>{{end}}
+  </nav>
+  <div class="header-right">
+    <button onclick="logout()">Sign out</button>
+  </div>
+</header>
+
+{{block "content" .}}{{end}}
+
+<!-- ── Login modal ──────────────────────────────────────────────────────── -->
+<div id="login-modal" class="modal-bg">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-head"><h2>&#x1F512; Kompakt Root Login</h2></div>
+    <div class="modal-body">
+      <div id="login-msg" style="color:#f78166;margin-bottom:10px;display:none"></div>
+      <div class="form-group">
+        <label>Password</label>
+        <input id="login-pw" type="password" placeholder="root password" autocomplete="current-password">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-add" onclick="doLogin()">Sign in</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Confirm modal ─────────────────────────────────────────────────────── -->
+<div id="confirm-modal" class="modal-bg">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-head"><h2 id="confirm-title"></h2></div>
+    <div class="modal-body"><p id="confirm-msg" style="color:#8b949e"></p></div>
+    <div class="modal-actions">
+      <button class="btn-muted" onclick="dismissConfirm()">Cancel</button>
+      <button id="confirm-ok" class="btn-add">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script src="/ui/assets/lucide.min.js"></script>
+<script src="/ui/assets/app.js"></script>
+{{block "scripts" .}}{{end}}
+</body>
+</html>
+{{end}}

@@ -1,0 +1,52 @@
+{{if not .Rows}}
+<div class="empty">{{if .Query}}No artifacts match your search.{{else}}No artifacts found.{{end}}</div>
+<script>var el=document.getElementById('counts-bar');if(el)el.textContent='Artifacts: 0';</script>
+{{else}}
+<script>var el=document.getElementById('counts-bar');if(el)el.textContent='Shown: {{len .Rows}} / {{.Total}}';</script>
+<div class="table-wrap">
+<div class="list list-artifacts">
+  <div class="list-head">
+    <div>Artifact</div><div>Filename</div><div>Size</div><div>Access Policy</div><div>Uploaded</div><div></div>
+  </div>
+  {{range .Rows}}
+  <div class="list-row">
+    <div class="cell-main">
+      <div>{{.Name}}</div>
+      <div class="mono sub">{{.ID}}</div>
+    </div>
+    <div class="mono">{{.Filename}}</div>
+    <div>{{formatSize .Size}}</div>
+    <div><span class="badge {{policyClass (print .AccessPolicy)}}" title="{{if .AllowedClients}}{{range .AllowedClients}}{{.}} {{end}}{{end}}">{{policyLabel (print .AccessPolicy)}}</span></div>
+    <div>{{formatTime .UploadedAt}}</div>
+    <div class="card-top-right"><div class="card-menu">
+      <button class="menu-btn" title="Actions">⋮</button>
+      <div class="menu-dropdown">
+        <button class="menu-item" onclick="downloadArtifact('{{.ID}}','{{.Filename}}')"><i class="m-icon" data-lucide="download"></i> Download</button>
+        <button class="menu-item" onclick="modifyPolicy('{{.ID}}','{{.Name}}','{{.AccessPolicy}}','{{range .AllowedClients}}{{.}},{{end}}')"><i class="m-icon" data-lucide="shield"></i> Modify Policy</button>
+        <button class="menu-item" onclick="removeArtifact('{{.ID}}')"><i class="m-icon" data-lucide="trash-2"></i> Remove</button>
+      </div>
+    </div></div>
+  </div>
+  {{end}}
+</div>
+</div>
+{{template "pagination" .}}
+{{end}}
+<script>if(window.lucide)window.lucide.createIcons();</script>
+
+{{define "pagination"}}
+{{if gt .TotalPages 1}}
+<div class="pagination">
+  {{if gt .Page 1}}
+  <button hx-get="/ui/partials/artifacts?page={{sub .Page 1}}&q={{.Query}}" hx-target="#table-root">‹ Prev</button>
+  {{end}}
+  {{range seq .TotalPages}}
+  <button {{if eq . $.Page}}class="active"{{end}}
+          hx-get="/ui/partials/artifacts?page={{.}}&q={{$.Query}}" hx-target="#table-root">{{.}}</button>
+  {{end}}
+  {{if lt .Page .TotalPages}}
+  <button hx-get="/ui/partials/artifacts?page={{add .Page 1}}&q={{.Query}}" hx-target="#table-root">Next ›</button>
+  {{end}}
+</div>
+{{end}}
+{{end}}

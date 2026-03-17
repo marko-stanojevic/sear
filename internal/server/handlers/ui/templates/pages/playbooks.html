@@ -1,0 +1,146 @@
+{{template "layout" .}}
+{{define "content"}}
+<div class="container">
+  <div class="meta">
+    <span id="counts-bar">Loading…</span>
+    <span class="spacer"></span>
+    <div class="search-inline">
+      <input id="f-query" type="search" name="q" placeholder="Search playbooks…" autocomplete="off"
+             hx-get="/ui/partials/playbooks" hx-target="#table-root" hx-trigger="input changed delay:300ms, search">
+      <button class="btn-clear btn-muted" onclick="document.getElementById('f-query').value='';htmx.trigger(document.getElementById('f-query'),'search')" title="Clear">✕</button>
+    </div>
+    <button class="btn-add" onclick="openCreate()">+ Add playbook</button>
+    <button hx-get="/ui/partials/playbooks" hx-target="#table-root" hx-include="#f-query">Refresh</button>
+  </div>
+  <div id="table-root"
+       hx-get="/ui/partials/playbooks"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <div class="spinner"></div>
+  </div>
+</div>
+
+<!-- Add/edit playbook modal -->
+<div id="pb-modal-bg" class="modal-bg">
+  <div class="modal">
+    <div class="modal-head"><h2 id="pb-modal-title">Add playbook</h2></div>
+    <div class="modal-body">
+      <div class="form-group"><label>Name</label><input id="pb-name" type="text" placeholder="Deploy app" spellcheck="false"></div>
+      <div class="form-group"><label>Description</label><input id="pb-desc" type="text" placeholder="Optional" spellcheck="false"></div>
+      <div class="form-group"><label>Playbook YAML</label><textarea id="pb-yaml" spellcheck="false" style="height:260px"></textarea></div>
+    </div>
+    <div class="modal-err" id="pb-modal-err"></div>
+    <div class="modal-actions">
+      <button class="btn-muted" onclick="closePBModal()">Cancel</button>
+      <button class="btn-add" onclick="savePlaybook()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign modal -->
+<div id="assign-modal-bg" class="modal-bg">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-head"><h2>Assign Playbook</h2></div>
+    <div class="modal-body">
+      <div class="form-group"><label>Playbook</label><input id="assign-pb-name" type="text" readonly></div>
+      <div class="form-group"><label>Client</label><select id="assign-client"></select></div>
+    </div>
+    <div class="modal-err" id="assign-modal-err"></div>
+    <div class="modal-actions">
+      <button class="btn-muted" onclick="closeAssignModal()">Cancel</button>
+      <button class="btn-add" onclick="confirmAssign()">Assign</button>
+    </div>
+  </div>
+</div>
+{{end}}
+{{define "scripts"}}
+<script>
+var _editingID='';
+var _assigningID='';
+var _templateYAML='name: hello-bash\njobs:\n  - name: main\n    steps:\n      - name: print hello\n        shell: bash\n        run: echo "hello"\n';
+
+function openCreate(){
+  _editingID='';
+  document.getElementById('pb-modal-title').textContent='Add playbook';
+  document.getElementById('pb-name').value='';
+  document.getElementById('pb-desc').value='';
+  document.getElementById('pb-yaml').value=_templateYAML;
+  document.getElementById('pb-modal-err').textContent='';
+  document.getElementById('pb-modal-bg').classList.add('show');
+}
+async function openEdit(id,name,desc){
+  _editingID=id;
+  document.getElementById('pb-modal-title').textContent='Edit Playbook';
+  document.getElementById('pb-name').value=name||'';
+  document.getElementById('pb-desc').value=desc||'';
+  document.getElementById('pb-yaml').value='';
+  document.getElementById('pb-modal-err').textContent='';
+  document.getElementById('pb-modal-bg').classList.add('show');
+  try {
+    var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(id),{headers:headersAuth()});
+    if(r.status===401){closePBModal();showLogin('Session expired — sign in again');return;}
+    if(r.ok){var d=await r.json();document.getElementById('pb-yaml').value=d.playbook_yaml||_templateYAML;}
+  } catch(e){document.getElementById('pb-modal-err').textContent='Network error';}
+}
+function closePBModal(){document.getElementById('pb-modal-bg').classList.remove('show');}
+
+async function savePlaybook(){
+  var errEl=document.getElementById('pb-modal-err');
+  var name=document.getElementById('pb-name').value.trim();
+  var desc=document.getElementById('pb-desc').value.trim();
+  var raw=document.getElementById('pb-yaml').value;
+  if(!name){errEl.textContent='Name is required';return;}
+  if(!raw.trim()){errEl.textContent='Playbook YAML is required';return;}
+  var url=_editingID?('/api/v1/playbooks/'+encodeURIComponent(_editingID)):'/api/v1/playbooks';
+  var method=_editingID?'PUT':'POST';
+  try {
+    var r=await fetch(url,{method:method,headers:headersJSON(),body:JSON.stringify({name:name,description:desc,playbook_yaml:raw})});
+    if(r.status===401){closePBModal();showLogin('Session expired — sign in again');return;}
+    if(!r.ok){var msg='Save failed ('+r.status+')';try{var d=await r.json();if(d.error)msg=d.error;}catch(_){}errEl.textContent=msg;return;}
+    closePBModal();
+    htmx.trigger(document.getElementById('table-root'),'load');
+  } catch(e){errEl.textContent='Network error';}
+}
+
+async function removePlaybook(id,name){
+  showConfirm('Delete Playbook','Delete "'+name+'"?',async function(){
+    try {
+      var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(id),{method:'DELETE',headers:headersAuth()});
+      if(r.status===401){showLogin('Session expired — sign in again');return;}
+      if(r.ok) htmx.trigger(document.getElementById('table-root'),'load');
+    } catch(e){}
+  });
+}
+
+function openAssign(id,name){
+  _assigningID=id;
+  document.getElementById('assign-pb-name').value=name+' ('+id+')';
+  document.getElementById('assign-modal-err').textContent='';
+  // Fetch fresh client list
+  fetch('/api/v1/clients',{headers:headersAuth()}).then(function(r){return r.json();}).then(function(clients){
+    var sel=document.getElementById('assign-client');
+    sel.innerHTML=(clients||[]).map(function(c){return '<option value="'+esc(c.id)+'">'+esc((c.hostname||c.id)+' – '+(c.status||'unknown'))+'</option>';}).join('');
+    document.getElementById('assign-modal-err').textContent=clients.length?'':'No clients available';
+  }).catch(function(){document.getElementById('assign-modal-err').textContent='Failed to load clients';});
+  document.getElementById('assign-modal-bg').classList.add('show');
+}
+function closeAssignModal(){document.getElementById('assign-modal-bg').classList.remove('show');}
+
+async function confirmAssign(){
+  var errEl=document.getElementById('assign-modal-err');
+  var clientID=document.getElementById('assign-client').value;
+  if(!clientID){errEl.textContent='Select a client';return;}
+  try {
+    var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(_assigningID)+'/assign',{method:'POST',headers:headersJSON(),body:JSON.stringify({client_id:clientID})});
+    if(r.status===401){closeAssignModal();showLogin('Session expired — sign in again');return;}
+    if(!r.ok){var msg='Assign failed ('+r.status+')';try{var d=await r.json();if(d.error)msg=d.error;}catch(_){}errEl.textContent=msg;return;}
+    closeAssignModal();
+    htmx.trigger(document.getElementById('table-root'),'load');
+  } catch(e){errEl.textContent='Network error';}
+}
+
+document.getElementById('pb-modal-bg').addEventListener('click',function(e){if(e.target===this)closePBModal();});
+document.getElementById('assign-modal-bg').addEventListener('click',function(e){if(e.target===this)closeAssignModal();});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){closePBModal();closeAssignModal();}});
+</script>
+{{end}}

@@ -351,19 +351,3 @@ func (e *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ── UI pages ──────────────────────────────────────────────────────────────────
-
-// HandleAgentsUI serves the live agents dashboard.
-func (e *Handler) HandleAgentsUI(w http.ResponseWriter, r *http.Request) {
-	renderUI(w, "clients.html")
-}
-
-// HandlePlaybooksUI serves the playbooks management web page.
-func (e *Handler) HandlePlaybooksUI(w http.ResponseWriter, r *http.Request) {
-	renderUI(w, "playbooks.html")
-}
-
-// HandleDeploymentsUI serves the deployments page.
-func (e *Handler) HandleDeploymentsUI(w http.ResponseWriter, r *http.Request) {
-	renderUI(w, "deployments.html")
-}

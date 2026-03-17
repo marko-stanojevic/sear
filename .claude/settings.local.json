@@ -23,7 +23,9 @@
       "Bash(sed -i -e 's/RequireClientAuth/RequireAgentAuth/g' -e 's/HandleWS\\\\b/HandleAgentWS/g' -e 's/HandleRegister\\\\b/HandleAgentRegister/g' -e 's/HandleClients\\\\b/HandleStatus/g' -e 's/HandleClientsUI\\\\b/HandleAgentsUI/g' \"$f\")",
       "Bash(done)",
       "Bash(sed -i -e 's|// ── Client API ──|// ── Agent API ──|' -e 's|// POST /api/v1/register  — no auth; validated by registration secret|// POST /api/v1/register  — no auth; validated by registration secret|' -e 's|// dualAuth accepts requests authenticated with either a client JWT Bearer|// dualAuth accepts requests authenticated with either an agent JWT Bearer|' -e 's|// Artifacts are accessible by both clients \\(JWT\\) and root \\(Basic auth\\)\\\\.|// Artifacts are accessible by both agents \\(JWT\\) and root \\(Basic auth\\).|' /mnt/c/git/kompakt/internal/server/server.go)",
-      "Bash(__NEW_LINE_70bacb0e5feada4f__ sed:*)"
+      "Bash(__NEW_LINE_70bacb0e5feada4f__ sed:*)",
+      "Bash(curl -sL https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js -o /mnt/c/git/kompakt/internal/server/handlers/ui/assets/htmx.min.js)",
+      "Bash(wc -c /mnt/c/git/kompakt/internal/server/handlers/ui/assets/htmx.min.js)"
     ]
   }
 }

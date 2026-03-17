@@ -1,0 +1,62 @@
+{{template "layout" .}}
+{{define "content"}}
+<div class="container">
+  <div class="meta">
+    <span id="counts-bar">Loading…</span>
+    <span class="spacer"></span>
+    <div class="search-inline">
+      <input id="f-query" type="search" name="q" placeholder="Search deployments…" autocomplete="off"
+             hx-get="/ui/partials/deployments" hx-target="#table-root" hx-trigger="input changed delay:300ms, search">
+      <button class="btn-clear btn-muted" onclick="document.getElementById('f-query').value='';htmx.trigger(document.getElementById('f-query'),'search')" title="Clear">✕</button>
+    </div>
+    <button hx-get="/ui/partials/deployments" hx-target="#table-root" hx-include="#f-query">Refresh</button>
+  </div>
+  <div id="table-root"
+       hx-get="/ui/partials/deployments"
+       hx-trigger="load, every 10s"
+       hx-swap="innerHTML">
+    <div class="spinner"></div>
+  </div>
+  <div id="logs-panel" class="panel" style="display:none">
+    <div class="panel-head">
+      <span id="logs-title">Logs</span>
+      <button onclick="closeLogs()">Close</button>
+    </div>
+    <div id="logs-root" class="log-list"></div>
+  </div>
+</div>
+{{end}}
+{{define "scripts"}}
+<script>
+async function openLogs(id){
+  var panel=document.getElementById('logs-panel');
+  var root=document.getElementById('logs-root');
+  document.getElementById('logs-title').textContent='Logs: '+id;
+  panel.style.display='block';
+  root.innerHTML='<div class="spinner"></div>';
+  try {
+    var r=await fetch('/api/v1/deployments/'+encodeURIComponent(id)+'/logs',{headers:headersAuth()});
+    if(r.status===401){showLogin('Session expired — sign in again');return;}
+    if(!r.ok){root.innerHTML='<div class="empty">Failed to load logs.</div>';return;}
+    var logs=await r.json()||[];
+    if(!logs.length){root.innerHTML='<div class="empty">No logs for this deployment.</div>';return;}
+    var rows=logs.map(function(l){
+      var ts=l.timestamp?new Date(l.timestamp).toLocaleString():'-';
+      return '<div class="log-row"><div class="ts">'+esc(ts)+'</div><div>'+esc(l.level||'-')+'</div><div>'+esc(l.job_name||'-')+'</div><div class="msg">'+esc(l.message||'')+'</div></div>';
+    }).join('');
+    root.innerHTML='<div class="log-head"><div>Time</div><div>Level</div><div>Job</div><div>Message</div></div>'+rows;
+  } catch(e){root.innerHTML='<div class="empty">Network error loading logs.</div>';}
+}
+function closeLogs(){document.getElementById('logs-panel').style.display='none';}
+
+async function removeDeployment(id){
+  showConfirm('Remove Deployment','Remove deployment '+id+'? This will delete its logs.',async function(){
+    try {
+      var r=await fetch('/api/v1/deployments/'+encodeURIComponent(id),{method:'DELETE',headers:headersAuth()});
+      if(r.status===401){showLogin('Session expired — sign in again');return;}
+      if(r.ok) htmx.trigger(document.getElementById('table-root'),'load');
+    } catch(e){}
+  });
+}
+</script>
+{{end}}

@@ -1,0 +1,13 @@
+{{if not .Entries}}
+<div class="empty">No logs for this deployment.</div>
+{{else}}
+<div class="log-head"><div>Time</div><div>Level</div><div>Job</div><div>Message</div></div>
+{{range .Entries}}
+<div class="log-row">
+  <div class="ts">{{formatTime .Timestamp}}</div>
+  <div>{{or (print .Level) "-"}}</div>
+  <div>{{or .JobName "-"}}</div>
+  <div class="msg">{{.Message}}</div>
+</div>
+{{end}}
+{{end}}

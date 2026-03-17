@@ -104,6 +104,29 @@ func (e *Handler) RequireAgentAuth(next http.Handler) http.Handler {
 	})
 }
 
+// isRootRequest returns true when the request carries valid root credentials —
+// either HTTP Basic auth or a UI Bearer JWT issued by HandleUILogin.
+// Use this for inline auth checks inside handlers that serve mixed audiences.
+func (e *Handler) isRootRequest(r *http.Request) bool {
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		raw := strings.TrimPrefix(auth, "Bearer ")
+		tok, err := jwt.ParseWithClaims(raw, &jwt.RegisteredClaims{},
+			func(_ *jwt.Token) (any, error) { return e.UserJWTSecret, nil },
+			jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+			jwt.WithAudience(uiTokenAudience),
+		)
+		if err == nil {
+			if claims, ok := tok.Claims.(*jwt.RegisteredClaims); ok && tok.Valid && claims.Subject == "root" {
+				return true
+			}
+		}
+	}
+	user, pass, ok := r.BasicAuth()
+	return ok &&
+		subtle.ConstantTimeCompare([]byte(user), []byte("root")) == 1 &&
+		subtle.ConstantTimeCompare([]byte(pass), []byte(e.RootPassword)) == 1
+}
+
 // RequireRootAuth enforces authentication for root/admin endpoints.
 // It accepts either:
 //   - HTTP Basic auth (username "root" + configured root password), for scripts/tools, or
