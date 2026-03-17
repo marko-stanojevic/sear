@@ -5,41 +5,36 @@ dependencies:
       - 'go.mod'
       - 'go.sum'
 
-ci-cd:
+ci:
   - changed-files:
     - any-glob-to-any-file:
-      - '.github/actions/*'
-      - '.github/workflows/*'
+      - '.github/workflows/**/*'
+      - '.github/actions/**/*'
+      - '.goreleaser.yml'
+      - '.golangci.yml'
 
 docs:
   - changed-files:
     - any-glob-to-any-file:
-      - 'docs/**/*'
       - '**/*.md'
+      - 'examples/**/*'
 
 tests:
   - changed-files:
     - any-glob-to-any-file:
       - '**/*_test.go'
 
-build:
-  - changed-files:
-    - any-glob-to-any-file:
-      - '.goreleaser.yml'
-      - '.golangci.yml'
-      - '.github/actions/**/*'
-
-daemon:
+server:
   - changed-files:
     - any-glob-to-any-file:
       - 'cmd/kompakt/**/*'
-      - 'internal/daemon/**/*'
+      - 'internal/server/**/*'
 
 agent:
   - changed-files:
     - any-glob-to-any-file:
       - 'cmd/kompakt-agent/**/*'
-      - 'internal/client/**/*'
+      - 'internal/agent/**/*'
 
 common:
   - changed-files:
@@ -48,11 +43,16 @@ common:
 
 # Branch-based labels
 breaking:
- - head-branch: ['^breaking', 'breaking', 'major']
+ - head-branch: ['^breaking/', '^major/']
 
 feature:
- - head-branch: ['^feature', 'feature', 'enhancement', 'feat', 'add', 'minor']
+ - head-branch: ['^feature/', '^feat/', '^enhancement/', '^minor/']
 
 bugfix:
- - head-branch: ['^bugfix', 'bugfix', 'fix', 'patch', 'hotfix']
+ - head-branch: ['^bugfix/', '^fix/', '^patch/', '^hotfix/']
 
+refactor:
+ - head-branch: ['^refactor/', '^rework/', '^cleanup/']
+
+security:
+ - head-branch: ['^security/', '^sec/', '^cve/']

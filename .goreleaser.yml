@@ -26,7 +26,7 @@ builds:
       - arm64
 
 archives:
-  - id: daemon-archive
+  - id: server-archive
     ids:
       - kompakt
     name_template: >-

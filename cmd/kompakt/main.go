@@ -22,30 +22,30 @@ import (
 	"time"
 
 	"github.com/marko-stanojevic/kompakt/internal/common"
-	daemon "github.com/marko-stanojevic/kompakt/internal/daemon"
-	"github.com/marko-stanojevic/kompakt/internal/daemon/handlers"
-	"github.com/marko-stanojevic/kompakt/internal/daemon/service"
-	"github.com/marko-stanojevic/kompakt/internal/daemon/store"
+	server "github.com/marko-stanojevic/kompakt/internal/server"
+	"github.com/marko-stanojevic/kompakt/internal/server/handlers"
+	"github.com/marko-stanojevic/kompakt/internal/server/service"
+	"github.com/marko-stanojevic/kompakt/internal/server/store"
 )
 
 func main() {
-	configPath := flag.String("config", "config.yml", "path to daemon config file")
-	secretsPath := flag.String("secrets", "secrets.yml", "path to daemon secrets file")
+	configPath := flag.String("config", "config.yml", "path to server config file")
+	secretsPath := flag.String("secrets", "secrets.yml", "path to server secrets file")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
-	cfg, err := common.LoadDaemonConfig(*configPath)
+	cfg, err := common.LoadServerConfig(*configPath)
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
 	applyConfigDefaults(cfg)
 
-	sec, err := common.LoadDaemonSecrets(*secretsPath)
+	sec, err := common.LoadServerSecrets(*secretsPath)
 	if err != nil {
 		// secrets.yml is optional on first run — we'll auto-generate what we need.
 		log.Printf("note: could not load %s (%v); using generated credentials", *secretsPath, err)
-		sec = &common.DaemonSecrets{}
+		sec = &common.ServerSecrets{}
 	}
 
 	// ── JWT secret ───────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ func main() {
 	}
 
 	// ── HTTP server ───────────────────────────────────────────────────────────
-	handler := daemon.NewServer(env)
+	handler := server.NewServer(env)
 	srv := &http.Server{
 		Addr:         cfg.ListenAddr,
 		Handler:      handler,
@@ -137,7 +137,7 @@ func main() {
 	}
 }
 
-func applyConfigDefaults(cfg *common.DaemonConfig) {
+func applyConfigDefaults(cfg *common.ServerConfig) {
 	if cfg.ListenAddr == "" {
 		cfg.ListenAddr = ":8080"
 	}
@@ -155,7 +155,7 @@ func applyConfigDefaults(cfg *common.DaemonConfig) {
 	}
 }
 
-func serverURL(cfg *common.DaemonConfig) string {
+func serverURL(cfg *common.ServerConfig) string {
 	if cfg.TLSCertFile != "" {
 		return "https://localhost" + cfg.ListenAddr
 	}

@@ -3,7 +3,27 @@
     "allow": [
       "Bash(go build:*)",
       "Bash(go test:*)",
-      "Bash(gh run:*)"
+      "Bash(gh run:*)",
+      "Bash(mv internal/agent/client.go internal/agent/agent.go)",
+      "Bash(mv internal/agent/client_internal_test.go internal/agent/agent_internal_test.go)",
+      "Bash(mv internal/agent/client_test.go internal/agent/agent_test.go)",
+      "Bash(sed -i -e 's|^package client$|package agent|' internal/agent/agent_internal_test.go)",
+      "Bash(__NEW_LINE_db461cb7d1237a29__ sed:*)",
+      "Bash(sed -i -e 's|var runClient = |var runAgent = |' -e 's|if err := runClient\\(ctx|if err := runAgent\\(ctx|' /mnt/c/git/kompakt/cmd/kompakt-agent/main.go)",
+      "Bash(__NEW_LINE_3d547e47b6c79560__ sed:*)",
+      "Bash(/usr/local/go/bin/go build:*)",
+      "Bash(wc -l /mnt/c/git/kompakt/internal/server/handlers/*.go)",
+      "Bash(mv env.go handler.go)",
+      "Bash(mv env_internal_test.go handler_internal_test.go)",
+      "Bash(mv connect.go ws.go)",
+      "Bash(mv connect_internal_test.go ws_internal_test.go)",
+      "Bash(mv home_ui.go home.go)",
+      "Bash(for f:*)",
+      "Bash(do)",
+      "Bash(sed -i -e 's/RequireClientAuth/RequireAgentAuth/g' -e 's/HandleWS\\\\b/HandleAgentWS/g' -e 's/HandleRegister\\\\b/HandleAgentRegister/g' -e 's/HandleClients\\\\b/HandleStatus/g' -e 's/HandleClientsUI\\\\b/HandleAgentsUI/g' \"$f\")",
+      "Bash(done)",
+      "Bash(sed -i -e 's|// ── Client API ──|// ── Agent API ──|' -e 's|// POST /api/v1/register  — no auth; validated by registration secret|// POST /api/v1/register  — no auth; validated by registration secret|' -e 's|// dualAuth accepts requests authenticated with either a client JWT Bearer|// dualAuth accepts requests authenticated with either an agent JWT Bearer|' -e 's|// Artifacts are accessible by both clients \\(JWT\\) and root \\(Basic auth\\)\\\\.|// Artifacts are accessible by both agents \\(JWT\\) and root \\(Basic auth\\).|' /mnt/c/git/kompakt/internal/server/server.go)",
+      "Bash(__NEW_LINE_70bacb0e5feada4f__ sed:*)"
     ]
   }
 }
