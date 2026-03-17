@@ -10,14 +10,13 @@
 <body>
 <header>
   <div class="header-brand">
-    <img src="/ui/assets/kompakt-logo.png" height="62" alt="Kompakt" style="vertical-align:middle;margin-right:8px">
-    <span class="badge">DASHBOARD</span>
+    <a href="/ui" class="brand-link">kompakt</a>
   </div>
   <nav>
     {{range .NavItems}}<a href="{{.URL}}"{{if .Active}} class="active"{{end}}>{{.Label}}</a>{{end}}
   </nav>
   <div class="header-right">
-    <button onclick="logout()">Sign out</button>
+    <button class="btn-signout" onclick="logout()">Sign out</button>
   </div>
 </header>
 

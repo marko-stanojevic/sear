@@ -1,11 +1,12 @@
 /* Shared Base CSS */
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh}
-header{background:#161b22;border-bottom:1px solid #30363d;padding:0 24px;display:flex;align-items:stretch;gap:0}
-.header-brand{display:flex;align-items:center;gap:12px;padding:16px 0}
-header h1{font-size:1.25rem;font-weight:600}
-nav{display:flex;gap:2px;align-items:stretch;margin-left:24px}
-nav a{color:#8b949e;text-decoration:none;padding:0 14px;display:flex;align-items:center;font-size:.875rem;border-bottom:2px solid transparent}
+header{background:#161b22;border-bottom:1px solid #30363d;padding:0 24px;display:flex;align-items:stretch;height:52px}
+.header-brand{display:flex;align-items:center;padding-right:20px;border-right:1px solid #30363d}
+.brand-link{font-size:.9375rem;font-weight:700;color:#e6edf3;text-decoration:none;letter-spacing:-.01em;font-family:'Segoe UI',system-ui,sans-serif}
+.brand-link:hover{color:#58a6ff}
+nav{display:flex;gap:0;align-items:stretch;margin-left:8px}
+nav a{color:#8b949e;text-decoration:none;padding:0 14px;display:flex;align-items:center;font-size:.875rem;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;white-space:nowrap}
 nav a:hover{color:#e6edf3}
 nav a.active{color:#e6edf3;border-bottom-color:#f78166}
 .badge{display:inline-block;font-size:0.75rem;padding:1px 8px;border-radius:12px;border:1px solid transparent;font-weight:500;line-height:1.4}
@@ -13,7 +14,9 @@ nav a.active{color:#e6edf3;border-bottom-color:#f78166}
 .badge-success{background:rgba(35,134,54,0.15);color:#3fb950;border-color:rgba(35,134,54,0.4)}
 .badge-warning{background:rgba(158,106,3,0.15);color:#e3b341;border-color:rgba(158,106,3,0.4)}
 .badge-outline{background:transparent !important;border-color:#30363d !important;color:#8b949e !important}
-.header-right{margin-left:auto;display:flex;align-items:center;gap:16px}
+.header-right{margin-left:auto;display:flex;align-items:center}
+.btn-signout{background:transparent;border:1px solid #30363d;color:#8b949e;padding:4px 12px;border-radius:6px;font-size:.8125rem;cursor:pointer;transition:color .15s,border-color .15s}
+.btn-signout:hover{color:#e6edf3;border-color:#8b949e}
 .search-inline{display:flex;align-items:center;gap:4px}
 .search-inline input{background:#0d1117;border:1px solid #30363d;color:#e6edf3;padding:5px 10px;border-radius:6px;font-size:.85rem;outline:none;width:200px;transition:border-color .2s}
 .search-inline input:focus{border-color:#58a6ff}
