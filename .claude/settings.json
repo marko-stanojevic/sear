@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -n \"^func\\\\|^type\\\\|^const\" /c/git/kompakt/internal/daemon/service/*.go)"
+      "Bash(grep -n \"^func\\\\|^type\\\\|^const\" /c/git/kompakt/internal/daemon/service/*.go)",
+      "Bash(wc -l /c/git/kompakt/internal/daemon/handlers/*.go)"
     ]
   }
 }

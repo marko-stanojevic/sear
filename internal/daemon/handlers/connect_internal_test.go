@@ -119,6 +119,20 @@ func TestHandleWSMessage_LogAndLifecycleUpdates(t *testing.T) {
 	}
 }
 
+func TestHandleWSMessage_UnknownType(t *testing.T) {
+	e := newConnectTestEnv(t)
+	saveClient(t, e, "c-unknown")
+	saveDeployment(t, e, "dep-unknown", "c-unknown", common.DeploymentStatusRunning)
+
+	before, _ := e.Store.GetDeployment("dep-unknown")
+	sendWS(t, e, "c-unknown", "totally_unknown_type_xyz", nil)
+	after, _ := e.Store.GetDeployment("dep-unknown")
+
+	if before.Status != after.Status || before.ResumeStepIndex != after.ResumeStepIndex {
+		t.Error("unknown message type should not mutate deployment state")
+	}
+}
+
 func TestHandleWSMessage_DeployFailedAndInvalidMessages(t *testing.T) {
 	e := newConnectTestEnv(t)
 	saveClient(t, e, "c2")
