@@ -34,7 +34,7 @@ func (e *Handler) issueToken(clientID string) (string, error) {
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return tok.SignedString(e.JWTSecret)
+	return tok.SignedString(e.AgentJWTSecret)
 }
 
 // clientIDFromToken validates the Bearer token in the request and returns
@@ -53,8 +53,8 @@ func (e *Handler) clientIDFromToken(r *http.Request) (string, error) {
 	return e.parseToken(strings.TrimPrefix(auth, "Bearer "))
 }
 
-// issueUIToken signs a short-lived (8 h) JWT for a root UI session.
-// The audience claim "kompakt-ui" prevents it from being accepted by agent auth.
+// issueUIToken signs a short-lived (8 h) JWT for a root UI session using the
+// dedicated UI secret, keeping it independent from agent tokens.
 func (e *Handler) issueUIToken() (string, error) {
 	claims := jwt.RegisteredClaims{
 		Subject:   "root",
@@ -63,12 +63,12 @@ func (e *Handler) issueUIToken() (string, error) {
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(8 * time.Hour)),
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return tok.SignedString(e.JWTSecret)
+	return tok.SignedString(e.UserJWTSecret)
 }
 
 func (e *Handler) parseToken(raw string) (string, error) {
 	tok, err := jwt.ParseWithClaims(raw, &jwt.RegisteredClaims{},
-		func(_ *jwt.Token) (any, error) { return e.JWTSecret, nil },
+		func(_ *jwt.Token) (any, error) { return e.AgentJWTSecret, nil },
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 	)
 	if err != nil {
@@ -114,7 +114,7 @@ func (e *Handler) RequireRootAuth(next http.Handler) http.Handler {
 		if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 			raw := strings.TrimPrefix(auth, "Bearer ")
 			tok, err := jwt.ParseWithClaims(raw, &jwt.RegisteredClaims{},
-				func(_ *jwt.Token) (any, error) { return e.JWTSecret, nil },
+				func(_ *jwt.Token) (any, error) { return e.UserJWTSecret, nil },
 				jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 				jwt.WithAudience(uiTokenAudience),
 			)

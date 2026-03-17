@@ -60,7 +60,7 @@ func newServerTestEnv(t *testing.T) *handlers.Handler {
 	hub := handlers.NewHub()
 	return &handlers.Handler{
 		Store:               st,
-		JWTSecret:           []byte("test-jwt-secret-32-bytes-padding!"),
+		AgentJWTSecret:           []byte("test-jwt-secret-32-bytes-padding!"),
 		RootPassword:        "admin123",
 		TokenExpiryHours:    24,
 		ArtifactsDir:        t.TempDir(),
@@ -109,7 +109,7 @@ func TestDualAuth_BasicAndBearer(t *testing.T) {
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	raw, err := tok.SignedString(env.JWTSecret)
+	raw, err := tok.SignedString(env.AgentJWTSecret)
 	if err != nil {
 		t.Fatalf("signed token: %v", err)
 	}

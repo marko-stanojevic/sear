@@ -48,11 +48,14 @@ func main() {
 		sec = &common.ServerSecrets{}
 	}
 
-	// ── JWT secret ───────────────────────────────────────────────────────────
-	if cfg.JWTSecret == "" {
-		cfg.JWTSecret = mustGenerateHex(32)
-		log.Printf("generated ephemeral JWT secret (set jwt_secret in config.yml to persist)")
+	// ── Ensure data directory exists before loading persisted secrets ────────
+	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
+		log.Fatalf("mkdir %s: %v", cfg.DataDir, err)
 	}
+
+	// ── JWT secrets (agent + UI, persisted across restarts) ──────────────────
+	cfg.AgentJWTSecret = loadOrCreateSecret(cfg.AgentJWTSecret, filepath.Join(cfg.DataDir, ".agent-jwt-secret"))
+	cfg.UserJWTSecret = loadOrCreateSecret(cfg.UserJWTSecret, filepath.Join(cfg.DataDir, ".ui-jwt-secret"))
 
 	// ── Root password ────────────────────────────────────────────────────────
 	if sec.RootPassword == "" {
@@ -68,7 +71,7 @@ func main() {
 	}
 
 	// ── Ensure directories ────────────────────────────────────────────────────
-	for _, dir := range []string{cfg.DataDir, cfg.ArtifactsDir, cfg.LogsDir} {
+	for _, dir := range []string{cfg.ArtifactsDir, cfg.LogsDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			log.Fatalf("mkdir %s: %v", dir, err)
 		}
@@ -91,7 +94,8 @@ func main() {
 	svc := &service.Manager{Store: st, Hub: hub, ServerURL: serverURL(cfg)}
 	env := &handlers.Handler{
 		Store:               st,
-		JWTSecret:           []byte(cfg.JWTSecret),
+		AgentJWTSecret:      []byte(cfg.AgentJWTSecret),
+		UserJWTSecret:       []byte(cfg.UserJWTSecret),
 		RootPassword:        sec.RootPassword,
 		TokenExpiryHours:    cfg.TokenExpiryHours,
 		ArtifactsDir:        cfg.ArtifactsDir,
@@ -160,6 +164,26 @@ func serverURL(cfg *common.ServerConfig) string {
 		return "https://localhost" + cfg.ListenAddr
 	}
 	return "http://localhost" + cfg.ListenAddr
+}
+
+// loadOrCreateSecret returns the explicit value if non-empty. Otherwise it
+// tries to read the secret from path; if the file does not exist it generates
+// a new secret, writes it to path, and returns it. This ensures secrets
+// survive server restarts without requiring manual config.
+func loadOrCreateSecret(explicit, path string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if data, err := os.ReadFile(path); err == nil {
+		if s := strings.TrimSpace(string(data)); s != "" {
+			return s
+		}
+	}
+	s := mustGenerateHex(32)
+	if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
+		log.Printf("warn: could not persist secret to %s: %v", path, err)
+	}
+	return s
 }
 
 func mustGenerateHex(n int) string {
