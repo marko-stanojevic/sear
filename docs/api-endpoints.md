@@ -4,12 +4,16 @@ This document describes the HTTP and WebSocket endpoints exposed by kompakt.
 
 ## Authentication model
 
-- Public endpoints: no auth required
-- Client endpoints: JWT bearer token (issued at registration)
-- Root endpoints: HTTP Basic auth (`root` + root password)
-- Artifacts endpoints: accepts either client JWT or root Basic auth
+| Caller | Mechanism |
+| --- | --- |
+| Root / admin (direct API) | HTTP Basic auth (`root` + root password) |
+| Root / admin (web UI) | Short-lived Bearer JWT issued by `POST /api/v1/ui/login` |
+| Agent | Bearer JWT issued at `POST /api/v1/register` |
+| Artifacts | Accepts either agent JWT or root Basic/Bearer |
 
-> Note: Daemon generates missing secrets and passwords on startup and prints them for onboarding.
+Root-protected endpoints accept both HTTP Basic and the UI JWT interchangeably.
+
+> Daemon generates missing credentials on startup and prints them for onboarding.
 
 ## Public endpoints
 
@@ -19,61 +23,75 @@ This document describes the HTTP and WebSocket endpoints exposed by kompakt.
 - `POST /api/v1/register`
   - Registers (or re-registers) a client
   - Validated by `registration_secret` (must match daemon config)
-  - Returns client ID and JWT token
+  - Returns client ID and agent JWT
+
+- `POST /api/v1/ui/login`
+  - Validates root password, returns a short-lived Bearer JWT for UI sessions
+  - Body: `{ "password": "..." }`
 
 - `GET /api/v1/ws`
-  - Upgrades to WebSocket for client control/log stream
-  - Auth via bearer token or `?token=` query parameter
-  - Streams real-time deployment events and logs
+  - Upgrades to WebSocket for agent control and log streaming
+  - Auth via `Authorization: Bearer <token>` or `?token=` query param
 
 ## Root endpoints
 
-Root management APIs require HTTP Basic auth.
+Require HTTP Basic auth (`root` + root password) or UI JWT Bearer token.
 
 ### UI pages
 
-UI pages are served under `/ui`:
+Served under `/ui` — no auth required at the HTTP level; page JS handles auth for API calls.
 
-- `GET /ui` (clients/status dashboard)
-- `GET /ui/secrets` (secrets management)
-- `GET /ui/playbooks` (playbooks management)
-- `GET /ui/deployments` (deployments and logs)
+- `GET /ui` — homepage dashboard
+- `GET /ui/clients` — connected clients
+- `GET /ui/secrets` — secrets management
+- `GET /ui/playbooks` — playbook library
+- `GET /ui/deployments` — deployment history and logs
+- `GET /ui/artifacts` — artifact storage
 
-The UI signs in and then calls the root APIs below using HTTP Basic credentials.
-
-### Status API
+### Status
 
 - `GET /api/v1/status`
-  - JSON summary of clients and deployments
+  - JSON snapshot of all clients and active deployments
 
 ### Playbooks
 
-- `GET /api/v1/playbooks` (list all playbooks)
-- `POST /api/v1/playbooks` (create playbook; accepts JSON or YAML)
-- `GET /api/v1/playbooks/{id}` (get playbook; includes YAML for editor roundtrips)
-- `PUT /api/v1/playbooks/{id}` (update playbook)
-- `DELETE /api/v1/playbooks/{id}` (delete playbook)
-- `POST /api/v1/playbooks/{id}/assign` (assign playbook to client; pushes deployment if connected)
+- `GET /api/v1/playbooks` — list all playbooks
+- `POST /api/v1/playbooks` — create playbook (JSON or YAML body)
+- `GET /api/v1/playbooks/{id}` — get playbook (includes YAML for editor round-trips)
+- `PUT /api/v1/playbooks/{id}` — update playbook
+- `DELETE /api/v1/playbooks/{id}` — delete playbook
+- `POST /api/v1/playbooks/{id}/assign` — assign playbook to a client; pushes deployment immediately if client is connected
 
 ### Clients
 
-- `GET /api/v1/clients` (list all registered clients)
-- `GET /api/v1/clients/{id}` (get client details)
-- `POST /api/v1/clients/{id}/reboot` (trigger client reboot)
+- `GET /api/v1/clients` — list all registered clients
+- `DELETE /api/v1/clients/{id}` — remove a client record
+
+### Deployments
+
+- `GET /api/v1/deployments` — list all deployments
+- `DELETE /api/v1/deployments/{id}` — remove a deployment and its logs
+- `GET /api/v1/deployments/{id}/logs` — get persisted log entries for a deployment
 
 ### Artifacts
 
-- `POST /api/v1/artifacts` (upload artifact)
-- `GET /api/v1/artifacts/{name}` (download artifact)
+Artifacts use the `/artifacts` prefix (not `/api/v1`). Access is controlled per artifact by its access policy (public, authenticated, restricted).
+
+- `GET /artifacts` — list all artifacts
+- `POST /artifacts?filename=<f>&name=<n>&access_policy=<p>&allowed_clients=<ids>` — upload artifact (raw body)
+- `GET /artifacts/{id}` — download artifact
+- `PATCH /artifacts/{id}?access_policy=<p>&allowed_clients=<ids>` — update access policy
+- `DELETE /artifacts/{id}` — delete artifact
 
 ### Secrets
 
-- `GET /api/v1/secrets` (list secrets)
-- `POST /api/v1/secrets` (add secret)
-- `DELETE /api/v1/secrets/{name}` (remove secret)
+- `GET /api/v1/secrets` — list secret names (values are not returned)
+- `GET /api/v1/secrets/{name}` — get a single secret value
+- `PUT /api/v1/secrets/{name}` — create or update a secret; body: `{ "value": "..." }`
+- `DELETE /api/v1/secrets/{name}` — delete a secret
 
 ## Notes
 
-- All deployment logs are persisted in the daemon's logs directory.
-- Clients resume deployments after reboot or crash.
-- Artifacts are distributed automatically during workflow execution.
+- All deployment logs are persisted in the daemon's logs directory, not in `state.json`.
+- Agents resume deployments automatically after reboot or crash using the stored `resume_step_index`.
+- Secrets are injected into playbook steps via `${{ secrets.NAME }}` at execution time.

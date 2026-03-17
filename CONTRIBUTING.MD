@@ -121,7 +121,7 @@ kompakt/
 
 - Follow standard Go idioms and style.
 - Keep internal/common free of external dependencies when possible.
-- Daemon endpoints for admins use HTTP Basic auth; client communication uses JWT.
+- Daemon endpoints for admins use HTTP Basic auth or a short-lived UI JWT (issued by `POST /api/v1/ui/login`); client communication uses JWT.
 - Logs are persisted per deployment under logsDir and not in state.json.
 - Keep job and step order deterministic in playbook processing.
 
@@ -133,7 +133,7 @@ Keep route structure consistent:
   - Public/client control examples: `/api/v1/register`, `/api/v1/ws`
   - Root management examples: `/api/v1/status`, `/api/v1/secrets`, `/api/v1/playbooks`, `/api/v1/clients`, `/api/v1/deployments`
 - Browser UI pages are under `/ui`.
-  - `/ui`, `/ui/secrets`, `/ui/playbooks`, `/ui/deployments`
+  - `/ui`, `/ui/clients`, `/ui/secrets`, `/ui/playbooks`, `/ui/deployments`, `/ui/artifacts`
 - When adding a new resource:
   - expose API under `/api/v1/<resource>`
   - expose UI under `/ui/<resource>` when needed
