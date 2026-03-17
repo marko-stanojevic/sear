@@ -107,8 +107,10 @@
 <script src="/ui/assets/layout.js"></script>
 <script>
 var artifacts = [];
+var currentPage = 1;
+function setPage(n) { currentPage = n; render(); }
 
-function clearSearch() { document.getElementById('f-query').value = ''; updateClearBtn(); render(); }
+function clearSearch() { document.getElementById('f-query').value = ''; currentPage = 1; updateClearBtn(); render(); }
 function updateClearBtn() {
   var q = document.getElementById('f-query').value;
   document.getElementById('f-clear').classList.toggle('show', !!q);
@@ -135,8 +137,9 @@ function render() {
     root.innerHTML = '<div class="empty">No artifacts match your search.</div>';
     return;
   }
-
-  var rows = rowsData.map(function(a) {
+  var start = (currentPage - 1) * PAGE_SIZE;
+  var pageItems = rowsData.slice(start, start + PAGE_SIZE);
+  var rows = pageItems.map(function(a) {
     var size = (a.size / 1024).toFixed(1) + ' KB';
     if (a.size > 1024 * 1024) size = (a.size / (1024 * 1024)).toFixed(1) + ' MB';
     var upd = a.uploaded_at ? new Date(a.uploaded_at).toLocaleString() : '-';
@@ -165,19 +168,24 @@ function render() {
   root.innerHTML = '<div class="list list-artifacts">' +
     '<div class="list-head"><div>Artifact</div><div>Filename</div><div>Size</div><div>Access Policy</div><div>Uploaded</div><div></div></div>' +
     rows +
-    '</div>';
+    '</div>' + buildPagination(rowsData.length, currentPage);
 
   updateIcons();
 }
 
 async function load() {
-  var r = await fetch('/artifacts', { headers: headersAuth() });
-  if (r.status === 401) { showLogin(''); return; }
-  if (!r.ok) { document.getElementById('root').innerHTML = '<div class="empty">Failed to load artifacts.</div>'; return; }
-  artifacts = await r.json() || [];
-  artifacts.sort((a, b) => new Date(b.uploaded_at || 0) - new Date(a.uploaded_at || 0));
-  render();
-  updateClearBtn();
+  document.getElementById('root').innerHTML = '<div class="spinner"></div>';
+  try {
+    var r = await fetch('/artifacts', { headers: headersAuth() });
+    if (r.status === 401) { showLogin(''); return; }
+    if (!r.ok) { document.getElementById('root').innerHTML = '<div class="empty">Failed to load artifacts.</div>'; return; }
+    artifacts = await r.json() || [];
+    artifacts.sort((a, b) => new Date(b.uploaded_at || 0) - new Date(a.uploaded_at || 0));
+    render();
+    updateClearBtn();
+  } catch(e) {
+    document.getElementById('root').innerHTML = '<div class="empty">Network error. Retrying&#x2026;</div>';
+  }
 }
 
 function showModal(id) { document.getElementById(id).classList.add('show'); }
@@ -270,21 +278,19 @@ async function uploadArtifact() {
 }
 
 async function removeArtifact(id) {
-  if (!confirm('Delete artifact?')) return;
-  try {
-    var r = await fetch('/artifacts/' + encodeURIComponent(id), {
-      method: 'DELETE',
-      headers: headersAuth()
-    });
-    if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
-    if (!r.ok) { document.getElementById('counts').textContent = 'Delete failed (' + r.status + ')'; return; }
-    load();
-  } catch(e) {
-    document.getElementById('counts').textContent = 'Network error';
-  }
+  showConfirm('Delete Artifact', 'Delete this artifact? This cannot be undone.', async function() {
+    try {
+      var r = await fetch('/artifacts/' + encodeURIComponent(id), { method: 'DELETE', headers: headersAuth() });
+      if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
+      if (!r.ok) { document.getElementById('counts').textContent = 'Delete failed (' + r.status + ')'; return; }
+      load();
+    } catch(e) {
+      document.getElementById('counts').textContent = 'Network error';
+    }
+  });
 }
 
-document.getElementById('f-query').addEventListener('input', function() { render(); updateClearBtn(); });
+document.getElementById('f-query').addEventListener('input', function() { currentPage = 1; render(); updateClearBtn(); });
 initLogin('/api/v1/status', load);
 </script>
 </body>

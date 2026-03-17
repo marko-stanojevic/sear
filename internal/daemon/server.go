@@ -25,6 +25,9 @@ func NewServer(env *handlers.Env) http.Handler {
 	// POST /api/v1/register  — no auth; validated by registration secret
 	mux.Handle("/api/v1/register", http.HandlerFunc(env.HandleRegister))
 
+	// POST /api/v1/ui/login — no auth; validates root password, returns short-lived UI JWT
+	mux.HandleFunc("/api/v1/ui/login", env.HandleUILogin)
+
 	// GET  /api/v1/ws        — WebSocket; JWT via ?token= query param
 	mux.Handle("/api/v1/ws", http.HandlerFunc(env.HandleWS))
 

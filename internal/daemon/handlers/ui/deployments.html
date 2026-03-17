@@ -43,8 +43,10 @@
 <script src="/ui/assets/layout.js"></script>
 <script>
 var deployments=[];
+var currentPage = 1;
+function setPage(n) { currentPage = n; render(); }
 
-function clearFilters(){document.getElementById('f-query').value='';updateClearBtn();render();}
+function clearFilters(){document.getElementById('f-query').value='';currentPage=1;updateClearBtn();render();}
 
 function filtered(){
   var q=(document.getElementById('f-query').value||'').trim().toLowerCase();
@@ -71,7 +73,9 @@ function render(){
   var rowsData=filtered();
   document.getElementById('counts').textContent='Shown: '+rowsData.length+' / '+deployments.length;
   if(!rowsData.length){root.innerHTML='<div class="empty">No deployments match your filters.</div>';return;}
-  var rows=rowsData.map(function(d,i){
+  var start=(currentPage-1)*PAGE_SIZE;
+  var pageItems=rowsData.slice(start,start+PAGE_SIZE);
+  var rows=pageItems.map(function(d,i){
     var upd=d.updated_at?new Date(d.updated_at).toLocaleString():'-';
     var finished=d.finished_at?new Date(d.finished_at).toLocaleString():'-';
     return '<div class="list-row">'+
@@ -93,20 +97,21 @@ function render(){
   root.innerHTML='<div class="list list-deployments">'+
     '<div class="list-head"><div>Deployment</div><div>Client</div><div>Playbook</div><div>Status</div><div>Updated</div><div>Finished</div><div></div></div>'+
     rows+
-  '</div>';
+  '</div>' + buildPagination(rowsData.length, currentPage);
   updateIcons();
 }
 
 async function removeDeployment(id) {
-  if (!confirm('Remove deployment "' + id + '"?\nThis will remove it from state and delete its logs.')) return;
-  try {
-    const r = await fetch('/api/v1/deployments/' + encodeURIComponent(id), { method: 'DELETE', headers: headersAuth() });
-    if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
-    if (!r.ok) { document.getElementById('counts').textContent = 'Delete failed (' + r.status + ')'; return; }
-    load();
-  } catch(e) {
-    document.getElementById('counts').textContent = 'Network error';
-  }
+  showConfirm('Remove Deployment', 'Remove deployment ' + id + '? This will delete its logs.', async function() {
+    try {
+      const r = await fetch('/api/v1/deployments/' + encodeURIComponent(id), { method: 'DELETE', headers: headersAuth() });
+      if (r.status === 401) { showLogin('Session expired — sign in again'); return; }
+      if (!r.ok) { document.getElementById('counts').textContent = 'Delete failed (' + r.status + ')'; return; }
+      load();
+    } catch(e) {
+      document.getElementById('counts').textContent = 'Network error';
+    }
+  });
 }
 
 async function openLogs(id){
@@ -114,9 +119,10 @@ async function openLogs(id){
   var root=document.getElementById('logs-root');
   document.getElementById('logs-title').textContent='Logs: '+id;
   p.style.display='block';
-  root.innerHTML='<div class="empty">Loading logs...</div>';
+  root.innerHTML='<div class="spinner"></div>';
+  try {
   var r=await fetch('/api/v1/deployments/'+encodeURIComponent(id)+'/logs',{headers:headersAuth()});
-  if(r.status===401){showLogin('Session expired - sign in again');return;}
+  if(r.status===401){showLogin('Session expired — sign in again');return;}
   if(!r.ok){root.innerHTML='<div class="empty">Failed to load logs.</div>';return;}
   var logs=await r.json()||[];
   if(!logs.length){root.innerHTML='<div class="empty">No logs for this deployment.</div>';return;}
@@ -146,10 +152,14 @@ async function openLogs(id){
     '</div>';
   }).join('');
   root.innerHTML='<div class="log-head"><div>Time</div><div>Level</div><div>Job</div><div>Step</div><div>Message</div></div>'+rows;
+  } catch(e) {
+    root.innerHTML='<div class="empty">Network error loading logs.</div>';
+  }
 }
 function closeLogs(){document.getElementById('logs-panel').style.display='none';}
 
 async function load(){
+  document.getElementById('root').innerHTML='<div class="spinner"></div>';
   try {
     var r=await fetch('/api/v1/deployments',{headers:headersAuth()});
     if(r.status===401){showLogin('');return;}
@@ -167,7 +177,7 @@ function updateClearBtn() {
   document.getElementById('f-clear').classList.toggle('show', !!q);
 }
 
-document.getElementById('f-query').addEventListener('input',function(){render();updateClearBtn();});
+document.getElementById('f-query').addEventListener('input',function(){currentPage=1;render();updateClearBtn();});
 
 var _autoRefreshTimer = null;
 function startAutoRefresh() { _autoRefreshTimer = setInterval(load, 10000); }

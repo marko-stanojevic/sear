@@ -16,6 +16,10 @@ import (
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
+// uiTokenAudience is the JWT audience claim used exclusively for UI session tokens.
+// It prevents a UI token from being accepted by the agent client-auth middleware.
+const uiTokenAudience = "kompakt-ui"
+
 // ── JWT helpers ───────────────────────────────────────────────────────────────
 
 // issueToken signs a JWT for the given client ID.
@@ -47,6 +51,19 @@ func (e *Env) clientIDFromToken(r *http.Request) (string, error) {
 		return e.parseToken(token)
 	}
 	return e.parseToken(strings.TrimPrefix(auth, "Bearer "))
+}
+
+// issueUIToken signs a short-lived (8 h) JWT for a root UI session.
+// The audience claim "kompakt-ui" prevents it from being accepted by agent auth.
+func (e *Env) issueUIToken() (string, error) {
+	claims := jwt.RegisteredClaims{
+		Subject:   "root",
+		Audience:  jwt.ClaimStrings{uiTokenAudience},
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(8 * time.Hour)),
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return tok.SignedString(e.JWTSecret)
 }
 
 func (e *Env) parseToken(raw string) (string, error) {
@@ -87,10 +104,28 @@ func (e *Env) RequireClientAuth(next http.Handler) http.Handler {
 	})
 }
 
-// RequireRootAuth enforces HTTP Basic auth with username "root" and the
-// configured root password.
+// RequireRootAuth enforces authentication for root/admin endpoints.
+// It accepts either:
+//   - HTTP Basic auth (username "root" + configured root password), for scripts/tools, or
+//   - Bearer JWT issued by HandleUILogin, for the web UI (never stores the raw password).
 func (e *Env) RequireRootAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Accept UI Bearer JWT
+		if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+			raw := strings.TrimPrefix(auth, "Bearer ")
+			tok, err := jwt.ParseWithClaims(raw, &jwt.RegisteredClaims{},
+				func(_ *jwt.Token) (any, error) { return e.JWTSecret, nil },
+				jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+				jwt.WithAudience(uiTokenAudience),
+			)
+			if err == nil {
+				if claims, ok := tok.Claims.(*jwt.RegisteredClaims); ok && tok.Valid && claims.Subject == "root" {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+		}
+		// Fall back to HTTP Basic auth
 		user, pass, ok := r.BasicAuth()
 		if !ok ||
 			subtle.ConstantTimeCompare([]byte(user), []byte("root")) != 1 ||
@@ -101,6 +136,33 @@ func (e *Env) RequireRootAuth(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// HandleUILogin processes POST /api/v1/ui/login.
+// Validates the root password and returns a short-lived JWT so the browser
+// never has to store the raw password in sessionStorage.
+func (e *Env) HandleUILogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(req.Password), []byte(e.RootPassword)) != 1 {
+		writeError(w, http.StatusUnauthorized, "invalid password")
+		return
+	}
+	token, err := e.issueUIToken()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to issue token")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"token": token})
 }
 
 // ── Registration ─────────────────────────────────────────────────────────────
