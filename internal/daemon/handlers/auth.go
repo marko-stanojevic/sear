@@ -23,7 +23,7 @@ const uiTokenAudience = "kompakt-ui"
 // ── JWT helpers ───────────────────────────────────────────────────────────────
 
 // issueToken signs a JWT for the given client ID.
-func (e *Env) issueToken(clientID string) (string, error) {
+func (e *Handler) issueToken(clientID string) (string, error) {
 	expiry := time.Duration(e.TokenExpiryHours) * time.Hour
 	if expiry == 0 {
 		expiry = 720 * time.Hour // 30 days default
@@ -39,7 +39,7 @@ func (e *Env) issueToken(clientID string) (string, error) {
 
 // clientIDFromToken validates the Bearer token in the request and returns
 // the embedded client ID.
-func (e *Env) clientIDFromToken(r *http.Request) (string, error) {
+func (e *Handler) clientIDFromToken(r *http.Request) (string, error) {
 	auth := r.Header.Get("Authorization")
 	if !strings.HasPrefix(auth, "Bearer ") {
 		// Also accept token as query parameter (for WebSocket clients that
@@ -55,7 +55,7 @@ func (e *Env) clientIDFromToken(r *http.Request) (string, error) {
 
 // issueUIToken signs a short-lived (8 h) JWT for a root UI session.
 // The audience claim "kompakt-ui" prevents it from being accepted by agent auth.
-func (e *Env) issueUIToken() (string, error) {
+func (e *Handler) issueUIToken() (string, error) {
 	claims := jwt.RegisteredClaims{
 		Subject:   "root",
 		Audience:  jwt.ClaimStrings{uiTokenAudience},
@@ -66,7 +66,7 @@ func (e *Env) issueUIToken() (string, error) {
 	return tok.SignedString(e.JWTSecret)
 }
 
-func (e *Env) parseToken(raw string) (string, error) {
+func (e *Handler) parseToken(raw string) (string, error) {
 	tok, err := jwt.ParseWithClaims(raw, &jwt.RegisteredClaims{},
 		func(_ *jwt.Token) (any, error) { return e.JWTSecret, nil },
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
@@ -85,7 +85,7 @@ func (e *Env) parseToken(raw string) (string, error) {
 
 // RequireClientAuth validates the client JWT and sets X-Client-ID for
 // downstream handlers. Also refreshes the client's last-seen timestamp.
-func (e *Env) RequireClientAuth(next http.Handler) http.Handler {
+func (e *Handler) RequireClientAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientID, err := e.clientIDFromToken(r)
 		if err != nil {
@@ -108,7 +108,7 @@ func (e *Env) RequireClientAuth(next http.Handler) http.Handler {
 // It accepts either:
 //   - HTTP Basic auth (username "root" + configured root password), for scripts/tools, or
 //   - Bearer JWT issued by HandleUILogin, for the web UI (never stores the raw password).
-func (e *Env) RequireRootAuth(next http.Handler) http.Handler {
+func (e *Handler) RequireRootAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Accept UI Bearer JWT
 		if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
@@ -141,7 +141,7 @@ func (e *Env) RequireRootAuth(next http.Handler) http.Handler {
 // HandleUILogin processes POST /api/v1/ui/login.
 // Validates the root password and returns a short-lived JWT so the browser
 // never has to store the raw password in sessionStorage.
-func (e *Env) HandleUILogin(w http.ResponseWriter, r *http.Request) {
+func (e *Handler) HandleUILogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -171,7 +171,7 @@ func (e *Env) HandleUILogin(w http.ResponseWriter, r *http.Request) {
 // Clients authenticate with a pre-shared registration secret.
 // Re-registration of the same machine_id is idempotent — the existing client
 // record is reused and a fresh JWT is issued.
-func (e *Env) HandleRegister(w http.ResponseWriter, r *http.Request) {
+func (e *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -259,7 +259,7 @@ func (e *Env) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (e *Env) validRegistrationSecret(s string) bool {
+func (e *Handler) validRegistrationSecret(s string) bool {
 	if s == "" {
 		return false
 	}

@@ -23,7 +23,7 @@ import (
 //
 // Uploading uses a raw request body rather than multipart to keep CLI usage
 // simple:  curl -T myapp http://daemon/artifacts?name=myapp
-func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
+func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/artifacts")
 	path = strings.TrimPrefix(path, "/")
 	parts := strings.SplitN(path, "/", 2)

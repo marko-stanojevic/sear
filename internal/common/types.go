@@ -49,11 +49,11 @@ type Step struct {
 	TimeoutMinutes int `yaml:"timeout-minutes,omitempty" json:"timeout_minutes,omitempty"`
 }
 
-// ── FlatStep — ordered execution view ────────────────────────────────────────
+// ── OrderedStep — ordered execution view ────────────────────────────────────────
 
-// FlatStep is a Step annotated with its position across the whole playbook.
+// OrderedStep is a Step annotated with its position across the whole playbook.
 // GlobalIndex is what the daemon persists as the resume point after a reboot.
-type FlatStep struct {
+type OrderedStep struct {
 	Step
 	JobName     string
 	JobIndex    int
@@ -62,12 +62,12 @@ type FlatStep struct {
 }
 
 // FlattenPlaybook returns all steps in execution order with global indices.
-func FlattenPlaybook(pb *Playbook) []FlatStep {
-	var out []FlatStep
+func FlattenPlaybook(pb *Playbook) []OrderedStep {
+	var out []OrderedStep
 	global := 0
 	for ji, job := range pb.Jobs {
 		for si, step := range job.Steps {
-			out = append(out, FlatStep{
+			out = append(out, OrderedStep{
 				Step:        step,
 				JobName:     job.Name,
 				JobIndex:    ji,

@@ -14,8 +14,8 @@ import (
 	"github.com/marko-stanojevic/kompakt/internal/daemon/service"
 )
 
-// Env bundles the dependencies shared by all handlers.
-type Env struct {
+// Handler bundles the dependencies shared by all handlers.
+type Handler struct {
 	Store               ports.Store
 	JWTSecret           []byte
 	RootPassword        string

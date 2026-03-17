@@ -17,14 +17,14 @@ import (
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
 
-func newTestEnv(t *testing.T) *handlers.Env {
+func newTestEnv(t *testing.T) *handlers.Handler {
 	t.Helper()
 	st, err := store.New(t.TempDir(), "")
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
 	hub := handlers.NewHub()
-	return &handlers.Env{
+	return &handlers.Handler{
 		Store:            st,
 		JWTSecret:        []byte("test-secret-key-32-bytes-padding!"),
 		RootPassword:     "admin123",
@@ -90,7 +90,7 @@ func decode[T any](t *testing.T, rr *httptest.ResponseRecorder) T {
 }
 
 // registerClient is a test helper that registers a client and returns its token.
-func registerClient(t *testing.T, env *handlers.Env, machineID, hostname string) (string, string) {
+func registerClient(t *testing.T, env *handlers.Handler, machineID, hostname string) (string, string) {
 	t.Helper()
 	rr := postJSON(t, env.HandleRegister, "/api/v1/register", common.RegistrationRequest{
 		Platform:           common.PlatformLinux,
@@ -358,11 +358,11 @@ func TestRequireRootAuth_Correct(t *testing.T) {
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
-func TestHandleStatus(t *testing.T) {
+func TestHandleClients(t *testing.T) {
 	env := newTestEnv(t)
 	registerClient(t, env, "SN-050", "host-50")
 
-	rr := getRequest(t, env.HandleStatus, "/status", "")
+	rr := getRequest(t, env.HandleClients, "/status", "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
@@ -380,7 +380,7 @@ func TestHandleUIPages(t *testing.T) {
 		path    string
 		handler http.HandlerFunc
 	}{
-		{name: "status ui", path: "/ui", handler: env.HandleStatusUI},
+		{name: "status ui", path: "/ui", handler: env.HandleClientsUI},
 		{name: "secrets ui", path: "/ui/secrets", handler: env.HandleSecretsUI},
 		{name: "playbooks ui", path: "/ui/playbooks", handler: env.HandlePlaybooksUI},
 		{name: "deployments ui", path: "/ui/deployments", handler: env.HandleDeploymentsUI},

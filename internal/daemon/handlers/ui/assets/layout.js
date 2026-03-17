@@ -141,9 +141,9 @@ function ensureLoginOverlay() {
     '<div id="login-box">' +
       '<h2>&#x1F512; Kompakt Root Login</h2>' +
       '<label>Username</label>' +
-      '<input id="lu" type="text" value="root" readonly>' +
+      '<input id="login-username" type="text" value="root" readonly>' +
       '<label>Password</label>' +
-      '<input id="lp" type="password" autocomplete="current-password" placeholder="root password">' +
+      '<input id="login-password" type="password" autocomplete="current-password" placeholder="root password">' +
       '<div id="login-error"></div>' +
       '<button class="btn-login" onclick="window.doLogin()">Sign in</button>' +
     '</div>';
@@ -153,9 +153,9 @@ function ensureLoginOverlay() {
 function showLogin(msg) {
   ensureLoginOverlay();
   var errEl = document.getElementById('login-error'); if (errEl) errEl.textContent = msg || '';
-  var lp    = document.getElementById('lp');           if (lp) lp.value = '';
+  var lp    = document.getElementById('login-password'); if (lp) lp.value = '';
   var overlay = document.getElementById('login-overlay'); if (overlay) overlay.classList.add('show');
-  setTimeout(function() { var lpf = document.getElementById('lp'); if (lpf) lpf.focus(); }, 50);
+  setTimeout(function() { var lpf = document.getElementById('login-password'); if (lpf) lpf.focus(); }, 50);
 }
 
 function hideLogin() {
@@ -169,7 +169,7 @@ function initLogin(apiPath, onSuccess) {
   var cb = onSuccess || function() { if (typeof load === 'function') load(); };
 
   async function doLogin() {
-    var p = document.getElementById('lp').value;
+    var p = document.getElementById('login-password').value;
     if (!p) { document.getElementById('login-error').textContent = 'Password required'; return; }
     document.getElementById('login-error').textContent = 'Signing in\u2026';
     try {
@@ -189,7 +189,7 @@ function initLogin(apiPath, onSuccess) {
     }
   }
 
-  var pwField = document.getElementById('lp');
+  var pwField = document.getElementById('login-password');
   if (pwField) pwField.addEventListener('keydown', function(e) { if (e.key === 'Enter') doLogin(); });
   window.doLogin = doLogin;
 

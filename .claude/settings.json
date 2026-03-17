@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"^func\\\\|^type\\\\|^const\" /c/git/kompakt/internal/daemon/service/*.go)"
+    ]
+  }
+}

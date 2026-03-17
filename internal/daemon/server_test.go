@@ -51,14 +51,14 @@ func TestLoggingPreservesHijacker(t *testing.T) {
 	}
 }
 
-func newServerTestEnv(t *testing.T) *handlers.Env {
+func newServerTestEnv(t *testing.T) *handlers.Handler {
 	t.Helper()
 	st, err := store.New(t.TempDir(), "")
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
 	hub := handlers.NewHub()
-	return &handlers.Env{
+	return &handlers.Handler{
 		Store:               st,
 		JWTSecret:           []byte("test-jwt-secret-32-bytes-padding!"),
 		RootPassword:        "admin123",

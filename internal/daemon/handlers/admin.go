@@ -35,7 +35,7 @@ type StatusResponse struct {
 //	DELETE /api/v1/playbooks/{id}         – delete
 //	POST   /api/v1/playbooks/{id}/assign  – assign to a client (pushes immediately
 //	                                         if client is connected via WebSocket)
-func (e *Env) HandleRootPlaybooks(w http.ResponseWriter, r *http.Request) {
+func (e *Handler) HandleRootPlaybooks(w http.ResponseWriter, r *http.Request) {
 	// Strip prefix to isolate the path tail.
 	tail := strings.TrimPrefix(r.URL.Path, "/api/v1/playbooks")
 	tail = strings.TrimPrefix(tail, "/")
@@ -186,7 +186,7 @@ func decodePlaybookWritePayload(r *http.Request) (store.PlaybookRecord, error) {
 
 // assignPlaybook assigns a playbook to a client and immediately pushes it
 // if the client is connected via WebSocket.
-func (e *Env) assignPlaybook(w http.ResponseWriter, r *http.Request, playbookID string) {
+func (e *Handler) assignPlaybook(w http.ResponseWriter, r *http.Request, playbookID string) {
 	var body struct {
 		ClientID string `json:"client_id"`
 	}
@@ -218,7 +218,7 @@ func (e *Env) assignPlaybook(w http.ResponseWriter, r *http.Request, playbookID 
 //	GET    /api/v1/clients/{id}     – get one
 //	PUT    /api/v1/clients/{id}     – update (e.g. assign playbook, set status)
 //	DELETE /api/v1/clients/{id}     – delete
-func (e *Env) HandleRootClients(w http.ResponseWriter, r *http.Request) {
+func (e *Handler) HandleRootClients(w http.ResponseWriter, r *http.Request) {
 	tail := strings.TrimPrefix(r.URL.Path, "/api/v1/clients")
 	tail = strings.TrimPrefix(tail, "/")
 	id := tail
@@ -289,7 +289,7 @@ func (e *Env) HandleRootClients(w http.ResponseWriter, r *http.Request) {
 //	GET /api/v1/deployments              – list all
 //	GET /api/v1/deployments/{id}         – get one
 //	GET /api/v1/deployments/{id}/logs    – get logs for deployment
-func (e *Env) HandleRootDeployments(w http.ResponseWriter, r *http.Request) {
+func (e *Handler) HandleRootDeployments(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/deployments")
 	path = strings.TrimPrefix(path, "/")
 	parts := strings.SplitN(path, "/", 2)

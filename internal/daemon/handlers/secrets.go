@@ -12,7 +12,7 @@ import (
 //	GET    /api/v1/secrets/{name}   – get a specific secret value
 //	PUT    /api/v1/secrets/{name}   – set or update a secret value
 //	DELETE /api/v1/secrets/{name}   – delete a secret
-func (e *Env) HandleSecrets(w http.ResponseWriter, r *http.Request) {
+func (e *Handler) HandleSecrets(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/api/v1/secrets")
 	name = strings.TrimPrefix(name, "/")
 
@@ -65,6 +65,6 @@ func (e *Env) HandleSecrets(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleSecretsUI serves the secrets management web page.
-func (e *Env) HandleSecretsUI(w http.ResponseWriter, r *http.Request) {
+func (e *Handler) HandleSecretsUI(w http.ResponseWriter, r *http.Request) {
 	renderUI(w, "secrets.html")
 }
