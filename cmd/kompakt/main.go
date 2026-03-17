@@ -89,7 +89,7 @@ func main() {
 	// ── Handler environment ───────────────────────────────────────────────────
 	hub := handlers.NewHub()
 	svc := &service.Manager{Store: st, Hub: hub, ServerURL: serverURL(cfg)}
-	env := &handlers.Env{
+	env := &handlers.Handler{
 		Store:               st,
 		JWTSecret:           []byte(cfg.JWTSecret),
 		RootPassword:        sec.RootPassword,

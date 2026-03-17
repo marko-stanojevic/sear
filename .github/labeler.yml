@@ -27,13 +27,24 @@ build:
     - any-glob-to-any-file:
       - '.goreleaser.yml'
       - '.golangci.yml'
+      - '.github/actions/**/*'
 
-commands:
+daemon:
   - changed-files:
     - any-glob-to-any-file:
-      - 'cmd/**/*'
-      - 'internal/**/*'
-      - 'main.go'
+      - 'cmd/kompakt/**/*'
+      - 'internal/daemon/**/*'
+
+agent:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'cmd/kompakt-agent/**/*'
+      - 'internal/client/**/*'
+
+common:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'internal/common/**/*'
 
 # Branch-based labels
 breaking:
@@ -45,26 +56,3 @@ feature:
 bugfix:
  - head-branch: ['^bugfix', 'bugfix', 'fix', 'patch', 'hotfix']
 
- # Conventional Commit-based labels
-conventional-commits:
-- type: 'bugfix'
-  nouns: ['bugfix', 'fix', 'patch', 'hotfix']
-  labels: ['bugfix']
-- type: 'feature'
-  nouns: ['feature', 'enhancement', 'feat', 'add', 'minor']
-  labels: ['feature']
-- type: 'breaking'
-  nouns: ['breaking', 'major']
-  labels: ['breaking']
-- type: 'docs'
-  nouns: ['document','documentation']
-  labels: ['docs']
-- type: 'build'
-  nouns: ['build','rebuild']
-  labels: ['build']
-- type: 'performance'
-  nouns: ['performance', 'optimize', 'optimization']
-  labels: ['performance']
-- type: 'config'
-  nouns: ['config', 'conf', 'cofiguration', 'configure']
-  labels: ['config']

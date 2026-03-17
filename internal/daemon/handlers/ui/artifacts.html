@@ -8,22 +8,7 @@
   <style>html,body{background:#0d1117;color:#e6edf3}</style>
 </head>
 <body>
-<header>
-  <div class="header-brand"><h1><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f78166" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom;margin-right:4px"><path d="M13 2 L3 14 h9 l-1 8 10-12 h-9 l1-8z"></path></svg> Kompakt</h1> <span class="badge">DASHBOARD</span></div>
-  <nav>
-    <a href="/ui">Home</a>
-    <a href="/ui/clients">Clients</a>
-    <a href="/ui/secrets">Secrets</a>
-    <a href="/ui/playbooks">Playbooks</a>
-    <a href="/ui/deployments">Deployments</a>
-    <a href="/ui/artifacts" class="active">Artifacts</a>
-  </nav>
-  <div class="header-search">
-    <input id="f-query" type="text" placeholder="Search artifacts..." autocomplete="off">
-    <button id="f-clear" class="btn-clear btn-muted" onclick="clearSearch()" title="Clear search">✕</button>
-  </div>
-  <div class="header-right"><button onclick="logout()">Sign out</button></div>
-</header>
+<header></header>
 <div class="container">
   <div class="meta">
     <span id="counts">Loading...</span>
@@ -106,15 +91,8 @@
 
 <script src="/ui/assets/layout.js"></script>
 <script>
+buildHeader('Artifacts', 'Search artifacts...');
 var artifacts = [];
-var currentPage = 1;
-function setPage(n) { currentPage = n; render(); }
-
-function clearSearch() { document.getElementById('f-query').value = ''; currentPage = 1; updateClearBtn(); render(); }
-function updateClearBtn() {
-  var q = document.getElementById('f-query').value;
-  document.getElementById('f-clear').classList.toggle('show', !!q);
-}
 
 function filtered() {
   var q = (document.getElementById('f-query').value || '').trim().toLowerCase();
@@ -290,7 +268,6 @@ async function removeArtifact(id) {
   });
 }
 
-document.getElementById('f-query').addEventListener('input', function() { currentPage = 1; render(); updateClearBtn(); });
 initLogin('/api/v1/status', load);
 </script>
 </body>

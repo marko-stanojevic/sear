@@ -8,22 +8,7 @@
   <style>html,body{background:#0d1117;color:#e6edf3}</style>
 </head>
 <body>
-<header>
-  <div class="header-brand"><h1><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f78166" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom;margin-right:4px"><path d="M13 2 L3 14 h9 l-1 8 10-12 h-9 l1-8z"></path></svg> Kompakt</h1> <span class="badge">DASHBOARD</span></div>
-  <nav>
-    <a href="/ui">Home</a>
-    <a href="/ui/clients">Clients</a>
-    <a href="/ui/secrets">Secrets</a>
-    <a href="/ui/playbooks">Playbooks</a>
-    <a href="/ui/deployments" class="active">Deployments</a>
-    <a href="/ui/artifacts">Artifacts</a>
-  </nav>
-  <div class="header-search">
-    <input id="f-query" type="text" placeholder="Search deployment, client, playbook" autocomplete="off">
-    <button id="f-clear" class="btn-clear btn-muted" onclick="clearFilters()" title="Clear search">✕</button>
-  </div>
-  <div class="header-right"><button onclick="logout()">Sign out</button></div>
-</header>
+<header></header>
 <div class="container">
   <div class="meta">
     <span id="counts">Loading...</span>
@@ -42,11 +27,8 @@
 </div>
 <script src="/ui/assets/layout.js"></script>
 <script>
+buildHeader('Deployments', 'Search deployment, client, playbook');
 var deployments=[];
-var currentPage = 1;
-function setPage(n) { currentPage = n; render(); }
-
-function clearFilters(){document.getElementById('f-query').value='';currentPage=1;updateClearBtn();render();}
 
 function filtered(){
   var q=(document.getElementById('f-query').value||'').trim().toLowerCase();
@@ -172,20 +154,6 @@ async function load(){
     document.getElementById('root').innerHTML='<div class="empty">Network error. Retrying&#x2026;</div>';
   }
 }
-function updateClearBtn() {
-  var q = document.getElementById('f-query').value;
-  document.getElementById('f-clear').classList.toggle('show', !!q);
-}
-
-document.getElementById('f-query').addEventListener('input',function(){currentPage=1;render();updateClearBtn();});
-
-var _autoRefreshTimer = null;
-function startAutoRefresh() { _autoRefreshTimer = setInterval(load, 10000); }
-function stopAutoRefresh() { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
-document.addEventListener('visibilitychange', function() {
-  if (document.hidden) { stopAutoRefresh(); } else { load(); startAutoRefresh(); }
-});
-
 initLogin('/api/v1/deployments', load);
 startAutoRefresh();
 </script>

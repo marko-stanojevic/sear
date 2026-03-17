@@ -12,7 +12,7 @@ import (
 )
 
 // NewServer wires all HTTP routes and returns a ready-to-use http.Handler.
-func NewServer(env *handlers.Env) http.Handler {
+func NewServer(env *handlers.Handler) http.Handler {
 	mux := http.NewServeMux()
 
 	// ── Public (no auth) ─────────────────────────────────────────────────────
@@ -34,13 +34,13 @@ func NewServer(env *handlers.Env) http.Handler {
 	// ── Root API (HTTP Basic auth) ───────────────────────────────────────────
 	root := env.RequireRootAuth
 
-	mux.Handle("/api/v1/status", root(http.HandlerFunc(env.HandleStatus)))
+	mux.Handle("/api/v1/status", root(http.HandlerFunc(env.HandleClients)))
 
 	// HTML UI pages are served without Basic auth; in-page JS handles auth for API calls.
 	mux.Handle("/ui/assets/", http.HandlerFunc(handlers.ServeUIAsset))
 	mux.Handle("/ui", http.HandlerFunc(env.HandleHomeUI))
 	mux.Handle("/ui/", http.HandlerFunc(env.HandleHomeUI))
-	mux.Handle("/ui/clients", http.HandlerFunc(env.HandleStatusUI))
+	mux.Handle("/ui/clients", http.HandlerFunc(env.HandleClientsUI))
 	mux.Handle("/ui/secrets", http.HandlerFunc(env.HandleSecretsUI))
 	mux.Handle("/ui/playbooks", http.HandlerFunc(env.HandlePlaybooksUI))
 	mux.Handle("/ui/deployments", http.HandlerFunc(env.HandleDeploymentsUI))
@@ -69,7 +69,7 @@ func NewServer(env *handlers.Env) http.Handler {
 
 // dualAuth accepts requests authenticated with either a client JWT Bearer
 // token or root HTTP Basic credentials.
-func dualAuth(env *handlers.Env, next http.Handler) http.Handler {
+func dualAuth(env *handlers.Handler, next http.Handler) http.Handler {
 	clientMW := env.RequireClientAuth(next)
 	adminMW := env.RequireRootAuth(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

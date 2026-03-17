@@ -21,7 +21,7 @@ var wsUpgrader = websocket.Upgrader{
 // Authentication uses the JWT bearer token passed as ?token=<jwt> query param
 // (WebSocket clients cannot set arbitrary headers during the handshake in all
 // environments, so the query param fallback is supported here).
-func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
+func (e *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	clientID, err := e.clientIDFromToken(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, err.Error())
@@ -102,7 +102,7 @@ func (e *Env) HandleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleWSMessage dispatches an inbound WebSocket message from a client.
-func (e *Env) handleWSMessage(clientID string, data []byte) {
+func (e *Handler) handleWSMessage(clientID string, data []byte) {
 	var envelope struct {
 		Type common.WSMessageType `json:"type"`
 		Data json.RawMessage      `json:"data"`
@@ -242,7 +242,7 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 	}
 }
 
-func (e *Env) updateDeploy(deploymentID string, fn func(*common.DeploymentState)) {
+func (e *Handler) updateDeploy(deploymentID string, fn func(*common.DeploymentState)) {
 	dep, ok := e.Store.GetDeployment(deploymentID)
 	if !ok {
 		return
@@ -254,8 +254,8 @@ func (e *Env) updateDeploy(deploymentID string, fn func(*common.DeploymentState)
 
 // ── Status UI ─────────────────────────────────────────────────────────────────
 
-// HandleStatus returns a JSON summary of all clients and deployments.
-func (e *Env) HandleStatus(w http.ResponseWriter, r *http.Request) {
+// HandleClients returns a JSON summary of all clients and deployments.
+func (e *Handler) HandleClients(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -275,7 +275,7 @@ func (e *Env) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleStatusUI returns a live HTML dashboard.
-func (e *Env) HandleStatusUI(w http.ResponseWriter, r *http.Request) {
-	renderUI(w, "status.html")
+// HandleClientsUI returns a live HTML dashboard.
+func (e *Handler) HandleClientsUI(w http.ResponseWriter, r *http.Request) {
+	renderUI(w, "clients.html")
 }

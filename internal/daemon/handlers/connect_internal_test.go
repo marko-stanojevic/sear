@@ -9,16 +9,16 @@ import (
 	"github.com/marko-stanojevic/kompakt/internal/daemon/store"
 )
 
-func newConnectTestEnv(t *testing.T) *Env {
+func newConnectTestEnv(t *testing.T) *Handler {
 	t.Helper()
 	st, err := store.New(t.TempDir(), "")
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
-	return &Env{Store: st, Hub: NewHub()}
+	return &Handler{Store: st, Hub: NewHub()}
 }
 
-func saveClient(t *testing.T, e *Env, id string) {
+func saveClient(t *testing.T, e *Handler, id string) {
 	t.Helper()
 	now := time.Now()
 	err := e.Store.SaveClient(&common.Client{
@@ -34,7 +34,7 @@ func saveClient(t *testing.T, e *Env, id string) {
 	}
 }
 
-func saveDeployment(t *testing.T, e *Env, depID, clientID string, status common.DeploymentStatus) {
+func saveDeployment(t *testing.T, e *Handler, depID, clientID string, status common.DeploymentStatus) {
 	t.Helper()
 	now := time.Now()
 	err := e.Store.SaveDeployment(&common.DeploymentState{
@@ -50,7 +50,7 @@ func saveDeployment(t *testing.T, e *Env, depID, clientID string, status common.
 	}
 }
 
-func sendWS(t *testing.T, e *Env, clientID string, msgType common.WSMessageType, data any) {
+func sendWS(t *testing.T, e *Handler, clientID string, msgType common.WSMessageType, data any) {
 	t.Helper()
 	b, err := json.Marshal(common.WSMessage{Type: msgType, Data: data})
 	if err != nil {
