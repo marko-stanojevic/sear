@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -83,6 +84,7 @@ func (h *Hub) Send(clientID string, msg common.WSMessage) bool {
 	}
 	data, err := json.Marshal(msg)
 	if err != nil {
+		slog.Error("failed to marshal websocket message", "client_id", clientID, "msg_type", msg.Type, "err", err)
 		return false
 	}
 	select {

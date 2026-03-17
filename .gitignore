@@ -14,8 +14,8 @@
 # Binaries for programs and plugins
 dist/*
 bin/*
-kompakt
-kompakt-agent
+/kompakt
+/kompakt-agent
 *.exe
 *.exe~
 *.dll
