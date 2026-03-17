@@ -1,4 +1,4 @@
-// Package client implements the sear deployment client.
+// Package client implements the kompakt deployment client.
 package client
 
 import (
@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/marko-stanojevic/sear/internal/client/executor"
-	"github.com/marko-stanojevic/sear/internal/client/identity"
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/client/executor"
+	"github.com/marko-stanojevic/kompakt/internal/client/identity"
+	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
 // errTokenRejected is returned by connect when the server responds with 401,
@@ -31,7 +31,7 @@ type localState struct {
 	Token    string `json:"token"`
 }
 
-// Client is the sear deployment client.
+// Client is the kompakt deployment client.
 type Client struct {
 	cfg        *common.ClientConfig
 	state      localState
@@ -441,21 +441,21 @@ func (c *Client) post(ctx context.Context, path string, body, out any, token str
 
 // ── Portable default paths ────────────────────────────────────────────────────
 
-// searDir returns the .sear directory next to the running executable.
-// Falls back to .sear in the current working directory if the executable
+// kompaktDir returns the .kompakt directory next to the running executable.
+// Falls back to .kompakt in the current working directory if the executable
 // path cannot be determined.
-func searDir() string {
+func kompaktDir() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return ".sear"
+		return ".kompakt"
 	}
-	return filepath.Join(filepath.Dir(exe), ".sear")
+	return filepath.Join(filepath.Dir(exe), ".kompakt")
 }
 
 func defaultStateFile() string {
-	return filepath.Join(searDir(), "state.json")
+	return filepath.Join(kompaktDir(), "state.json")
 }
 
 func defaultWorkDir() string {
-	return filepath.Join(searDir(), "work")
+	return filepath.Join(kompaktDir(), "work")
 }

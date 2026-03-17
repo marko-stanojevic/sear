@@ -18,7 +18,7 @@ function ensureLoginOverlay() {
   overlay.id = 'login-overlay';
   overlay.innerHTML = `
     <div id="login-box">
-      <h2>&#x1F512; Sear Root Login</h2>
+      <h2>&#x1F512; Kompakt Root Login</h2>
       <label>Username</label>
       <input id="lu" type="text" value="root" readonly>
       <label>Password</label>
@@ -31,7 +31,7 @@ function ensureLoginOverlay() {
   document.body.appendChild(overlay);
 }
 
-function authHeader(){var c=sessionStorage.getItem('sear_creds');return c?'Basic '+c:null;}
+function authHeader(){var c=sessionStorage.getItem('kompakt_creds');return c?'Basic '+c:null;}
 
 function showLogin(msg) {
   ensureLoginOverlay();
@@ -50,7 +50,7 @@ function hideLogin(){
   const overlay = document.getElementById('login-overlay');
   if (overlay) overlay.classList.remove('show');
 }
-function logout(){sessionStorage.removeItem('sear_creds');showLogin('');}
+function logout(){sessionStorage.removeItem('kompakt_creds');showLogin('');}
 
 function initLogin(apiPath, onSuccess) {
   const cb = onSuccess || (() => typeof load === 'function' ? load() : null);
@@ -65,7 +65,7 @@ function initLogin(apiPath, onSuccess) {
       var r=await fetch(apiPath,{headers:{Authorization:'Basic '+creds}});
       if(r.status===401){document.getElementById('login-error').textContent='Invalid password';return;}
       if(!r.ok){document.getElementById('login-error').textContent='Error: '+r.status;return;}
-      sessionStorage.setItem('sear_creds',creds);
+      sessionStorage.setItem('kompakt_creds',creds);
       hideLogin();
       cb();
     } catch(e) {

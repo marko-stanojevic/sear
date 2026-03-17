@@ -64,7 +64,7 @@ For each finding include:
 - Minimal fix recommendation.
 - Test recommendation (if applicable).
 
-## Repo Defaults (sear)
+## Repo Defaults (kompakt)
 When useful for validation, use:
 - go test ./... -v -count=1
 - go test ./... -race -count=1

@@ -1,4 +1,4 @@
-// Package handlers implements all HTTP and WebSocket handlers for the sear daemon.
+// Package handlers implements all HTTP and WebSocket handlers for the kompakt daemon.
 package handlers
 
 import (
@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/marko-stanojevic/sear/internal/common"
-	"github.com/marko-stanojevic/sear/internal/daemon/ports"
-	"github.com/marko-stanojevic/sear/internal/daemon/service"
+	"github.com/marko-stanojevic/kompakt/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/ports"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/service"
 )
 
 // Env bundles the dependencies shared by all handlers.

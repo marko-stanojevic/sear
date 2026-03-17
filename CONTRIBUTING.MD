@@ -1,4 +1,4 @@
-# Contributing to sear
+# Contributing to kompakt
 
 Thanks for contributing.
 
@@ -20,8 +20,8 @@ go mod download
 Build both binaries:
 
 ```bash
-go build -o bin/sear-daemon ./cmd/sear-daemon
-go build -o bin/sear-client ./cmd/sear-client
+go build -o bin/kompakt ./cmd/kompakt
+go build -o bin/kompakt-agent ./cmd/kompakt-agent
 ```
 
 Or build all packages:
@@ -35,13 +35,13 @@ go build ./...
 Daemon:
 
 ```bash
-go run ./cmd/sear-daemon -config examples/config.yml -secrets examples/secrets.yml
+go run ./cmd/kompakt -config examples/config.yml -secrets examples/secrets.yml
 ```
 
 Client:
 
 ```bash
-go run ./cmd/sear-client -config examples/client.config.yml
+go run ./cmd/kompakt-agent -config examples/client.config.yml
 ```
 
 ## Testing
@@ -100,10 +100,10 @@ The workspace includes ready-to-run tasks:
 ## Repository structure
 
 ```text
-sear/
+kompakt/
   cmd/
-    sear-daemon/
-    sear-client/
+    kompakt/
+    kompakt-agent/
   internal/
     common/
     daemon/

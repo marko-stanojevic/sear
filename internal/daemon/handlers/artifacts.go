@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
 // HandleArtifacts dispatches artifact CRUD and download/upload.
@@ -117,18 +117,18 @@ func (e *Env) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		   name := r.URL.Query().Get("name")
-		   filename := r.URL.Query().Get("filename")
-		   if filename == "" {
-			   filename = name
-		   }
-		   if name == "" {
-			   name = filename // fallback: if no user-supplied name, use filename
-		   }
-		   if filename == "" {
-			   writeError(w, http.StatusBadRequest, "'filename' query parameter is required")
-			   return
-		   }
+		name := r.URL.Query().Get("name")
+		filename := r.URL.Query().Get("filename")
+		if filename == "" {
+			filename = name
+		}
+		if name == "" {
+			name = filename // fallback: if no user-supplied name, use filename
+		}
+		if filename == "" {
+			writeError(w, http.StatusBadRequest, "'filename' query parameter is required")
+			return
+		}
 		ct := r.Header.Get("Content-Type")
 		if ct == "" {
 			ct = "application/octet-stream"

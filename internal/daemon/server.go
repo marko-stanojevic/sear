@@ -1,4 +1,4 @@
-// Package daemon assembles and starts the sear HTTP server.
+// Package daemon assembles and starts the kompakt HTTP server.
 package daemon
 
 import (
@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/marko-stanojevic/sear/internal/daemon/handlers"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/handlers"
 )
 
 // NewServer wires all HTTP routes and returns a ready-to-use http.Handler.

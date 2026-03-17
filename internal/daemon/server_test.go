@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/marko-stanojevic/sear/internal/daemon/handlers"
-	"github.com/marko-stanojevic/sear/internal/daemon/service"
-	"github.com/marko-stanojevic/sear/internal/daemon/store"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/handlers"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/service"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/store"
 )
 
 type hijackableRecorder struct {

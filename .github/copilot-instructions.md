@@ -1,20 +1,20 @@
-# Copilot Instructions for the Sear Project
+# Copilot Instructions for the Kompakt Project
 
 ## Project Overview
 
-**Sear** is a portable client-server framework written in Go, designed for bootstrapping edge datacenters and on-prem hardware. It executes GitHub Actions-style YAML workflows that persist across system reboots, with extensible client registration and a central dashboard for real-time deployment monitoring.
+**Kompakt** is a portable client-server framework written in Go, designed for bootstrapping edge datacenters and on-prem hardware. It executes GitHub Actions-style YAML workflows that persist across system reboots, with extensible client registration and a central dashboard for real-time deployment monitoring.
 
-- **Module path**: `github.com/marko-stanojevic/sear`
+- **Module path**: `github.com/marko-stanojevic/kompakt`
 - **Language**: Go (no CGo dependencies)
 - **Key dependencies**: `gopkg.in/yaml.v3`, `github.com/golang-jwt/jwt/v5`, `github.com/google/uuid`, `github.com/gorilla/websocket`
 
 ## Repository Layout
 
 ```
-sear/
+kompakt/
 ├── cmd/
-│   ├── sear-daemon/        # Server/daemon entry point (main.go)
-│   └── sear-client/        # Client CLI entry point (main.go)
+│   ├── kompakt/            # Server/daemon entry point (main.go)
+│   └── kompakt-agent/      # Client CLI entry point (main.go)
 ├── internal/
 │   ├── common/             # Shared types used by both daemon and client
 │   ├── daemon/
@@ -45,8 +45,8 @@ go mod download
 Build both binaries:
 
 ```bash
-go build -o bin/sear-daemon ./cmd/sear-daemon
-go build -o bin/sear-client ./cmd/sear-client
+go build -o bin/kompakt ./cmd/kompakt
+go build -o bin/kompakt-agent ./cmd/kompakt-agent
 ```
 
 Or build everything at once:
@@ -58,8 +58,8 @@ go build ./...
 Run local examples:
 
 ```bash
-go run ./cmd/sear-daemon -config examples/config.yml -secrets examples/secrets.yml
-go run ./cmd/sear-client -config examples/client.config.yml
+go run ./cmd/kompakt -config examples/config.yml -secrets examples/secrets.yml
+go run ./cmd/kompakt-agent -config examples/client.config.yml
 ```
 
 ## Testing
@@ -116,7 +116,7 @@ Release artifacts and matrix are configured in `.goreleaser.yml`.
 
 - Follow standard Go idioms and conventions (effective Go, standard library style).
 - Keep `internal/common` free of external dependencies — it holds only shared types.
-- The daemon (`cmd/sear-daemon`) is the long-running server process; the client (`cmd/sear-client`) is the short-lived CLI tool.
+- The daemon (`cmd/kompakt`) is the long-running server process; the agent (`cmd/kompakt-agent`) is the short-lived CLI tool.
 - Workflow definitions use YAML (via `gopkg.in/yaml.v3`); model them after GitHub Actions syntax.
 - Authentication uses JWT (`github.com/golang-jwt/jwt/v5`).
 - Use `github.com/google/uuid` for generating unique IDs.

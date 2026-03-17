@@ -6,8 +6,8 @@
         "**/.git/subtree-cache/**": true,
         "**/node_modules/**": true,
         "**/dist/**": true,
-        "**/bin/sear/logs/**": true,
-        "**/bin/sear/artifacts/**": true
+        "**/bin/kompakt/logs/**": true,
+        "**/bin/kompakt/artifacts/**": true
     },
     "editor.formatOnSave": true,
     "editor.formatOnPaste": true,
@@ -43,5 +43,6 @@
     },
     "[jsonc]": {
         "editor.defaultFormatter": "vscode.json-language-features"
-    }
+    },
+    "claudeCodeChat.permissions.yoloMode": false
 }

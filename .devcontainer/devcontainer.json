@@ -1,5 +1,5 @@
 {
-    "name": "go-sear-devcontainer",
+    "name": "go-kompakt-devcontainer",
     "build": {
         "dockerfile": "Dockerfile"
     },
@@ -43,7 +43,7 @@
         }
     },
     "onCreateCommand": "go mod download",
-    "postCreateCommand": "go build ./cmd/sear-daemon && go build ./cmd/sear-client",
+    "postCreateCommand": "go build ./cmd/kompakt && go build ./cmd/kompakt-agent",
     "postAttachCommand": "echo 'Dev container ready.'",
     "waitFor": "postCreateCommand",
     "remoteUser": "vscode",

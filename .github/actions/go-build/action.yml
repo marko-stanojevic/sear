@@ -46,7 +46,7 @@ runs:
       run: |
         set -euo pipefail
         mkdir -p dist/debug
-        for binary in sear-daemon sear-client; do
+        for binary in kompakt kompakt-agent; do
           echo "Building dist/debug/${binary}..."
           go build -v -o "dist/debug/${binary}" "./cmd/${binary}"
         done
@@ -59,7 +59,7 @@ runs:
       run: |
         set -euo pipefail
         mkdir -p dist
-        binaries=("sear-daemon" "sear-client")
+        binaries=("kompakt" "kompakt-agent")
         platforms=("linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows/amd64")
         for platform in "${platforms[@]}"; do
           GOOS="${platform%%/*}"

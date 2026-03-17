@@ -60,9 +60,9 @@ type DaemonSecrets struct {
 
 // ── Client config (client.config.yml) ────────────────────────────────────────
 
-// ClientConfig is the configuration file used by sear-client.
+// ClientConfig is the configuration file used by kompakt-agent.
 type ClientConfig struct {
-	// ServerURL is the base URL of the sear-daemon (e.g. "http://sear:8080").
+	// ServerURL is the base URL of the kompakt daemon (e.g. "http://kompakt:8080").
 	ServerURL string `yaml:"server_url"`
 
 	// RegistrationSecret must match one of the daemon's registration_secrets values.
@@ -74,7 +74,7 @@ type ClientConfig struct {
 
 	// StateFile is where the client persists its token and resume position
 	// so that deployment can be resumed after a reboot.
-	// Default: /var/lib/sear/state.json (Linux), C:\ProgramData\sear\state.json (Windows).
+	// Default: /var/lib/kompakt/state.json (Linux), C:\ProgramData\kompakt\state.json (Windows).
 	StateFile string `yaml:"state_file"`
 
 	// WorkDir is the directory where shell steps are executed.

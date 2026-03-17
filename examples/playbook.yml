@@ -1,4 +1,4 @@
-# Example sear playbook
+# Example kompakt playbook
 # Jobs execute in the order listed (not alphabetically — list order is preserved).
 
 name: "Production App Deployment"
@@ -22,8 +22,8 @@ jobs:
       - name: "Configure sysctl"
         shell: bash
         run: |
-          echo "vm.swappiness=10"          >> /etc/sysctl.d/99-sear.conf
-          echo "net.core.somaxconn=65535"  >> /etc/sysctl.d/99-sear.conf
+          echo "vm.swappiness=10"          >> /etc/sysctl.d/99-kompakt.conf
+          echo "net.core.somaxconn=65535"  >> /etc/sysctl.d/99-kompakt.conf
 
       - name: "Reboot to apply kernel settings"
         uses: reboot

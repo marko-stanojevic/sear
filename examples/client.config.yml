@@ -1,19 +1,19 @@
-# sear-client configuration
-# Copy to /etc/sear/client.config.yml (Linux) or C:\ProgramData\sear\client.config.yml (Windows).
+# kompakt-agent configuration
+# Copy to /etc/kompakt/client.config.yml (Linux) or C:\ProgramData\kompakt\client.config.yml (Windows).
 
-# URL of the sear-daemon. Use wss:// if TLS is enabled.
-server_url: "http://sear-daemon:8080"
+# URL of the kompakt daemon. Use wss:// if TLS is enabled.
+server_url: "http://kompakt:8080"
 
 # Must match one of the daemon's registration_secrets values.
 registration_secret: "replace-with-a-strong-random-value"
 
-# Platform hint. Use "auto" to let the client detect the OS.
+# Platform hint. Use "auto" to let the agent detect the OS.
 # Options: auto | linux | mac | windows
 platform: "auto"
 
-# Where the client persists its token and resume position across reboots.
-# Defaults: /var/lib/sear/state.json (Linux/macOS), C:\ProgramData\sear\state.json (Windows)
-# state_file: "/var/lib/sear/state.json"
+# Where the agent persists its token and resume position across reboots.
+# Defaults: /var/lib/kompakt/state.json (Linux/macOS), C:\ProgramData\kompakt\state.json (Windows)
+# state_file: "/var/lib/kompakt/state.json"
 
 # How long to wait before retrying a failed WebSocket connection (seconds).
 reconnect_interval_seconds: 10
@@ -21,4 +21,4 @@ reconnect_interval_seconds: 10
 # Maximum number of log lines buffered before a forced flush.
 log_batch_size: 100
 
-# The client resumes deployments after reboot or crash.
+# The agent resumes deployments after reboot or crash.

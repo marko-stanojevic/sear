@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
 type logCollector struct {
@@ -57,10 +57,10 @@ func TestRunStepSimplePaths(t *testing.T) {
 func TestRunStepShell(t *testing.T) {
 	logs := &logCollector{}
 	shell := "sh"
-	run := "echo hello-sear"
+	run := "echo hello-kompakt"
 	if runtime.GOOS == "windows" {
 		shell = "cmd"
-		run = "echo hello-sear"
+		run = "echo hello-kompakt"
 	}
 
 	res := RunStep(context.Background(), common.Step{Run: run, Shell: shell}, nil, "", "", logs.logger())
@@ -68,7 +68,7 @@ func TestRunStepShell(t *testing.T) {
 		t.Fatalf("run shell failed: %v", res.Err)
 	}
 	joined := logs.joined()
-	if !strings.Contains(strings.ToLower(joined), "hello-sear") {
+	if !strings.Contains(strings.ToLower(joined), "hello-kompakt") {
 		t.Fatalf("expected shell output in logs, got: %q", joined)
 	}
 }

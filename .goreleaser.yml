@@ -1,11 +1,11 @@
 version: 2
 
-project_name: sear
+project_name: kompakt
 
 builds:
-  - id: sear-daemon
-    binary: sear-daemon
-    main: ./cmd/sear-daemon
+  - id: kompakt
+    binary: kompakt
+    main: ./cmd/kompakt
     goos:
       - darwin
       - linux
@@ -14,9 +14,9 @@ builds:
       - amd64
       - arm64
 
-  - id: sear-client
-    binary: sear-client
-    main: ./cmd/sear-client
+  - id: kompakt-agent
+    binary: kompakt-agent
+    main: ./cmd/kompakt-agent
     goos:
       - darwin
       - linux
@@ -28,9 +28,9 @@ builds:
 archives:
   - id: daemon-archive
     ids:
-      - sear-daemon
+      - kompakt
     name_template: >-
-      {{ .ProjectName }}-daemon_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     formats:
       - tar.gz
     format_overrides:
@@ -38,11 +38,11 @@ archives:
         formats:
           - zip
 
-  - id: client-archive
+  - id: agent-archive
     ids:
-      - sear-client
+      - kompakt-agent
     name_template: >-
-      {{ .ProjectName }}-client_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+      {{ .ProjectName }}-agent_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     formats:
       - tar.gz
     format_overrides:

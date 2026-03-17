@@ -1,4 +1,4 @@
-module github.com/marko-stanojevic/sear
+module github.com/marko-stanojevic/kompakt
 
 go 1.26
 

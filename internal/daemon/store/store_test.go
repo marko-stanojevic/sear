@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/marko-stanojevic/sear/internal/common"
-	"github.com/marko-stanojevic/sear/internal/daemon/store"
+	"github.com/marko-stanojevic/kompakt/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/store"
 )
 
 func newTestStore(t *testing.T) *store.Store {
