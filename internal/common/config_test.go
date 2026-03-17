@@ -207,6 +207,90 @@ func TestLoadConfigMissing(t *testing.T) {
 	}
 }
 
+// ── Negative path: corrupted / missing YAML ───────────────────────────────────
+
+func TestLoadDaemonConfig_CorruptedYAML(t *testing.T) {
+	path := writeTempFile(t, "config.yml", "listen_addr: [unclosed")
+	_, err := common.LoadDaemonConfig(path)
+	if err == nil {
+		t.Error("expected error for corrupted YAML, got nil")
+	}
+}
+
+func TestLoadDaemonSecrets_MissingFile(t *testing.T) {
+	_, err := common.LoadDaemonSecrets("/nonexistent/path/secrets.yml")
+	if err == nil {
+		t.Error("expected error for missing file, got nil")
+	}
+}
+
+func TestLoadDaemonSecrets_CorruptedYAML(t *testing.T) {
+	path := writeTempFile(t, "secrets.yml", "root_password: [unclosed")
+	_, err := common.LoadDaemonSecrets(path)
+	if err == nil {
+		t.Error("expected error for corrupted YAML, got nil")
+	}
+}
+
+func TestLoadClientConfig_MissingFile(t *testing.T) {
+	_, err := common.LoadClientConfig("/nonexistent/path/client.yml")
+	if err == nil {
+		t.Error("expected error for missing file, got nil")
+	}
+}
+
+func TestLoadClientConfig_CorruptedYAML(t *testing.T) {
+	path := writeTempFile(t, "client.yml", "server_url: [unclosed")
+	_, err := common.LoadClientConfig(path)
+	if err == nil {
+		t.Error("expected error for corrupted YAML, got nil")
+	}
+}
+
+func TestLoadClientConfig_MissingRequiredFields(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{
+			name:    "missing server_url",
+			content: "registration_secret: abc\n",
+		},
+		{
+			name:    "missing registration_secret",
+			content: "server_url: http://kompakt:8080\n",
+		},
+		{
+			name:    "invalid platform",
+			content: "server_url: http://kompakt:8080\nregistration_secret: abc\nplatform: foobar\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeTempFile(t, "client.yml", tt.content)
+			_, err := common.LoadClientConfig(path)
+			if err == nil {
+				t.Errorf("expected validation error for %q, got nil", tt.name)
+			}
+		})
+	}
+}
+
+func TestLoadPlaybook_MissingFile(t *testing.T) {
+	_, err := common.LoadPlaybook("/nonexistent/path/playbook.yml")
+	if err == nil {
+		t.Error("expected error for missing file, got nil")
+	}
+}
+
+func TestLoadPlaybook_CorruptedYAML(t *testing.T) {
+	path := writeTempFile(t, "playbook.yml", "name: [unclosed")
+	_, err := common.LoadPlaybook(path)
+	if err == nil {
+		t.Error("expected error for corrupted YAML, got nil")
+	}
+}
+
 func writeTempFile(t *testing.T, name, content string) string {
 	t.Helper()
 	dir := t.TempDir()
