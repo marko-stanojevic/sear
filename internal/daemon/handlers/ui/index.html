@@ -70,17 +70,7 @@
 </style>
 </head>
 <body>
-<header>
-  <div class="header-brand">
-    <h1><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f78166" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom;margin-right:4px"><path d="M13 2 L3 14 h9 l-1 8 10-12 h-9 l1-8z"></path></svg> Kompakt</h1>
-    <span class="badge">DASHBOARD</span>
-  </div>
-  <nav id="main-nav">
-  </nav>
-  <div class="header-right">
-    <button onclick="logout()">Sign out</button>
-  </div>
-</header>
+<header></header>
 <div class="container">
   <div class="welcome-section">
     <h2>Welcome to Kompakt</h2>
@@ -128,16 +118,7 @@
 
 <script src="/ui/assets/layout.js"></script>
 <script>
-// Build common navigation
-const nav = document.getElementById('main-nav');
-nav.innerHTML = `
-  <a href="/ui" class="active">Home</a>
-  <a href="/ui/clients">Clients</a>
-  <a href="/ui/secrets">Secrets</a>
-  <a href="/ui/playbooks">Playbooks</a>
-  <a href="/ui/deployments">Deployments</a>
-  <a href="/ui/artifacts">Artifacts</a>
-`;
+buildHeader('Home');
 
 async function loadCounts() {
   const h = headersAuth();
