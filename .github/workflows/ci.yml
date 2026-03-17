@@ -96,11 +96,3 @@ jobs:
         uses: ./.github/actions/go-build
         with:
           release-type: 'debug'
-      - name: Upload build artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: debug-binaries-${{ runner.os }}
-          path: dist/debug/
-          retention-days: 30
-          if-no-files-found: warn

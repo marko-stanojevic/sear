@@ -16,7 +16,7 @@ runs:
   using: composite
   steps:
     - name: Set up Go
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@v5
       with:
         go-version-file: go.mod
         cache: true
@@ -40,45 +40,29 @@ runs:
         echo "FullSemVer: ${{ steps.version.outputs.fullSemVer }}"
         echo "InformationalVersion: ${{ steps.version.outputs.informationalVersion }}"
 
-    - name: Build (debug)
+    - name: Build snapshot (debug)
       if: inputs.release-type == 'debug'
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p dist/debug
-        for binary in kompakt kompakt-agent; do
-          echo "Building dist/debug/${binary}..."
-          go build -v -o "dist/debug/${binary}" "./cmd/${binary}"
-        done
-
-    - name: Cross-compile (release)
-      if: inputs.release-type == 'release'
-      shell: bash
+      uses: goreleaser/goreleaser-action@v7
+      with:
+        distribution: goreleaser
+        version: v2.14.3
+        args: build --snapshot --clean
       env:
-        VERSION: ${{ steps.version.outputs.semVer }}
-      run: |
-        set -euo pipefail
-        mkdir -p dist
-        binaries=("kompakt" "kompakt-agent")
-        platforms=("linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows/amd64")
-        for platform in "${platforms[@]}"; do
-          GOOS="${platform%%/*}"
-          GOARCH="${platform##*/}"
-          for binary in "${binaries[@]}"; do
-            output="dist/${binary}-${VERSION}-${GOOS}-${GOARCH}"
-            [[ "$GOOS" == "windows" ]] && output="${output}.exe"
-            echo "Building ${output}..."
-            GOOS=$GOOS GOARCH=$GOARCH go build \
-              -ldflags="-s -w" \
-              -o "${output}" \
-              "./cmd/${binary}"
-          done
-        done
+        GORELEASER_CURRENT_TAG: v${{ steps.version.outputs.semVer }}
+
+    - name: Build and package (release)
+      if: inputs.release-type == 'release'
+      uses: goreleaser/goreleaser-action@v7
+      with:
+        distribution: goreleaser
+        version: v2.14.3
+        args: release --clean --skip=publish
+      env:
+        GORELEASER_CURRENT_TAG: v${{ steps.version.outputs.semVer }}
 
     - name: Upload artifacts
-      if: inputs.release-type == 'release'
       uses: actions/upload-artifact@v4
       with:
-        name: dist
+        name: dist-${{ inputs.release-type }}
         path: dist/
         retention-days: 30
