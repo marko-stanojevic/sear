@@ -2,11 +2,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "sear-daemon (examples)",
+            "name": "kompakt (examples)",
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/cmd/sear-daemon",
+            "program": "${workspaceFolder}/cmd/kompakt",
             "cwd": "${workspaceFolder}",
             "args": [
                 "-config",
@@ -16,11 +16,11 @@
             ]
         },
         {
-            "name": "sear-client (examples)",
+            "name": "kompakt-agent (examples)",
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/cmd/sear-client",
+            "program": "${workspaceFolder}/cmd/kompakt-agent",
             "cwd": "${workspaceFolder}",
             "args": [
                 "-config",

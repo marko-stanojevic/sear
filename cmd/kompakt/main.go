@@ -1,8 +1,8 @@
-// Command sear-daemon is the sear deployment server.
+// Command kompakt is the kompakt deployment server.
 //
 // Usage:
 //
-//	sear-daemon -config config.yml -secrets secrets.yml
+//	kompakt -config config.yml -secrets secrets.yml
 package main
 
 import (
@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,17 +21,19 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/marko-stanojevic/sear/internal/common"
-	daemon "github.com/marko-stanojevic/sear/internal/daemon"
-	"github.com/marko-stanojevic/sear/internal/daemon/handlers"
-	"github.com/marko-stanojevic/sear/internal/daemon/service"
-	"github.com/marko-stanojevic/sear/internal/daemon/store"
+	"github.com/marko-stanojevic/kompakt/internal/common"
+	daemon "github.com/marko-stanojevic/kompakt/internal/daemon"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/handlers"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/service"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/store"
 )
 
 func main() {
 	configPath := flag.String("config", "config.yml", "path to daemon config file")
 	secretsPath := flag.String("secrets", "secrets.yml", "path to daemon secrets file")
 	flag.Parse()
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
 	cfg, err := common.LoadDaemonConfig(*configPath)
 	if err != nil {
@@ -108,7 +111,7 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	log.Printf("sear-daemon listening on %s", cfg.ListenAddr)
+	log.Printf("kompakt listening on %s", cfg.ListenAddr)
 	log.Printf("status UI: http://localhost%s/status/ui", cfg.ListenAddr)
 
 	// Graceful shutdown on SIGINT/SIGTERM.
@@ -139,7 +142,7 @@ func applyConfigDefaults(cfg *common.DaemonConfig) {
 		cfg.ListenAddr = ":8080"
 	}
 	if cfg.DataDir == "" {
-		cfg.DataDir = "sear-data"
+		cfg.DataDir = "kompakt-data"
 	}
 	if cfg.ArtifactsDir == "" {
 		cfg.ArtifactsDir = filepath.Join(cfg.DataDir, "artifacts")

@@ -66,7 +66,7 @@ Return results in this order:
 - Do not remove tests that protect behavior.
 - Prefer adding tests when refactoring complex branches.
 
-## Repo Defaults (sear)
+## Repo Defaults (kompakt)
 For validation, prefer:
 - go test ./... -v -count=1
 - go test ./internal/daemon/handlers/...

@@ -1,14 +1,14 @@
-# sear-daemon configuration
+# kompakt configuration
 # Copy to config.yml and adjust for your environment.
 
 listen_addr: ":8080"
-data_dir: "/var/lib/sear"
-artifacts_dir: "/var/lib/sear/artifacts"
-logs_dir: "/var/lib/sear/logs"
+data_dir: "/var/lib/kompakt"
+artifacts_dir: "/var/lib/kompakt/artifacts"
+logs_dir: "/var/lib/kompakt/logs"
 
 # TLS — leave blank to use plain HTTP (fine for private networks).
-# tls_cert_file: "/etc/sear/tls.crt"
-# tls_key_file:  "/etc/sear/tls.key"
+# tls_cert_file: "/etc/kompakt/tls.crt"
+# tls_key_file:  "/etc/kompakt/tls.key"
 
 # JWT signing secret — set a stable value so tokens survive daemon restarts.
 # If empty a new random secret is generated each startup (invalidates all tokens).

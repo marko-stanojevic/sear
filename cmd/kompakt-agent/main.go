@@ -1,8 +1,8 @@
-// Command sear-client is the sear deployment agent.
+// Command kompakt-agent is the kompakt deployment agent.
 //
 // Usage:
 //
-//	sear-client -config /etc/sear/client.config.yml
+//	kompakt-agent -config /etc/kompakt/client.config.yml
 package main
 
 import (
@@ -13,8 +13,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/marko-stanojevic/sear/internal/client"
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/client"
+	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
 var runClient = func(ctx context.Context, cfg *common.ClientConfig) error {
@@ -28,7 +28,7 @@ func main() {
 	if err := runWithConfig(*configPath); err != nil {
 		log.Fatalf("client: %v", err)
 	}
-	log.Println("sear-client stopped")
+	log.Println("kompakt-agent stopped")
 	os.Exit(0)
 }
 

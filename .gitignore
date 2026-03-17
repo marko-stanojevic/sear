@@ -14,8 +14,8 @@
 # Binaries for programs and plugins
 dist/*
 bin/*
-sear-client
-sear-daemon
+/kompakt
+/kompakt-agent
 *.exe
 *.exe~
 *.dll

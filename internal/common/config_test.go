@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
 func TestLoadDaemonConfig(t *testing.T) {
@@ -58,7 +58,7 @@ client_secrets:
 
 func TestLoadClientConfig(t *testing.T) {
 	content := `
-server_url: "http://sear:8080"
+server_url: "http://kompakt:8080"
 registration_secret: "reg-secret"
 platform: "auto"
 reconnect_interval_seconds: 5
@@ -69,7 +69,7 @@ log_batch_size: 50
 	if err != nil {
 		t.Fatalf("LoadClientConfig: %v", err)
 	}
-	if cfg.ServerURL != "http://sear:8080" {
+	if cfg.ServerURL != "http://kompakt:8080" {
 		t.Errorf("ServerURL = %q", cfg.ServerURL)
 	}
 	if cfg.ReconnectIntervalSeconds != 5 {

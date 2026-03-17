@@ -3,11 +3,12 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
 var wsUpgrader = websocket.Upgrader{
@@ -107,13 +108,15 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 		Data json.RawMessage      `json:"data"`
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
+		slog.Error("failed to parse websocket envelope", "client_id", clientID, "err", err)
 		return
 	}
 
 	switch envelope.Type {
 	case common.WSMsgLog:
 		var d common.WSLogData
-		if json.Unmarshal(envelope.Data, &d) != nil {
+		if err := json.Unmarshal(envelope.Data, &d); err != nil {
+			slog.Error("failed to parse log message", "client_id", clientID, "err", err)
 			return
 		}
 		entry := &common.LogEntry{
@@ -128,7 +131,8 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgStepStart:
 		var d common.WSStepData
-		if json.Unmarshal(envelope.Data, &d) != nil {
+		if err := json.Unmarshal(envelope.Data, &d); err != nil {
+			slog.Error("failed to parse step-start message", "client_id", clientID, "err", err)
 			return
 		}
 		stepName := d.StepName
@@ -146,7 +150,8 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgStepComplete:
 		var d common.WSStepData
-		if json.Unmarshal(envelope.Data, &d) != nil {
+		if err := json.Unmarshal(envelope.Data, &d); err != nil {
+			slog.Error("failed to parse step-complete message", "client_id", clientID, "err", err)
 			return
 		}
 		stepName := d.StepName
@@ -163,7 +168,8 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgStepFailed:
 		var d common.WSStepData
-		if json.Unmarshal(envelope.Data, &d) != nil {
+		if err := json.Unmarshal(envelope.Data, &d); err != nil {
+			slog.Error("failed to parse step-failed message", "client_id", clientID, "err", err)
 			return
 		}
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -173,7 +179,8 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgReboot:
 		var d common.WSRebootData
-		if json.Unmarshal(envelope.Data, &d) != nil {
+		if err := json.Unmarshal(envelope.Data, &d); err != nil {
+			slog.Error("failed to parse reboot message", "client_id", clientID, "err", err)
 			return
 		}
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -183,7 +190,8 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgDeployDone:
 		var d common.WSStepData
-		if json.Unmarshal(envelope.Data, &d) != nil {
+		if err := json.Unmarshal(envelope.Data, &d); err != nil {
+			slog.Error("failed to parse deploy-done message", "client_id", clientID, "err", err)
 			return
 		}
 		if e.Service != nil {
@@ -203,7 +211,8 @@ func (e *Env) handleWSMessage(clientID string, data []byte) {
 
 	case common.WSMsgDeployFailed:
 		var d common.WSStepData
-		if json.Unmarshal(envelope.Data, &d) != nil {
+		if err := json.Unmarshal(envelope.Data, &d); err != nil {
+			slog.Error("failed to parse deploy-failed message", "client_id", clientID, "err", err)
 			return
 		}
 		playbookName := "playbook"

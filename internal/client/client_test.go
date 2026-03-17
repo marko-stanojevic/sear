@@ -3,8 +3,8 @@ package client_test
 import (
 	"testing"
 
-	"github.com/marko-stanojevic/sear/internal/client"
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/client"
+	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
 func newTestClient(serverURL string) *client.Client {
@@ -23,7 +23,7 @@ func TestNew_Defaults(t *testing.T) {
 
 func TestClientDefaults(t *testing.T) {
 	cfg := &common.ClientConfig{
-		ServerURL: "http://sear:8080",
+		ServerURL: "http://kompakt:8080",
 	}
 	_ = client.New(cfg)
 	if cfg.ReconnectIntervalSeconds == 0 {

@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/marko-stanojevic/sear/internal/common"
-	"github.com/marko-stanojevic/sear/internal/daemon/service"
-	"github.com/marko-stanojevic/sear/internal/daemon/store"
+	"github.com/marko-stanojevic/kompakt/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/service"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/store"
 	"gopkg.in/yaml.v3"
 )
 

@@ -1,25 +1,25 @@
-# Sear Project Documentation Index
+# Kompakt Project Documentation Index
 
-Welcome to the Sear documentation hub. This index provides easy access to all guides, references, and support resources for operators, integrators, and contributors.
+Welcome to the Kompakt documentation hub. This index provides easy access to all guides, references, and support resources for operators, integrators, and contributors.
 
 ---
 
 ## 📚 Guides & References
 
-- [API Endpoints](api-endpoints.md): HTTP and WebSocket API reference for sear-daemon.
+- [API Endpoints](api-endpoints.md): HTTP and WebSocket API reference for kompakt.
 - [Playbook Model](playbook-model.md): Workflow structure, environment injection, secrets, and artifact usage.
 - [Example Playbook](../examples/playbook.yml): Sample deployment workflow.
 - [Daemon Configuration](../examples/config.yml): Daemon config example.
 - [Client Configuration](../examples/client.config.yml): Client config example.
 - [Secrets File](../examples/secrets.yml): Daemon secrets example.
-- [Contributing Guide](../CONTRIBUTING.md): How to contribute to Sear.
+- [Contributing Guide](../CONTRIBUTING.md): How to contribute to Kompakt.
 
 ---
 
 ## 🚀 Onboarding & Quick Start
 
 - [Quick Start in README](../README.md#quick-start): Step-by-step setup for new users.
-- [Operator Guide](../README.md#platform-overview): Overview of Sear components and their roles.
+- [Operator Guide](../README.md#platform-overview): Overview of Kompakt components and their roles.
 - [Dashboard UI](../README.md#quick-start): Access real-time status and deployment logs.
 
 ---
@@ -33,7 +33,7 @@ A: Set a matching `registration_secret` in both daemon and client configs, then 
 A: Secrets are defined in `secrets.yml` and injected into playbooks using `${{ secrets.NAME }}` syntax.
 
 **Q: What happens if a client reboots during deployment?**
-A: Sear resumes from the last confirmed step after reboot, ensuring deterministic rollout.
+A: Kompakt resumes from the last confirmed step after reboot, ensuring deterministic rollout.
 
 **Q: How are artifacts distributed?**
 A: Artifacts are uploaded to the daemon and referenced in playbooks; clients download them automatically during workflow execution.

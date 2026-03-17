@@ -3,11 +3,12 @@ package service
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/marko-stanojevic/sear/internal/common"
-	"github.com/marko-stanojevic/sear/internal/daemon/ports"
+	"github.com/marko-stanojevic/kompakt/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/ports"
 )
 
 // Sentinel errors returned by service operations.
@@ -81,7 +82,7 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
 		dep.Status = common.DeploymentStatusRunning
 		dep.UpdatedAt = time.Now()
 		if err := m.Store.SaveDeployment(dep); err != nil {
-			fmt.Printf("failed to save deployment %s for client %s: %v\n", dep.ID, clientID, err)
+			slog.Error("failed to save deployment", "deployment_id", dep.ID, "client_id", clientID, "err", err)
 			return
 		}
 	} else if !isSamePlaybook || force {
@@ -97,7 +98,7 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
 			UpdatedAt:       time.Now(),
 		}
 		if err := m.Store.SaveDeployment(newDep); err != nil {
-			fmt.Printf("failed to save new deployment %s for client %s: %v\n", deploymentID, clientID, err)
+			slog.Error("failed to save new deployment", "deployment_id", deploymentID, "client_id", clientID, "err", err)
 			return
 		}
 	} else {
@@ -109,7 +110,7 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
 
 	client.Status = common.ClientStatusDeploying
 	if err := m.Store.SaveClient(client); err != nil {
-		fmt.Printf("failed to update client %s status to deploying: %v\n", clientID, err)
+		slog.Error("failed to update client status to deploying", "client_id", clientID, "err", err)
 		return
 	}
 

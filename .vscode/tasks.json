@@ -4,9 +4,9 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "mkdir -p bin && go build -o bin/sear-daemon ./cmd/sear-daemon && go build -o bin/sear-client ./cmd/sear-client",
+            "command": "mkdir -p bin && go build -o bin/kompakt ./cmd/kompakt && go build -o bin/kompakt-agent ./cmd/kompakt-agent",
             "windows": {
-                "command": "if (-not (Test-Path bin)) { New-Item -ItemType Directory -Path bin | Out-Null }; go build -o bin/sear-daemon.exe ./cmd/sear-daemon; go build -o bin/sear-client.exe ./cmd/sear-client"
+                "command": "if (-not (Test-Path bin)) { New-Item -ItemType Directory -Path bin | Out-Null }; go build -o bin/kompakt.exe ./cmd/kompakt; go build -o bin/kompakt-agent.exe ./cmd/kompakt-agent"
             },
             "group": {
                 "kind": "build",
@@ -19,7 +19,7 @@
         {
             "label": "run daemon (examples)",
             "type": "shell",
-            "command": "go run ./cmd/sear-daemon -config examples/config.yml -secrets examples/secrets.yml",
+            "command": "go run ./cmd/kompakt -config examples/config.yml -secrets examples/secrets.yml",
             "presentation": {
                 "reveal": "always",
                 "panel": "dedicated"
@@ -28,7 +28,7 @@
         {
             "label": "run client (examples)",
             "type": "shell",
-            "command": "go run ./cmd/sear-client -config examples/client.config.yml",
+            "command": "go run ./cmd/kompakt-agent -config examples/client.config.yml",
             "presentation": {
                 "reveal": "always",
                 "panel": "dedicated"

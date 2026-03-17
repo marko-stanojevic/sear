@@ -1,5 +1,5 @@
 // Package identity collects hardware/platform identifiers for client
-// self-registration with the sear daemon.
+// self-registration with the kompakt daemon.
 package identity
 
 import (

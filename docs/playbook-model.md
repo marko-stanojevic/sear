@@ -1,6 +1,6 @@
 # Playbook Model
 
-This document describes the structure and features of Sear playbooks for deployment automation.
+This document describes the structure and features of Kompakt playbooks for deployment automation.
 
 ## Overview
 
@@ -30,7 +30,7 @@ jobs:
       - name: "Configure sysctl"
         shell: bash
         run: |
-          echo "vm.swappiness=10" >> /etc/sysctl.d/99-sear.conf
+          echo "vm.swappiness=10" >> /etc/sysctl.d/99-kompakt.conf
       - name: "Reboot to apply kernel settings"
         uses: reboot
         with:

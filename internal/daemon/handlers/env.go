@@ -1,16 +1,17 @@
-// Package handlers implements all HTTP and WebSocket handlers for the sear daemon.
+// Package handlers implements all HTTP and WebSocket handlers for the kompakt daemon.
 package handlers
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/marko-stanojevic/sear/internal/common"
-	"github.com/marko-stanojevic/sear/internal/daemon/ports"
-	"github.com/marko-stanojevic/sear/internal/daemon/service"
+	"github.com/marko-stanojevic/kompakt/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/ports"
+	"github.com/marko-stanojevic/kompakt/internal/daemon/service"
 )
 
 // Env bundles the dependencies shared by all handlers.
@@ -83,6 +84,7 @@ func (h *Hub) Send(clientID string, msg common.WSMessage) bool {
 	}
 	data, err := json.Marshal(msg)
 	if err != nil {
+		slog.Error("failed to marshal websocket message", "client_id", clientID, "msg_type", msg.Type, "err", err)
 		return false
 	}
 	select {

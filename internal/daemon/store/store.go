@@ -1,4 +1,4 @@
-// Package store provides a JSON-file-backed persistence layer for the sear daemon.
+// Package store provides a JSON-file-backed persistence layer for the kompakt daemon.
 // Design notes:
 //   - All client/deployment/playbook/artifact/secret state lives in state.json.
 //   - Logs are stored in per-deployment files under logsDir/{deploymentID}.json
@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
 // PlaybookRecord wraps a Playbook with server-side metadata.

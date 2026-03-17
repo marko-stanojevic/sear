@@ -1,8 +1,8 @@
-MODULE  := github.com/marko-stanojevic/sear
+MODULE  := github.com/marko-stanojevic/kompakt
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags "-X main.version=$(VERSION) -s -w"
 
-BINARIES := sear-daemon sear-client
+BINARIES := kompakt kompakt-agent
 PLATFORMS := linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64
 
 .PHONY: all build release test lint clean tidy
@@ -12,9 +12,9 @@ all: build
 ## build: compile binaries for the current platform
 build:
 	@mkdir -p bin
-	go build $(LDFLAGS) -o bin/sear-daemon ./cmd/sear-daemon
-	go build $(LDFLAGS) -o bin/sear-client ./cmd/sear-client
-	@echo "Built: bin/sear-daemon  bin/sear-client"
+	go build $(LDFLAGS) -o bin/kompakt ./cmd/kompakt
+	go build $(LDFLAGS) -o bin/kompakt-agent ./cmd/kompakt-agent
+	@echo "Built: bin/kompakt  bin/kompakt-agent"
 
 ## release: cross-compile for all platforms into dist/
 release: tidy

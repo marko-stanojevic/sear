@@ -41,7 +41,7 @@
 <script>
 async function removeClient(id, hostname) {
   if (!confirm('Remove client "' + hostname + '"?\nThis cannot be undone.')) return;
-  const creds = sessionStorage.getItem('sear_creds');
+  const creds = sessionStorage.getItem('kompakt_creds');
   const headers = {'Content-Type':'application/json'};
   if (creds) headers['Authorization'] = 'Basic ' + creds;
 	const r = await fetch('/api/v1/clients/' + encodeURIComponent(id), {method:'DELETE', headers});

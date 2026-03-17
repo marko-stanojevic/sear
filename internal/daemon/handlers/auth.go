@@ -13,7 +13,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/marko-stanojevic/sear/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
 // ── JWT helpers ───────────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ func (e *Env) RequireRootAuth(next http.Handler) http.Handler {
 		if !ok ||
 			subtle.ConstantTimeCompare([]byte(user), []byte("root")) != 1 ||
 			subtle.ConstantTimeCompare([]byte(pass), []byte(e.RootPassword)) != 1 {
-			w.Header().Set("WWW-Authenticate", `Basic realm="sear-root"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="kompakt-root"`)
 			writeError(w, http.StatusUnauthorized, "invalid root credentials")
 			return
 		}

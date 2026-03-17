@@ -1,6 +1,6 @@
 # API endpoints
 
-This document describes the HTTP and WebSocket endpoints exposed by sear-daemon.
+This document describes the HTTP and WebSocket endpoints exposed by kompakt.
 
 ## Authentication model
 
