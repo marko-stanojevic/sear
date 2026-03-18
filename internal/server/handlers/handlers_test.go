@@ -381,7 +381,7 @@ func TestHandleUIPages(t *testing.T) {
 		handler http.HandlerFunc
 	}{
 		{name: "status ui", path: "/ui", handler: env.HandleAgentsUI},
-		{name: "secrets ui", path: "/ui/secrets", handler: env.HandleSecretsUI},
+		{name: "vault ui", path: "/ui/vault", handler: env.HandleVaultUI},
 		{name: "playbooks ui", path: "/ui/playbooks", handler: env.HandlePlaybooksUI},
 		{name: "deployments ui", path: "/ui/deployments", handler: env.HandleDeploymentsUI},
 	}

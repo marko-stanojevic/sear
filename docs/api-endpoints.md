@@ -43,7 +43,7 @@ Served under `/ui` — no auth required at the HTTP level; page JS handles auth 
 
 - `GET /ui` — homepage dashboard
 - `GET /ui/clients` — connected clients
-- `GET /ui/secrets` — secrets management
+- `GET /ui/vault` — secrets management
 - `GET /ui/playbooks` — playbook library
 - `GET /ui/deployments` — deployment history and logs
 - `GET /ui/artifacts` — artifact storage
