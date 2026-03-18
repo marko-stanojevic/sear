@@ -1,0 +1,171 @@
+{{template "layout" .}}
+{{define "content"}}
+<div class="container">
+  <div class="meta">
+    <span id="counts-bar">Loading…</span>
+    <span class="spacer"></span>
+    <div class="search-inline">
+      <input id="f-query" type="search" name="q" placeholder="Search artifacts…" autocomplete="off"
+             hx-get="/ui/partials/artifacts" hx-target="#table-root" hx-trigger="input changed delay:300ms, search">
+      <button class="btn-clear btn-muted" onclick="document.getElementById('f-query').value='';htmx.trigger(document.getElementById('f-query'),'search')" title="Clear">✕</button>
+    </div>
+    <button class="btn-add" onclick="showUploadModal()">+ Add artifact</button>
+    <button hx-get="/ui/partials/artifacts" hx-target="#table-root" hx-include="#f-query">Refresh</button>
+  </div>
+  <div id="table-root"
+       hx-get="/ui/partials/artifacts"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <div class="spinner"></div>
+  </div>
+</div>
+
+<!-- Upload modal -->
+<div id="modal-upload" class="modal-bg">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Add Artifact</h2>
+      <button class="btn-icon" onclick="closeModal('modal-upload')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label>Name (optional)</label><input id="artifact-name" type="text" placeholder="Defaults to filename"></div>
+      <div class="form-group"><label>File</label><input id="artifact-file" type="file"></div>
+      <div class="form-group">
+        <label>Access Policy</label>
+        <select id="artifact-policy" onchange="toggleRestrictedUI()">
+          <option value="authenticated">Authenticated (all clients)</option>
+          <option value="public">Public (unauthenticated)</option>
+          <option value="restricted">Restricted (selected clients only)</option>
+        </select>
+      </div>
+      <div id="restricted-ui" class="form-group" style="display:none">
+        <label>Allowed Client IDs (comma separated)</label>
+        <input id="artifact-clients" type="text" placeholder="client-uuid-1, client-uuid-2">
+      </div>
+    </div>
+    <div class="modal-err" id="upload-modal-err"></div>
+    <div class="modal-actions">
+      <button class="btn-muted" onclick="closeModal('modal-upload')">Cancel</button>
+      <button class="btn-add" onclick="uploadArtifact()">Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modify policy modal -->
+<div id="modal-modify" class="modal-bg">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Modify Access Policy</h2>
+      <button class="btn-icon" onclick="closeModal('modal-modify')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="modify-art-name" style="font-weight:600;margin-bottom:2px"></div>
+      <div id="modify-art-id" class="sub" style="margin-bottom:20px;font-family:monospace"></div>
+      <div class="form-group">
+        <label>Access Policy</label>
+        <select id="modify-policy" onchange="toggleModifyRestricted()">
+          <option value="authenticated">Authenticated (Default)</option>
+          <option value="public">Public</option>
+          <option value="restricted">Restricted</option>
+        </select>
+      </div>
+      <div id="modify-restricted-group" class="form-group" style="display:none">
+        <label>Allowed Client IDs (comma separated)</label>
+        <input type="text" id="modify-allowed-clients" placeholder="client-1, client-2">
+      </div>
+      <div id="modify-error" class="modal-err"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-muted" onclick="closeModal('modal-modify')">Cancel</button>
+      <button class="btn-add" onclick="savePolicy()">Save Changes</button>
+    </div>
+  </div>
+</div>
+{{end}}
+{{define "scripts"}}
+<script>
+function showModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function toggleRestrictedUI(){document.getElementById('restricted-ui').style.display=document.getElementById('artifact-policy').value==='restricted'?'block':'none';}
+function toggleModifyRestricted(){document.getElementById('modify-restricted-group').style.display=document.getElementById('modify-policy').value==='restricted'?'block':'none';}
+
+function showUploadModal(){
+  document.getElementById('artifact-name').value='';
+  document.getElementById('artifact-file').value='';
+  document.getElementById('artifact-policy').value='authenticated';
+  document.getElementById('artifact-clients').value='';
+  document.getElementById('restricted-ui').style.display='none';
+  document.getElementById('upload-modal-err').textContent='';
+  showModal('modal-upload');
+}
+
+async function uploadArtifact(){
+  var errEl=document.getElementById('upload-modal-err');
+  var fileInput=document.getElementById('artifact-file');
+  if(!fileInput.files.length){errEl.textContent='Please select a file';return;}
+  var file=fileInput.files[0];
+  var name=document.getElementById('artifact-name').value.trim();
+  var policy=document.getElementById('artifact-policy').value;
+  var clients=document.getElementById('artifact-clients').value.trim();
+  var params='?filename='+encodeURIComponent(file.name);
+  if(name) params+='&name='+encodeURIComponent(name);
+  params+='&access_policy='+encodeURIComponent(policy);
+  if(policy==='restricted'&&clients) params+='&allowed_clients='+encodeURIComponent(clients);
+  try {
+    var r=await fetch('/artifacts'+params,{method:'POST',headers:headersAuth(),body:file});
+    if(r.status===401){showLogin('Session expired — sign in again');return;}
+    if(!r.ok){errEl.textContent='Upload failed ('+r.status+')';return;}
+    closeModal('modal-upload');
+    refreshTable();
+  } catch(e){errEl.textContent='Network error: '+e.message;}
+}
+
+function modifyPolicy(id,name,policy,allowedClients){
+  document.getElementById('modify-art-name').innerText=name;
+  document.getElementById('modify-art-id').innerText=id;
+  document.getElementById('modify-policy').value=policy;
+  document.getElementById('modify-allowed-clients').value=allowedClients||'';
+  toggleModifyRestricted();
+  document.getElementById('modify-error').innerText='';
+  showModal('modal-modify');
+  window.currentModifyId=id;
+}
+
+async function savePolicy(){
+  var id=window.currentModifyId;
+  var policy=document.getElementById('modify-policy').value;
+  var clients=document.getElementById('modify-allowed-clients').value;
+  var err=document.getElementById('modify-error');
+  try {
+    var url='/artifacts/'+id+'?access_policy='+encodeURIComponent(policy)+'&allowed_clients='+encodeURIComponent(clients);
+    var res=await fetch(url,{method:'PATCH',headers:headersAuth()});
+    if(!res.ok){var d=await res.json();throw new Error(d.error||'Failed to update policy');}
+    closeModal('modal-modify');
+    refreshTable();
+  } catch(e){err.innerText=e.message;}
+}
+
+async function downloadArtifact(id,filename){
+  try {
+    var r=await fetch('/artifacts/'+encodeURIComponent(id),{headers:headersAuth()});
+    if(r.status===401){showLogin('Session expired — sign in again');return;}
+    if(!r.ok){return;}
+    var blob=await r.blob();
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download=filename;a.click();
+    URL.revokeObjectURL(url);
+  } catch(e){}
+}
+
+async function removeArtifact(id){
+  showConfirm('Delete Artifact','Delete this artifact? This cannot be undone.',async function(){
+    try {
+      var r=await fetch('/artifacts/'+encodeURIComponent(id),{method:'DELETE',headers:headersAuth()});
+      if(r.status===401){showLogin('Session expired — sign in again');return;}
+      if(r.ok) refreshTable();
+    } catch(e){}
+  });
+}
+</script>
+{{end}}

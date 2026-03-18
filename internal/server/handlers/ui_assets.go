@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-//go:embed ui/*.html ui/assets/*
+//go:embed ui/templates ui/assets
 var uiFS embed.FS
 
 // ServeUIAsset handles requests to /ui/assets/ by stripping the prefix
@@ -45,16 +45,3 @@ func setSecurityHeaders(w http.ResponseWriter) {
 	w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 }
 
-func renderUI(w http.ResponseWriter, name string) {
-	data, err := uiFS.ReadFile("ui/" + name)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to load UI asset")
-		return
-	}
-	setSecurityHeaders(w)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
-	_, _ = w.Write(data)
-}

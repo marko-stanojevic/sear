@@ -64,6 +64,15 @@ func NewServer(env *handlers.Handler) http.Handler {
 	mux.Handle("/api/v1/secrets", root(http.HandlerFunc(env.HandleSecrets)))
 	mux.Handle("/api/v1/secrets/", root(http.HandlerFunc(env.HandleSecrets)))
 
+	// ── HTMX partials (root auth required) ───────────────────────────────────
+	mux.Handle("/ui/partials/home-stats", root(http.HandlerFunc(env.HandlePartialHomeStats)))
+	mux.Handle("/ui/partials/clients", root(http.HandlerFunc(env.HandlePartialClients)))
+	mux.Handle("/ui/partials/artifacts", root(http.HandlerFunc(env.HandlePartialArtifacts)))
+	mux.Handle("/ui/partials/deployments", root(http.HandlerFunc(env.HandlePartialDeployments)))
+	mux.Handle("/ui/partials/deployments/", root(http.HandlerFunc(env.HandlePartialDeploymentLogs)))
+	mux.Handle("/ui/partials/playbooks", root(http.HandlerFunc(env.HandlePartialPlaybooks)))
+	mux.Handle("/ui/partials/secrets", root(http.HandlerFunc(env.HandlePartialSecrets)))
+
 	return logging(mux)
 }
 

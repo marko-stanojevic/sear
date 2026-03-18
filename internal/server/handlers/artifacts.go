@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
@@ -37,8 +36,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		if id == "" {
 			// Listing requires authentication (root or any client)
-			_, _, isRoot := r.BasicAuth()
-			if !isRoot {
+			if !e.isRootRequest(r) {
 				if _, err := e.clientIDFromToken(r); err != nil {
 					writeError(w, http.StatusUnauthorized, "authentication required to list artifacts")
 					return
@@ -69,8 +67,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		// Enforce Access Policy
 		if a.AccessPolicy != common.AccessPublic {
 			// Check for root auth first
-			_, _, isRoot := r.BasicAuth()
-			if !isRoot {
+			if !e.isRootRequest(r) {
 				// Check for client auth
 				clientID, err := e.clientIDFromToken(r)
 				if err != nil {
@@ -110,8 +107,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPost:
 		// Upload requires authentication (root or any client)
-		_, _, isRoot := r.BasicAuth()
-		if !isRoot {
+		if !e.isRootRequest(r) {
 			if _, err := e.clientIDFromToken(r); err != nil {
 				writeError(w, http.StatusUnauthorized, "authentication required to upload artifacts")
 				return
@@ -133,7 +129,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		if ct == "" {
 			ct = "application/octet-stream"
 		}
-		artID := uuid.New().String()
+		artID := common.NewID()
 		artDir := filepath.Join(e.ArtifactsDir, artID)
 		if err := os.MkdirAll(artDir, 0o700); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to create artifact directory")
@@ -179,8 +175,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPatch:
 		// Update metadata requires authentication (root or any client)
-		_, _, isRoot := r.BasicAuth()
-		if !isRoot {
+		if !e.isRootRequest(r) {
 			if _, err := e.clientIDFromToken(r); err != nil {
 				writeError(w, http.StatusUnauthorized, "authentication required to modify artifacts")
 				return
@@ -224,8 +219,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodDelete:
 		// Delete requires authentication (root or any client)
-		_, _, isRoot := r.BasicAuth()
-		if !isRoot {
+		if !e.isRootRequest(r) {
 			if _, err := e.clientIDFromToken(r); err != nil {
 				writeError(w, http.StatusUnauthorized, "authentication required to delete artifacts")
 				return
@@ -252,7 +246,3 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleArtifactsUI serves the artifacts page.
-func (e *Handler) HandleArtifactsUI(w http.ResponseWriter, r *http.Request) {
-	renderUI(w, "artifacts.html")
-}

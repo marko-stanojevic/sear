@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
@@ -102,6 +101,29 @@ func (e *Handler) RequireAgentAuth(next http.Handler) http.Handler {
 		r.Header.Set("X-Client-ID", clientID)
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isRootRequest returns true when the request carries valid root credentials —
+// either HTTP Basic auth or a UI Bearer JWT issued by HandleUILogin.
+// Use this for inline auth checks inside handlers that serve mixed audiences.
+func (e *Handler) isRootRequest(r *http.Request) bool {
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		raw := strings.TrimPrefix(auth, "Bearer ")
+		tok, err := jwt.ParseWithClaims(raw, &jwt.RegisteredClaims{},
+			func(_ *jwt.Token) (any, error) { return e.UserJWTSecret, nil },
+			jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+			jwt.WithAudience(uiTokenAudience),
+		)
+		if err == nil {
+			if claims, ok := tok.Claims.(*jwt.RegisteredClaims); ok && tok.Valid && claims.Subject == "root" {
+				return true
+			}
+		}
+	}
+	user, pass, ok := r.BasicAuth()
+	return ok &&
+		subtle.ConstantTimeCompare([]byte(user), []byte("root")) == 1 &&
+		subtle.ConstantTimeCompare([]byte(pass), []byte(e.RootPassword)) == 1
 }
 
 // RequireRootAuth enforces authentication for root/admin endpoints.
@@ -210,18 +232,8 @@ func (e *Handler) HandleAgentRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if client == nil {
-		clientID := preferredClientID(machineID)
-		if existing, ok := e.Store.GetClient(clientID); ok {
-			existingMachineID := ""
-			if existing.Metadata != nil {
-				existingMachineID = strings.TrimSpace(existing.Metadata["machine_id"])
-			}
-			if machineID == "" || existingMachineID == "" || existingMachineID != machineID {
-				clientID = uuid.New().String()
-			}
-		}
 		client = &common.Client{
-			ID:           clientID,
+			ID:           common.NewID(),
 			RegisteredAt: time.Now(),
 		}
 	}
@@ -320,34 +332,3 @@ func decodeJSON(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
 }
 
-func preferredClientID(machineID string) string {
-	v := strings.TrimSpace(machineID)
-	if v == "" {
-		return uuid.New().String()
-	}
-
-	var b strings.Builder
-	b.Grow(len(v))
-	for _, r := range v {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r)
-		case r >= 'A' && r <= 'Z':
-			b.WriteRune(r)
-		case r >= '0' && r <= '9':
-			b.WriteRune(r)
-		case r == '-', r == '_', r == '.', r == ':':
-			b.WriteRune(r)
-		case r == ' ', r == '/', r == '\\':
-			b.WriteRune('-')
-		}
-	}
-	out := strings.Trim(b.String(), "-._:")
-	if out == "" {
-		return uuid.New().String()
-	}
-	if len(out) > 128 {
-		out = out[:128]
-	}
-	return out
-}

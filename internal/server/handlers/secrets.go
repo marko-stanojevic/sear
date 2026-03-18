@@ -64,7 +64,3 @@ func (e *Handler) HandleSecrets(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleSecretsUI serves the secrets management web page.
-func (e *Handler) HandleSecretsUI(w http.ResponseWriter, r *http.Request) {
-	renderUI(w, "secrets.html")
-}

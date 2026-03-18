@@ -1,0 +1,58 @@
+{{if not .Rows}}
+<div class="empty">{{if .Query}}No deployments match your search.{{else}}No deployments yet.{{end}}</div>
+<script>var el=document.getElementById('counts-bar');if(el)el.textContent='Deployments: 0';</script>
+{{else}}
+<script>var el=document.getElementById('counts-bar');if(el)el.textContent='Shown: {{len .Rows}} / {{.Total}}';</script>
+<div class="table-wrap">
+<div class="list list-deployments">
+  <div class="list-head">
+    <div>Deployment</div><div>Client</div><div>Playbook</div><div>Status</div><div>Updated</div><div>Finished</div><div></div>
+  </div>
+  {{range .Rows}}
+  <div class="list-row">
+    <div>
+      <div class="sub mono">{{.ID}}</div>
+      <div class="sub mono" style="font-size:10px">Step: {{.ResumeStepIndex}}</div>
+    </div>
+    <div class="cell-main">
+      <div>{{or .Hostname "-"}}</div>
+      <div class="sub mono">{{.ClientID}}</div>
+    </div>
+    <div class="cell-main">
+      <div>{{or .PlaybookName "-"}}</div>
+      <div class="sub mono">{{.PlaybookID}}</div>
+    </div>
+    <div><span class="badge badge-{{statusClass (print .Status)}}">{{.Status}}</span></div>
+    <div>{{formatTime .UpdatedAt}}</div>
+    <div>{{formatTimePtr .FinishedAt}}</div>
+    <div class="card-top-right"><div class="card-menu">
+      <button class="menu-btn" title="Actions">⋮</button>
+      <div class="menu-dropdown">
+        <button class="menu-item" onclick="openLogs('{{.ID}}')"><i class="m-icon" data-lucide="file-text"></i> View Logs</button>
+        <button class="menu-item" onclick="removeDeployment('{{.ID}}')"><i class="m-icon" data-lucide="trash-2"></i> Remove</button>
+      </div>
+    </div></div>
+  </div>
+  {{end}}
+</div>
+</div>
+{{template "pagination" .}}
+{{end}}
+<script>if(window.lucide)window.lucide.createIcons();</script>
+
+{{define "pagination"}}
+{{if gt .TotalPages 1}}
+<div class="pagination">
+  {{if gt .Page 1}}
+  <button hx-get="/ui/partials/deployments?page={{sub .Page 1}}&q={{.Query}}" hx-target="#table-root">‹ Prev</button>
+  {{end}}
+  {{range seq .TotalPages}}
+  <button {{if eq . $.Page}}class="active"{{end}}
+          hx-get="/ui/partials/deployments?page={{.}}&q={{$.Query}}" hx-target="#table-root">{{.}}</button>
+  {{end}}
+  {{if lt .Page .TotalPages}}
+  <button hx-get="/ui/partials/deployments?page={{add .Page 1}}&q={{.Query}}" hx-target="#table-root">Next ›</button>
+  {{end}}
+</div>
+{{end}}
+{{end}}

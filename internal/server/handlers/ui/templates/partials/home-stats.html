@@ -1,0 +1,23 @@
+<div class="dashboard-grid">
+  <a href="/ui/clients" class="stat-card">
+    <div class="stat-header"><i data-lucide="monitor" style="width:24px;height:24px;color:#58a6ff"></i><span>Connected Clients</span></div>
+    <div class="stat-value">{{.Clients}}</div>
+    <div class="stat-label">Active nodes in your fleet</div>
+  </a>
+  <a href="/ui/playbooks" class="stat-card">
+    <div class="stat-header"><i data-lucide="book-open" style="width:24px;height:24px;color:#58a6ff"></i><span>Playbooks</span></div>
+    <div class="stat-value">{{.Playbooks}}</div>
+    <div class="stat-label">Automation blueprints</div>
+  </a>
+  <a href="/ui/deployments" class="stat-card">
+    <div class="stat-header"><i data-lucide="rocket" style="width:24px;height:24px;color:#58a6ff"></i><span>Running Deployments</span></div>
+    <div class="stat-value">{{.Deployments}}</div>
+    <div class="stat-label">Real-time execution status</div>
+  </a>
+  <a href="/ui/artifacts" class="stat-card">
+    <div class="stat-header"><i data-lucide="package" style="width:24px;height:24px;color:#58a6ff"></i><span>Artifacts</span></div>
+    <div class="stat-value">{{.Artifacts}}</div>
+    <div class="stat-label">Static files and binaries</div>
+  </a>
+</div>
+<script>if(window.lucide)window.lucide.createIcons();</script>
