@@ -232,18 +232,8 @@ func (e *Handler) HandleAgentRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if client == nil {
-		clientID := preferredClientID(machineID)
-		if existing, ok := e.Store.GetClient(clientID); ok {
-			existingMachineID := ""
-			if existing.Metadata != nil {
-				existingMachineID = strings.TrimSpace(existing.Metadata["machine_id"])
-			}
-			if machineID == "" || existingMachineID == "" || existingMachineID != machineID {
-				clientID = common.NewID()
-			}
-		}
 		client = &common.Client{
-			ID:           clientID,
+			ID:           common.NewID(),
 			RegisteredAt: time.Now(),
 		}
 	}
@@ -342,34 +332,3 @@ func decodeJSON(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
 }
 
-func preferredClientID(machineID string) string {
-	v := strings.TrimSpace(machineID)
-	if v == "" {
-		return common.NewID()
-	}
-
-	var b strings.Builder
-	b.Grow(len(v))
-	for _, r := range v {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r)
-		case r >= 'A' && r <= 'Z':
-			b.WriteRune(r)
-		case r >= '0' && r <= '9':
-			b.WriteRune(r)
-		case r == '-', r == '_', r == '.', r == ':':
-			b.WriteRune(r)
-		case r == ' ', r == '/', r == '\\':
-			b.WriteRune('-')
-		}
-	}
-	out := strings.Trim(b.String(), "-._:")
-	if out == "" {
-		return common.NewID()
-	}
-	if len(out) > 128 {
-		out = out[:128]
-	}
-	return out
-}
