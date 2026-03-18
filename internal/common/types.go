@@ -1,4 +1,4 @@
-// Package common defines shared types used by both the daemon and client.
+// Package common defines shared types used by both the daemon and agent.
 package common
 
 import (
@@ -117,7 +117,7 @@ func ResolveEnvSecrets(env map[string]string, secrets map[string]string) map[str
 	return out
 }
 
-// ── Client / registration types ───────────────────────────────────────────────
+// ── Agent / registration types ────────────────────────────────────────────────
 
 // PlatformType identifies the operating system platform.
 type PlatformType string
@@ -128,7 +128,7 @@ const (
 	PlatformWindows PlatformType = "windows"
 )
 
-// RegistrationRequest is sent by a client to POST /api/v1/register.
+// RegistrationRequest is sent by an agent to POST /api/v1/register.
 type RegistrationRequest struct {
 	Platform           PlatformType      `json:"platform"`
 	Hostname           string            `json:"hostname"`
@@ -138,26 +138,26 @@ type RegistrationRequest struct {
 	Metadata           map[string]string `json:"metadata,omitempty"`
 }
 
-// RegistrationResponse is returned to a successfully registered client.
+// RegistrationResponse is returned to a successfully registered agent.
 type RegistrationResponse struct {
-	ClientID string `json:"client_id"`
-	Token    string `json:"token"`
+	AgentID string `json:"agent_id"`
+	Token   string `json:"token"`
 }
 
-// ClientStatus represents the lifecycle state of a registered client.
-type ClientStatus string
+// AgentStatus represents the lifecycle state of a registered agent.
+type AgentStatus string
 
 const (
-	ClientStatusRegistered ClientStatus = "registered"
-	ClientStatusConnected  ClientStatus = "connected"
-	ClientStatusDeploying  ClientStatus = "deploying"
-	ClientStatusDone       ClientStatus = "done"
-	ClientStatusFailed     ClientStatus = "failed"
-	ClientStatusOffline    ClientStatus = "offline"
+	AgentStatusRegistered AgentStatus = "registered"
+	AgentStatusConnected  AgentStatus = "connected"
+	AgentStatusDeploying  AgentStatus = "deploying"
+	AgentStatusDone       AgentStatus = "done"
+	AgentStatusFailed     AgentStatus = "failed"
+	AgentStatusOffline    AgentStatus = "offline"
 )
 
-// Client holds server-side information about a registered client machine.
-type Client struct {
+// Agent holds server-side information about a registered agent machine.
+type Agent struct {
 	ID             string            `json:"id"`
 	Hostname       string            `json:"hostname"`
 	Platform       PlatformType      `json:"platform"`
@@ -166,7 +166,7 @@ type Client struct {
 	Vendor         string            `json:"vendor,omitempty"`
 	IPAddress      string            `json:"ip_address,omitempty"`
 	Metadata       map[string]string `json:"metadata,omitempty"`
-	Status         ClientStatus      `json:"status"`
+	Status         AgentStatus       `json:"status"`
 	PlaybookID     string            `json:"playbook_id,omitempty"`
 	RegisteredAt   time.Time         `json:"registered_at"`
 	LastActivityAt time.Time         `json:"last_activity_at"`
@@ -186,11 +186,11 @@ const (
 )
 
 // DeploymentState is persisted on the server for each active deployment.
-// ResumeStepIndex is the flat global step index the client should start from
+// ResumeStepIndex is the flat global step index the agent should start from
 // on the next connect (used after a reboot).
 type DeploymentState struct {
 	ID              string           `json:"id"`
-	ClientID        string           `json:"client_id"`
+	AgentID         string           `json:"agent_id"`
 	Hostname        string           `json:"hostname,omitempty"`
 	PlaybookID      string           `json:"playbook_id"`
 	PlaybookName    string           `json:"playbook_name,omitempty"`
@@ -214,7 +214,7 @@ const (
 	LogLevelError LogLevel = "error"
 )
 
-// LogEntry represents a single log line from a client step.
+// LogEntry represents a single log line from an agent step.
 type LogEntry struct {
 	DeploymentID string    `json:"deployment_id"`
 	JobName      string    `json:"job_name"`
@@ -237,9 +237,9 @@ type Artifact struct {
 	Filename       string       `json:"filename"`
 	Size           int64        `json:"size"`
 	ContentType    string       `json:"content_type"`
-	AccessPolicy   AccessPolicy `json:"access_policy"`
-	AllowedClients []string     `json:"allowed_clients,omitempty"`
-	UploadedAt     time.Time    `json:"uploaded_at"`
+	AccessPolicy  AccessPolicy `json:"access_policy"`
+	AllowedAgents []string     `json:"allowed_agents,omitempty"`
+	UploadedAt    time.Time    `json:"uploaded_at"`
 }
 
 // AccessPolicy defines who can download an artifact.
@@ -247,8 +247,8 @@ type AccessPolicy string
 
 const (
 	AccessPublic        AccessPolicy = "public"        // anyone
-	AccessAuthenticated AccessPolicy = "authenticated" // any client/user
-	AccessRestricted    AccessPolicy = "restricted"    // specific clients only
+	AccessAuthenticated AccessPolicy = "authenticated" // any agent/user
+	AccessRestricted    AccessPolicy = "restricted"    // specific agents only
 )
 
 // ── WebSocket protocol types ──────────────────────────────────────────────────
@@ -261,12 +261,12 @@ const (
 	WSMsgPlaybook WSMessageType = "playbook" // push deployment instructions
 	WSMsgPing     WSMessageType = "ping"
 
-	// Client → Server
+	// Agent → Server
 	WSMsgLog          WSMessageType = "log"           // stream a log line
 	WSMsgStepStart    WSMessageType = "step_start"    // step beginning
 	WSMsgStepComplete WSMessageType = "step_complete" // step succeeded
 	WSMsgStepFailed   WSMessageType = "step_failed"   // step error
-	WSMsgReboot       WSMessageType = "reboot"        // client about to reboot
+	WSMsgReboot       WSMessageType = "reboot"        // agent about to reboot
 	WSMsgDeployDone   WSMessageType = "deploy_done"   // all steps complete
 	WSMsgDeployFailed WSMessageType = "deploy_failed" // fatal deployment error
 	WSMsgPong         WSMessageType = "pong"

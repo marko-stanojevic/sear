@@ -41,10 +41,10 @@ func newTestEnv(t *testing.T) *handlers.Handler {
 
 func postJSON(t *testing.T, handler http.HandlerFunc, path string, body any, token string) *httptest.ResponseRecorder {
 	t.Helper()
-	return requestWithClientID(t, http.MethodPost, handler, path, body, token, "")
+	return requestWithAgentID(t, http.MethodPost, handler, path, body, token, "")
 }
 
-func requestWithClientID(t *testing.T, method string, handler http.HandlerFunc, path string, body any, token, clientID string) *httptest.ResponseRecorder {
+func requestWithAgentID(t *testing.T, method string, handler http.HandlerFunc, path string, body any, token, agentID string) *httptest.ResponseRecorder {
 	t.Helper()
 	var bodyReader *bytes.Reader
 	if body != nil {
@@ -61,8 +61,8 @@ func requestWithClientID(t *testing.T, method string, handler http.HandlerFunc, 
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	if clientID != "" {
-		req.Header.Set("X-Client-ID", clientID)
+	if agentID != "" {
+		req.Header.Set("X-Agent-ID", agentID)
 	}
 	rr := httptest.NewRecorder()
 	handler(rr, req)
@@ -102,7 +102,7 @@ func registerAgent(t *testing.T, env *handlers.Handler, machineID, hostname stri
 		t.Fatalf("register: status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	resp := decode[common.RegistrationResponse](t, rr)
-	return resp.ClientID, resp.Token
+	return resp.AgentID, resp.Token
 }
 
 // ── Registration ─────────────────────────────────────────────────────────────
@@ -118,8 +118,8 @@ func TestHandleRegister_Success(t *testing.T) {
 		t.Fatalf("status = %d (body: %s)", rr.Code, rr.Body.String())
 	}
 	resp := decode[common.RegistrationResponse](t, rr)
-	if resp.ClientID == "" {
-		t.Error("ClientID is empty")
+	if resp.AgentID == "" {
+		t.Error("AgentID is empty")
 	}
 	if resp.Token == "" {
 		t.Error("Token is empty")
@@ -185,15 +185,15 @@ func TestHandleRegister_Idempotent(t *testing.T) {
 	r1 := decode[common.RegistrationResponse](t, rr1)
 	r2 := decode[common.RegistrationResponse](t, rr2)
 
-	if r1.ClientID != r2.ClientID {
-		t.Errorf("second registration should reuse client ID: %q != %q", r1.ClientID, r2.ClientID)
+	if r1.AgentID != r2.AgentID {
+		t.Errorf("second registration should reuse agent ID: %q != %q", r1.AgentID, r2.AgentID)
 	}
-	if len(r1.ClientID) != 26 {
-		t.Errorf("client_id %q is not a 26-char ULID", r1.ClientID)
+	if len(r1.AgentID) != 26 {
+		t.Errorf("agent_id %q is not a 26-char ULID", r1.AgentID)
 	}
 }
 
-func TestHandleRegister_ClientIDIsULID(t *testing.T) {
+func TestHandleRegister_AgentIDIsULID(t *testing.T) {
 	env := newTestEnv(t)
 	rr := postJSON(t, env.HandleAgentRegister, "/api/v1/register", common.RegistrationRequest{
 		Platform: common.PlatformLinux,
@@ -207,12 +207,12 @@ func TestHandleRegister_ClientIDIsULID(t *testing.T) {
 		t.Fatalf("status = %d (body: %s)", rr.Code, rr.Body.String())
 	}
 	resp := decode[common.RegistrationResponse](t, rr)
-	if len(resp.ClientID) != 26 {
-		t.Errorf("client_id %q is not a 26-char ULID", resp.ClientID)
+	if len(resp.AgentID) != 26 {
+		t.Errorf("agent_id %q is not a 26-char ULID", resp.AgentID)
 	}
 }
 
-func TestHandleRegister_CapturesClientIP(t *testing.T) {
+func TestHandleRegister_CapturesAgentIP(t *testing.T) {
 	env := newTestEnv(t)
 
 	body, err := json.Marshal(common.RegistrationRequest{
@@ -235,16 +235,16 @@ func TestHandleRegister_CapturesClientIP(t *testing.T) {
 	}
 
 	resp := decode[common.RegistrationResponse](t, rr)
-	client, ok := env.Store.GetClient(resp.ClientID)
+	agent, ok := env.Store.GetAgent(resp.AgentID)
 	if !ok {
-		t.Fatalf("client %q not found", resp.ClientID)
+		t.Fatalf("agent %q not found", resp.AgentID)
 	}
-	if client.IPAddress != "203.0.113.10" {
-		t.Errorf("ip_address = %q; want %q", client.IPAddress, "203.0.113.10")
+	if agent.IPAddress != "203.0.113.10" {
+		t.Errorf("ip_address = %q; want %q", agent.IPAddress, "203.0.113.10")
 	}
 }
 
-func TestHandleRegister_CapturesClientOS(t *testing.T) {
+func TestHandleRegister_CapturesAgentOS(t *testing.T) {
 	env := newTestEnv(t)
 
 	body, err := json.Marshal(common.RegistrationRequest{
@@ -271,18 +271,18 @@ func TestHandleRegister_CapturesClientOS(t *testing.T) {
 	}
 
 	resp := decode[common.RegistrationResponse](t, rr)
-	client, ok := env.Store.GetClient(resp.ClientID)
+	agent, ok := env.Store.GetAgent(resp.AgentID)
 	if !ok {
-		t.Fatalf("client %q not found", resp.ClientID)
+		t.Fatalf("agent %q not found", resp.AgentID)
 	}
-	if client.OS != "Debian GNU/Linux 12 (bookworm)" {
-		t.Errorf("os = %q; want %q", client.OS, "Debian GNU/Linux 12 (bookworm)")
+	if agent.OS != "Debian GNU/Linux 12 (bookworm)" {
+		t.Errorf("os = %q; want %q", agent.OS, "Debian GNU/Linux 12 (bookworm)")
 	}
-	if client.Model != "PowerEdge R650" {
-		t.Errorf("model = %q; want %q", client.Model, "PowerEdge R650")
+	if agent.Model != "PowerEdge R650" {
+		t.Errorf("model = %q; want %q", agent.Model, "PowerEdge R650")
 	}
-	if client.Vendor != "Dell Inc." {
-		t.Errorf("vendor = %q; want %q", client.Vendor, "Dell Inc.")
+	if agent.Vendor != "Dell Inc." {
+		t.Errorf("vendor = %q; want %q", agent.Vendor, "Dell Inc.")
 	}
 }
 
@@ -302,14 +302,14 @@ func TestRequireAgentAuth_Missing(t *testing.T) {
 
 func TestRequireAgentAuth_QueryToken(t *testing.T) {
 	env := newTestEnv(t)
-	clientID, token := registerAgent(t, env, "SN-QUERY-01", "query-client")
+	agentID, token := registerAgent(t, env, "SN-QUERY-01", "query-client")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/ws?token="+token, nil)
 	rr := httptest.NewRecorder()
 
 	env.RequireAgentAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("X-Client-ID"); got != clientID {
-			t.Fatalf("X-Client-ID = %q; want %q", got, clientID)
+		if got := r.Header.Get("X-Agent-ID"); got != agentID {
+			t.Fatalf("X-Agent-ID = %q; want %q", got, agentID)
 		}
 		w.WriteHeader(http.StatusOK)
 	})).ServeHTTP(rr, req)
@@ -367,8 +367,8 @@ func TestHandleStatus(t *testing.T) {
 		t.Fatalf("status = %d", rr.Code)
 	}
 	resp := decode[handlers.StatusResponse](t, rr)
-	if len(resp.Clients) != 1 {
-		t.Errorf("clients = %d; want 1", len(resp.Clients))
+	if len(resp.Agents) != 1 {
+		t.Errorf("agents = %d; want 1", len(resp.Agents))
 	}
 }
 
@@ -505,15 +505,15 @@ func TestHandleRootPlaybooks_Assign(t *testing.T) {
 	env := newTestEnv(t)
 	now := time.Now()
 
-	if err := env.Store.SaveClient(&common.Client{
+	if err := env.Store.SaveAgent(&common.Agent{
 		ID:             "client-assign-1",
 		Hostname:       "edge-assign",
 		Platform:       common.PlatformLinux,
-		Status:         common.ClientStatusRegistered,
+		Status:         common.AgentStatusRegistered,
 		RegisteredAt:   now,
 		LastActivityAt: now,
 	}); err != nil {
-		t.Fatalf("SaveClient: %v", err)
+		t.Fatalf("SaveAgent: %v", err)
 	}
 	if err := env.Store.SavePlaybook(&store.PlaybookRecord{
 		ID:   "pb-assign-1",
@@ -529,7 +529,7 @@ func TestHandleRootPlaybooks_Assign(t *testing.T) {
 	}
 
 	t.Run("success", func(t *testing.T) {
-		b, _ := json.Marshal(map[string]string{"client_id": "client-assign-1"})
+		b, _ := json.Marshal(map[string]string{"agent_id": "client-assign-1"})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/playbooks/pb-assign-1/assign", bytes.NewReader(b))
 		req.URL.Path = "/api/v1/playbooks/pb-assign-1/assign"
 		req.Header.Set("Content-Type", "application/json")
@@ -540,9 +540,9 @@ func TestHandleRootPlaybooks_Assign(t *testing.T) {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 		}
 
-		c, ok := env.Store.GetClient("client-assign-1")
+		c, ok := env.Store.GetAgent("client-assign-1")
 		if !ok {
-			t.Fatal("client not found")
+			t.Fatal("agent not found")
 		}
 		if c.PlaybookID != "pb-assign-1" {
 			t.Fatalf("PlaybookID = %q; want pb-assign-1", c.PlaybookID)
@@ -560,8 +560,8 @@ func TestHandleRootPlaybooks_Assign(t *testing.T) {
 		}
 	})
 
-	t.Run("missing client", func(t *testing.T) {
-		b, _ := json.Marshal(map[string]string{"client_id": "no-client"})
+	t.Run("missing agent", func(t *testing.T) {
+		b, _ := json.Marshal(map[string]string{"agent_id": "no-agent"})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/playbooks/pb-assign-1/assign", bytes.NewReader(b))
 		req.URL.Path = "/api/v1/playbooks/pb-assign-1/assign"
 		rr := httptest.NewRecorder()
@@ -573,7 +573,7 @@ func TestHandleRootPlaybooks_Assign(t *testing.T) {
 	})
 
 	t.Run("missing playbook", func(t *testing.T) {
-		b, _ := json.Marshal(map[string]string{"client_id": "client-assign-1"})
+		b, _ := json.Marshal(map[string]string{"agent_id": "client-assign-1"})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/playbooks/no-playbook/assign", bytes.NewReader(b))
 		req.URL.Path = "/api/v1/playbooks/no-playbook/assign"
 		rr := httptest.NewRecorder()
@@ -587,7 +587,7 @@ func TestHandleRootPlaybooks_Assign(t *testing.T) {
 	t.Run("service missing", func(t *testing.T) {
 		envNoService := newTestEnv(t)
 		envNoService.Service = nil
-		b, _ := json.Marshal(map[string]string{"client_id": "client-assign-1"})
+		b, _ := json.Marshal(map[string]string{"agent_id": "client-assign-1"})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/playbooks/pb-assign-1/assign", bytes.NewReader(b))
 		req.URL.Path = "/api/v1/playbooks/pb-assign-1/assign"
 		rr := httptest.NewRecorder()
@@ -660,120 +660,120 @@ func TestHandleRootPlaybooks_UpdateAndGetErrors(t *testing.T) {
 	})
 }
 
-func TestHandleRootClients_CRUDAndErrors(t *testing.T) {
+func TestHandleRootAgents_CRUDAndErrors(t *testing.T) {
 	env := newTestEnv(t)
 	now := time.Now()
 
-	if err := env.Store.SaveClient(&common.Client{
+	if err := env.Store.SaveAgent(&common.Agent{
 		ID:             "client-root-1",
 		Hostname:       "edge-root",
 		Platform:       common.PlatformLinux,
-		Status:         common.ClientStatusRegistered,
+		Status:         common.AgentStatusRegistered,
 		RegisteredAt:   now,
 		LastActivityAt: now,
 	}); err != nil {
-		t.Fatalf("SaveClient: %v", err)
+		t.Fatalf("SaveAgent: %v", err)
 	}
 
 	t.Run("list", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/clients", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil)
 		rr := httptest.NewRecorder()
-		env.HandleRootClients(rr, req)
+		env.HandleRootAgents(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d", rr.Code)
 		}
-		var clients []*common.Client
-		_ = json.NewDecoder(rr.Body).Decode(&clients)
-		if len(clients) != 1 {
-			t.Fatalf("clients len=%d; want 1", len(clients))
+		var agents []*common.Agent
+		_ = json.NewDecoder(rr.Body).Decode(&agents)
+		if len(agents) != 1 {
+			t.Fatalf("agents len=%d; want 1", len(agents))
 		}
 	})
 
 	t.Run("get one", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/clients/client-root-1", nil)
-		req.URL.Path = "/api/v1/clients/client-root-1"
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/client-root-1", nil)
+		req.URL.Path = "/api/v1/agents/client-root-1"
 		rr := httptest.NewRecorder()
-		env.HandleRootClients(rr, req)
+		env.HandleRootAgents(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d", rr.Code)
 		}
 	})
 
 	t.Run("get missing", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/clients/missing", nil)
-		req.URL.Path = "/api/v1/clients/missing"
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/missing", nil)
+		req.URL.Path = "/api/v1/agents/missing"
 		rr := httptest.NewRecorder()
-		env.HandleRootClients(rr, req)
+		env.HandleRootAgents(rr, req)
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("status=%d; want 404", rr.Code)
 		}
 	})
 
 	t.Run("put missing id", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPut, "/api/v1/clients", bytes.NewBufferString(`{"status":"connected"}`))
-		req.URL.Path = "/api/v1/clients"
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/agents", bytes.NewBufferString(`{"status":"connected"}`))
+		req.URL.Path = "/api/v1/agents"
 		rr := httptest.NewRecorder()
-		env.HandleRootClients(rr, req)
+		env.HandleRootAgents(rr, req)
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d; want 400", rr.Code)
 		}
 	})
 
 	t.Run("put invalid json", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPut, "/api/v1/clients/client-root-1", bytes.NewBufferString("{"))
-		req.URL.Path = "/api/v1/clients/client-root-1"
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/agents/client-root-1", bytes.NewBufferString("{"))
+		req.URL.Path = "/api/v1/agents/client-root-1"
 		rr := httptest.NewRecorder()
-		env.HandleRootClients(rr, req)
+		env.HandleRootAgents(rr, req)
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d; want 400", rr.Code)
 		}
 	})
 
 	t.Run("put success", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPut, "/api/v1/clients/client-root-1", bytes.NewBufferString(`{"playbook_id":"pb-1","status":"deploying"}`))
-		req.URL.Path = "/api/v1/clients/client-root-1"
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/agents/client-root-1", bytes.NewBufferString(`{"playbook_id":"pb-1","status":"deploying"}`))
+		req.URL.Path = "/api/v1/agents/client-root-1"
 		rr := httptest.NewRecorder()
-		env.HandleRootClients(rr, req)
+		env.HandleRootAgents(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 		}
-		c, ok := env.Store.GetClient("client-root-1")
+		c, ok := env.Store.GetAgent("client-root-1")
 		if !ok {
-			t.Fatal("client not found")
+			t.Fatal("agent not found")
 		}
-		if c.PlaybookID != "pb-1" || c.Status != common.ClientStatusDeploying {
+		if c.PlaybookID != "pb-1" || c.Status != common.AgentStatusDeploying {
 			t.Fatalf("unexpected update: playbook=%q status=%q", c.PlaybookID, c.Status)
 		}
 	})
 
 	t.Run("delete missing id", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, "/api/v1/clients", nil)
-		req.URL.Path = "/api/v1/clients"
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents", nil)
+		req.URL.Path = "/api/v1/agents"
 		rr := httptest.NewRecorder()
-		env.HandleRootClients(rr, req)
+		env.HandleRootAgents(rr, req)
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d; want 400", rr.Code)
 		}
 	})
 
 	t.Run("delete success", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, "/api/v1/clients/client-root-1", nil)
-		req.URL.Path = "/api/v1/clients/client-root-1"
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/client-root-1", nil)
+		req.URL.Path = "/api/v1/agents/client-root-1"
 		rr := httptest.NewRecorder()
-		env.HandleRootClients(rr, req)
+		env.HandleRootAgents(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d", rr.Code)
 		}
-		if _, ok := env.Store.GetClient("client-root-1"); ok {
-			t.Fatal("client should be deleted")
+		if _, ok := env.Store.GetAgent("client-root-1"); ok {
+			t.Fatal("agent should be deleted")
 		}
 	})
 
 	t.Run("method not allowed", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPatch, "/api/v1/clients", nil)
-		req.URL.Path = "/api/v1/clients"
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents", nil)
+		req.URL.Path = "/api/v1/agents"
 		rr := httptest.NewRecorder()
-		env.HandleRootClients(rr, req)
+		env.HandleRootAgents(rr, req)
 		if rr.Code != http.StatusMethodNotAllowed {
 			t.Fatalf("status=%d; want 405", rr.Code)
 		}
@@ -883,7 +883,7 @@ func TestHandleRootDeployments_ListGetAndNotFound(t *testing.T) {
 	now := time.Now()
 	_ = env.Store.SaveDeployment(&common.DeploymentState{
 		ID:         "dep-list-1",
-		ClientID:   "client-1",
+		AgentID:    "agent-1",
 		PlaybookID: "pb-1",
 		Status:     common.DeploymentStatusRunning,
 		StartedAt:  now,
@@ -1056,8 +1056,8 @@ func TestHandleArtifacts_ErrorPaths(t *testing.T) {
 
 func TestHandleArtifacts_AccessPolicy(t *testing.T) {
 	env := newTestEnv(t)
-	clientID, token := registerAgent(t, env, "client-1", "host-1")
-	_, otherToken := registerAgent(t, env, "client-2", "host-2")
+	agentID, token := registerAgent(t, env, "agent-1", "host-1")
+	_, otherToken := registerAgent(t, env, "agent-2", "host-2")
 
 	// 1. Upload Public Artifact
 	pubReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=pub.bin&access_policy=public", bytes.NewBufferString("public content"))
@@ -1073,8 +1073,8 @@ func TestHandleArtifacts_AccessPolicy(t *testing.T) {
 	env.HandleArtifacts(authRR, authReq)
 	authArt := decode[common.Artifact](t, authRR)
 
-	// 3. Upload Restricted Artifact for client-1 (use the actual ULID assigned at registration)
-	restReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=rest.bin&access_policy=restricted&allowed_clients="+clientID, bytes.NewBufferString("rest content"))
+	// 3. Upload Restricted Artifact for agent-1 (use the actual ULID assigned at registration)
+	restReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=rest.bin&access_policy=restricted&allowed_agents="+agentID, bytes.NewBufferString("rest content"))
 	restReq.SetBasicAuth("root", env.RootPassword)
 	restRR := httptest.NewRecorder()
 	env.HandleArtifacts(restRR, restReq)
@@ -1108,7 +1108,7 @@ func TestHandleArtifacts_AccessPolicy(t *testing.T) {
 		}
 	})
 
-	t.Run("restricted download other client", func(t *testing.T) {
+	t.Run("restricted download other agent", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/artifacts/"+restArt.ID, nil)
 		req.Header.Set("Authorization", "Bearer "+otherToken)
 		rr := httptest.NewRecorder()
@@ -1118,7 +1118,7 @@ func TestHandleArtifacts_AccessPolicy(t *testing.T) {
 		}
 	})
 
-	t.Run("restricted download allowed client", func(t *testing.T) {
+	t.Run("restricted download allowed agent", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/artifacts/"+restArt.ID, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		rr := httptest.NewRecorder()
@@ -1141,7 +1141,7 @@ func TestHandleArtifacts_AccessPolicy(t *testing.T) {
 
 func TestHandleArtifacts_ModifyPolicy(t *testing.T) {
 	env := newTestEnv(t)
-	_, token := registerAgent(t, env, "client-1", "host-1")
+	_, token := registerAgent(t, env, "agent-1", "host-1")
 
 	// 1. Upload Authenticated Artifact
 	req := httptest.NewRequest(http.MethodPost, "/artifacts?name=mod.bin&access_policy=authenticated", bytes.NewBufferString("content"))
@@ -1174,8 +1174,8 @@ func TestHandleArtifacts_ModifyPolicy(t *testing.T) {
 		t.Fatalf("after patch dl: status=%d; want 200", pubRR.Code)
 	}
 
-	// 5. Modify to Restricted for client-2
-	modReq2 := httptest.NewRequest(http.MethodPatch, "/artifacts/"+art.ID+"?access_policy=restricted&allowed_clients=client-2", nil)
+	// 5. Modify to Restricted for agent-2
+	modReq2 := httptest.NewRequest(http.MethodPatch, "/artifacts/"+art.ID+"?access_policy=restricted&allowed_agents=agent-2", nil)
 	modReq2.SetBasicAuth("root", env.RootPassword)
 	modRR2 := httptest.NewRecorder()
 	env.HandleArtifacts(modRR2, modReq2)
@@ -1183,19 +1183,19 @@ func TestHandleArtifacts_ModifyPolicy(t *testing.T) {
 		t.Fatalf("patch2 status=%d", modRR2.Code)
 	}
 
-	// 6. Verify client-1 (from token) cannot download it
+	// 6. Verify agent-1 (from token) cannot download it
 	c1Req := httptest.NewRequest(http.MethodGet, "/artifacts/"+art.ID, nil)
 	c1Req.Header.Set("Authorization", "Bearer "+token)
 	c1RR := httptest.NewRecorder()
 	env.HandleArtifacts(c1RR, c1Req)
 	if c1RR.Code != http.StatusForbidden {
-		t.Fatalf("restricted c1: status=%d; want 403", c1RR.Code)
+		t.Fatalf("restricted agent-1: status=%d; want 403", c1RR.Code)
 	}
 }
 
-// ── Cross-client security ─────────────────────────────────────────────────────
+// ── Cross-agent security ──────────────────────────────────────────────────────
 
-func TestCrossClientDeploymentForbidden(t *testing.T) {
+func TestCrossAgentDeploymentForbidden(t *testing.T) {
 	env := newTestEnv(t)
 	ownerID, _ := registerAgent(t, env, "SN-031", "host-31")
 	_, _ = registerAgent(t, env, "SN-032", "host-32")
@@ -1203,7 +1203,7 @@ func TestCrossClientDeploymentForbidden(t *testing.T) {
 	// Create a deployment owned by ownerID.
 	dep := &common.DeploymentState{
 		ID:        "dep-owned",
-		ClientID:  ownerID,
+		AgentID:   ownerID,
 		Status:    common.DeploymentStatusRunning,
 		StartedAt: time.Now(),
 		UpdatedAt: time.Now(),

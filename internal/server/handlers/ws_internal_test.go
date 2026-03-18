@@ -18,28 +18,28 @@ func newConnectTestEnv(t *testing.T) *Handler {
 	return &Handler{Store: st, Hub: NewHub()}
 }
 
-func saveClient(t *testing.T, e *Handler, id string) {
+func saveAgent(t *testing.T, e *Handler, id string) {
 	t.Helper()
 	now := time.Now()
-	err := e.Store.SaveClient(&common.Client{
+	err := e.Store.SaveAgent(&common.Agent{
 		ID:             id,
 		Hostname:       id,
 		Platform:       common.PlatformLinux,
-		Status:         common.ClientStatusConnected,
+		Status:         common.AgentStatusConnected,
 		RegisteredAt:   now,
 		LastActivityAt: now,
 	})
 	if err != nil {
-		t.Fatalf("SaveClient: %v", err)
+		t.Fatalf("SaveAgent: %v", err)
 	}
 }
 
-func saveDeployment(t *testing.T, e *Handler, depID, clientID string, status common.DeploymentStatus) {
+func saveDeployment(t *testing.T, e *Handler, depID, agentID string, status common.DeploymentStatus) {
 	t.Helper()
 	now := time.Now()
 	err := e.Store.SaveDeployment(&common.DeploymentState{
 		ID:         depID,
-		ClientID:   clientID,
+		AgentID:    agentID,
 		PlaybookID: "pb-1",
 		Status:     status,
 		StartedAt:  now,
@@ -50,18 +50,18 @@ func saveDeployment(t *testing.T, e *Handler, depID, clientID string, status com
 	}
 }
 
-func sendWS(t *testing.T, e *Handler, clientID string, msgType common.WSMessageType, data any) {
+func sendWS(t *testing.T, e *Handler, agentID string, msgType common.WSMessageType, data any) {
 	t.Helper()
 	b, err := json.Marshal(common.WSMessage{Type: msgType, Data: data})
 	if err != nil {
 		t.Fatalf("marshal message: %v", err)
 	}
-	e.handleWSMessage(clientID, b)
+	e.handleWSMessage(agentID, b)
 }
 
 func TestHandleWSMessage_LogAndLifecycleUpdates(t *testing.T) {
 	e := newConnectTestEnv(t)
-	saveClient(t, e, "c1")
+	saveAgent(t, e,"c1")
 	saveDeployment(t, e, "dep-1", "c1", common.DeploymentStatusPending)
 
 	sendWS(t, e, "c1", common.WSMsgLog, common.WSLogData{
@@ -113,15 +113,15 @@ func TestHandleWSMessage_LogAndLifecycleUpdates(t *testing.T) {
 	if dep.Status != common.DeploymentStatusDone || dep.FinishedAt == nil {
 		t.Fatalf("after deploy_done: status=%q finished_at_nil=%v", dep.Status, dep.FinishedAt == nil)
 	}
-	client, _ := e.Store.GetClient("c1")
-	if client.Status != common.ClientStatusDone {
-		t.Fatalf("client status = %q; want %q", client.Status, common.ClientStatusDone)
+	agent, _ := e.Store.GetAgent("c1")
+	if agent.Status != common.AgentStatusDone {
+		t.Fatalf("agent status = %q; want %q", agent.Status, common.AgentStatusDone)
 	}
 }
 
 func TestHandleWSMessage_UnknownType(t *testing.T) {
 	e := newConnectTestEnv(t)
-	saveClient(t, e, "c-unknown")
+	saveAgent(t, e,"c-unknown")
 	saveDeployment(t, e, "dep-unknown", "c-unknown", common.DeploymentStatusRunning)
 
 	before, _ := e.Store.GetDeployment("dep-unknown")
@@ -135,7 +135,7 @@ func TestHandleWSMessage_UnknownType(t *testing.T) {
 
 func TestHandleWSMessage_DeployFailedAndInvalidMessages(t *testing.T) {
 	e := newConnectTestEnv(t)
-	saveClient(t, e, "c2")
+	saveAgent(t, e,"c2")
 	saveDeployment(t, e, "dep-2", "c2", common.DeploymentStatusRunning)
 
 	before, _ := e.Store.GetDeployment("dep-2")
@@ -156,8 +156,8 @@ func TestHandleWSMessage_DeployFailedAndInvalidMessages(t *testing.T) {
 	if dep.Status != common.DeploymentStatusFailed || dep.ErrorDetail != "boom" || dep.FinishedAt == nil {
 		t.Fatalf("after deploy_failed: status=%q error=%q finished_at_nil=%v", dep.Status, dep.ErrorDetail, dep.FinishedAt == nil)
 	}
-	client, _ := e.Store.GetClient("c2")
-	if client.Status != common.ClientStatusFailed {
-		t.Fatalf("client status = %q; want %q", client.Status, common.ClientStatusFailed)
+	agent, _ := e.Store.GetAgent("c2")
+	if agent.Status != common.AgentStatusFailed {
+		t.Fatalf("agent status = %q; want %q", agent.Status, common.AgentStatusFailed)
 	}
 }

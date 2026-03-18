@@ -12,8 +12,8 @@ import (
 
 // Sentinel errors returned by service operations.
 var (
-	// ErrClientNotFound is returned when a client ID does not match any registered client.
-	ErrClientNotFound = errors.New("client not found")
+	// ErrAgentNotFound is returned when an agent ID does not match any registered agent.
+	ErrAgentNotFound = errors.New("agent not found")
 	// ErrPlaybookNotFound is returned when a playbook ID does not match any stored playbook.
 	ErrPlaybookNotFound = errors.New("playbook not found")
 )
@@ -25,38 +25,38 @@ type Manager struct {
 	ServerURL string
 }
 
-func (m *Manager) StatusSnapshot() ([]*common.Client, []*common.DeploymentState) {
-	return m.Store.ListClients(), m.Store.ListDeployments()
+func (m *Manager) StatusSnapshot() ([]*common.Agent, []*common.DeploymentState) {
+	return m.Store.ListAgents(), m.Store.ListDeployments()
 }
 
-func (m *Manager) AssignPlaybookToClient(playbookID, clientID string) error {
-	client, ok := m.Store.GetClient(clientID)
+func (m *Manager) AssignPlaybookToAgent(playbookID, agentID string) error {
+	agent, ok := m.Store.GetAgent(agentID)
 	if !ok {
-		return fmt.Errorf("assign playbook to client: %w", ErrClientNotFound)
+		return fmt.Errorf("assign playbook to agent: %w", ErrAgentNotFound)
 	}
 	if _, ok := m.Store.GetPlaybook(playbookID); !ok {
-		return fmt.Errorf("assign playbook to client: %w", ErrPlaybookNotFound)
+		return fmt.Errorf("assign playbook to agent: %w", ErrPlaybookNotFound)
 	}
-	client.PlaybookID = playbookID
-	if err := m.Store.SaveClient(client); err != nil {
-		return fmt.Errorf("failed to save client: %w", err)
+	agent.PlaybookID = playbookID
+	if err := m.Store.SaveAgent(agent); err != nil {
+		return fmt.Errorf("failed to save agent: %w", err)
 	}
-	if m.Hub.IsConnected(clientID) {
-		m.PushPlaybookIfAssigned(clientID, true)
+	if m.Hub.IsConnected(agentID) {
+		m.PushPlaybookIfAssigned(agentID, true)
 	}
 	return nil
 }
 
-// PushPlaybookIfAssigned sends an assigned playbook to a connected client.
+// PushPlaybookIfAssigned sends an assigned playbook to a connected agent.
 // If force is false, it skips if the latest deployment for this playbook is already Done.
-func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
-	client, ok := m.Store.GetClient(clientID)
-	if !ok || client.PlaybookID == "" {
+func (m *Manager) PushPlaybookIfAssigned(agentID string, force bool) {
+	agent, ok := m.Store.GetAgent(agentID)
+	if !ok || agent.PlaybookID == "" {
 		return
 	}
 
-	dep, hasDep := m.Store.GetActiveDeploymentForClient(clientID)
-	pb, ok := m.Store.GetPlaybook(client.PlaybookID)
+	dep, hasDep := m.Store.GetActiveDeploymentForAgent(agentID)
+	pb, ok := m.Store.GetPlaybook(agent.PlaybookID)
 	if !ok {
 		return
 	}
@@ -70,7 +70,7 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
 	//    - If Running/Rebooting: resume (ignore force).
 	//    - If Done/Failed: start new if force, otherwise skip.
 
-	isSamePlaybook := hasDep && dep.PlaybookID == client.PlaybookID
+	isSamePlaybook := hasDep && dep.PlaybookID == agent.PlaybookID
 
 	if isSamePlaybook && (dep.Status == common.DeploymentStatusPending ||
 		dep.Status == common.DeploymentStatusRunning ||
@@ -81,7 +81,7 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
 		dep.Status = common.DeploymentStatusRunning
 		dep.UpdatedAt = time.Now()
 		if err := m.Store.SaveDeployment(dep); err != nil {
-			slog.Error("failed to save deployment", "deployment_id", dep.ID, "client_id", clientID, "err", err)
+			slog.Error("failed to save deployment", "deployment_id", dep.ID, "agent_id", agentID, "err", err)
 			return
 		}
 	} else if !isSamePlaybook || force {
@@ -89,9 +89,9 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
 		deploymentID = common.NewID()
 		newDep := &common.DeploymentState{
 			ID:           deploymentID,
-			ClientID:     clientID,
-			Hostname:     client.Hostname,
-			PlaybookID:   client.PlaybookID,
+			AgentID:      agentID,
+			Hostname:     agent.Hostname,
+			PlaybookID:   agent.PlaybookID,
 			PlaybookName: pb.Name,
 			Status:          common.DeploymentStatusRunning,
 			ResumeStepIndex: 0,
@@ -102,7 +102,7 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
 			newDep.PlaybookName = pb.Playbook.Name
 		}
 		if err := m.Store.SaveDeployment(newDep); err != nil {
-			slog.Error("failed to save new deployment", "deployment_id", deploymentID, "client_id", clientID, "err", err)
+			slog.Error("failed to save new deployment", "deployment_id", deploymentID, "agent_id", agentID, "err", err)
 			return
 		}
 	} else {
@@ -112,9 +112,9 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
 		return
 	}
 
-	client.Status = common.ClientStatusDeploying
-	if err := m.Store.SaveClient(client); err != nil {
-		slog.Error("failed to update client status to deploying", "client_id", clientID, "err", err)
+	agent.Status = common.AgentStatusDeploying
+	if err := m.Store.SaveAgent(agent); err != nil {
+		slog.Error("failed to update agent status to deploying", "agent_id", agentID, "err", err)
 		return
 	}
 
@@ -125,7 +125,7 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
 	m.AppendDeploymentLog(deploymentID, "", 0, common.LogLevelInfo,
 		fmt.Sprintf("starting playbook %q (deployment %s, resume step %d)", playbookName, deploymentID, resumeStep))
 
-	m.Hub.Send(clientID, common.WSMessage{
+	m.Hub.Send(agentID, common.WSMessage{
 		Type:      common.WSMsgPlaybook,
 		Timestamp: time.Now(),
 		Data: common.WSPlaybookData{
@@ -165,5 +165,3 @@ func (m *Manager) ResolvePlaybookNameByDeployment(deploymentID string) string {
 	}
 	return playbookName
 }
-
-

@@ -19,79 +19,79 @@ func newTestStore(t *testing.T) *store.Store {
 	return s
 }
 
-// ── Clients ───────────────────────────────────────────────────────────────────
+// ── Agents ────────────────────────────────────────────────────────────────────
 
-func TestClientCRUD(t *testing.T) {
+func TestAgentCRUD(t *testing.T) {
 	s := newTestStore(t)
 
-	c := &common.Client{
-		ID:             "client-1",
+	a := &common.Agent{
+		ID:             "agent-1",
 		Hostname:       "edge-01",
 		Platform:       common.PlatformLinux,
-		Status:         common.ClientStatusRegistered,
+		Status:         common.AgentStatusRegistered,
 		RegisteredAt:   time.Now(),
 		LastActivityAt: time.Now(),
 	}
-	if err := s.SaveClient(c); err != nil {
-		t.Fatalf("SaveClient: %v", err)
+	if err := s.SaveAgent(a); err != nil {
+		t.Fatalf("SaveAgent: %v", err)
 	}
 
-	got, ok := s.GetClient("client-1")
+	got, ok := s.GetAgent("agent-1")
 	if !ok {
-		t.Fatal("GetClient: not found")
+		t.Fatal("GetAgent: not found")
 	}
 	if got.Hostname != "edge-01" {
 		t.Errorf("Hostname = %q; want edge-01", got.Hostname)
 	}
 
-	list := s.ListClients()
+	list := s.ListAgents()
 	if len(list) != 1 {
-		t.Errorf("ListClients len = %d; want 1", len(list))
+		t.Errorf("ListAgents len = %d; want 1", len(list))
 	}
 
-	if err := s.DeleteClient("client-1"); err != nil {
-		t.Fatalf("DeleteClient: %v", err)
+	if err := s.DeleteAgent("agent-1"); err != nil {
+		t.Fatalf("DeleteAgent: %v", err)
 	}
-	_, ok = s.GetClient("client-1")
+	_, ok = s.GetAgent("agent-1")
 	if ok {
-		t.Error("expected client to be deleted")
+		t.Error("expected agent to be deleted")
 	}
 }
 
-func TestListClientsStableOrder(t *testing.T) {
+func TestListAgentsStableOrder(t *testing.T) {
 	s := newTestStore(t)
 	now := time.Now()
 
-	clients := []*common.Client{
-		{ID: "id-z", Hostname: "zeta", Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
-		{ID: "id-a", Hostname: "alpha", Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
-		{ID: "id-b", Hostname: "", Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
-		{ID: "id-a2", Hostname: "alpha", Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now},
+	agents := []*common.Agent{
+		{ID: "id-z", Hostname: "zeta", Status: common.AgentStatusRegistered, RegisteredAt: now, LastActivityAt: now},
+		{ID: "id-a", Hostname: "alpha", Status: common.AgentStatusRegistered, RegisteredAt: now, LastActivityAt: now},
+		{ID: "id-b", Hostname: "", Status: common.AgentStatusRegistered, RegisteredAt: now, LastActivityAt: now},
+		{ID: "id-a2", Hostname: "alpha", Status: common.AgentStatusRegistered, RegisteredAt: now, LastActivityAt: now},
 	}
-	for _, c := range clients {
-		if err := s.SaveClient(c); err != nil {
-			t.Fatalf("SaveClient(%s): %v", c.ID, err)
+	for _, a := range agents {
+		if err := s.SaveAgent(a); err != nil {
+			t.Fatalf("SaveAgent(%s): %v", a.ID, err)
 		}
 	}
 
-	got := s.ListClients()
+	got := s.ListAgents()
 	if len(got) != 4 {
-		t.Fatalf("ListClients len = %d; want 4", len(got))
+		t.Fatalf("ListAgents len = %d; want 4", len(got))
 	}
 
 	wantIDs := []string{"id-a", "id-a2", "id-z", "id-b"}
 	for i, want := range wantIDs {
 		if got[i].ID != want {
-			t.Fatalf("ListClients[%d].ID = %q; want %q", i, got[i].ID, want)
+			t.Fatalf("ListAgents[%d].ID = %q; want %q", i, got[i].ID, want)
 		}
 	}
 
 	// Call repeatedly to ensure order remains deterministic.
 	for n := 0; n < 3; n++ {
-		again := s.ListClients()
+		again := s.ListAgents()
 		for i, want := range wantIDs {
 			if again[i].ID != want {
-				t.Fatalf("ListClients call %d index %d ID = %q; want %q", n+2, i, again[i].ID, want)
+				t.Fatalf("ListAgents call %d index %d ID = %q; want %q", n+2, i, again[i].ID, want)
 			}
 		}
 	}
@@ -104,7 +104,7 @@ func TestDeploymentCRUD(t *testing.T) {
 
 	d := &common.DeploymentState{
 		ID:              "dep-1",
-		ClientID:        "client-1",
+		AgentID:         "agent-1",
 		PlaybookID:      "pb-1",
 		Status:          common.DeploymentStatusRunning,
 		ResumeStepIndex: 2,
@@ -123,9 +123,9 @@ func TestDeploymentCRUD(t *testing.T) {
 		t.Errorf("ResumeStepIndex = %d; want 2", got.ResumeStepIndex)
 	}
 
-	dep, ok := s.GetActiveDeploymentForClient("client-1")
+	dep, ok := s.GetActiveDeploymentForAgent("agent-1")
 	if !ok {
-		t.Fatal("GetActiveDeploymentForClient: not found")
+		t.Fatal("GetActiveDeploymentForAgent: not found")
 	}
 	if dep.ID != "dep-1" {
 		t.Errorf("deployment ID = %q; want dep-1", dep.ID)
@@ -137,20 +137,20 @@ func TestDeploymentCRUD(t *testing.T) {
 	}
 }
 
-func TestGetActiveDeploymentForClientMostRecent(t *testing.T) {
+func TestGetActiveDeploymentForAgentMostRecent(t *testing.T) {
 	s := newTestStore(t)
 	now := time.Now()
 
 	older := &common.DeploymentState{
 		ID:        "dep-old",
-		ClientID:  "client-1",
+		AgentID:   "agent-1",
 		Status:    common.DeploymentStatusRunning,
 		StartedAt: now.Add(-10 * time.Minute),
 		UpdatedAt: now.Add(-10 * time.Minute),
 	}
 	newer := &common.DeploymentState{
 		ID:        "dep-new",
-		ClientID:  "client-1",
+		AgentID:   "agent-1",
 		Status:    common.DeploymentStatusRunning,
 		StartedAt: now,
 		UpdatedAt: now,
@@ -163,20 +163,20 @@ func TestGetActiveDeploymentForClientMostRecent(t *testing.T) {
 		t.Fatalf("SaveDeployment newer: %v", err)
 	}
 
-	got, ok := s.GetActiveDeploymentForClient("client-1")
+	got, ok := s.GetActiveDeploymentForAgent("agent-1")
 	if !ok {
-		t.Fatal("GetActiveDeploymentForClient: not found")
+		t.Fatal("GetActiveDeploymentForAgent: not found")
 	}
 	if got.ID != "dep-new" {
 		t.Fatalf("deployment ID = %q; want dep-new", got.ID)
 	}
 }
 
-func TestGetActiveDeploymentForClientNotFound(t *testing.T) {
+func TestGetActiveDeploymentForAgentNotFound(t *testing.T) {
 	s := newTestStore(t)
 
-	if _, ok := s.GetActiveDeploymentForClient("missing-client"); ok {
-		t.Fatal("expected no active deployment for unknown client")
+	if _, ok := s.GetActiveDeploymentForAgent("missing-agent"); ok {
+		t.Fatal("expected no active deployment for unknown agent")
 	}
 }
 
@@ -341,13 +341,13 @@ func TestAllSecretsReturnsCopy(t *testing.T) {
 
 // ── Logs — per-deployment files ───────────────────────────────────────────────
 
-func TestLogsQueryByDeploymentAndClient(t *testing.T) {
+func TestLogsQueryByDeploymentAndAgent(t *testing.T) {
 	s := newTestStore(t)
 	now := time.Now()
 
 	_ = s.SaveDeployment(&common.DeploymentState{
 		ID:        "dep-1",
-		ClientID:  "client-1",
+		AgentID:   "agent-1",
 		StartedAt: now,
 		UpdatedAt: now,
 	})
@@ -365,25 +365,25 @@ func TestLogsQueryByDeploymentAndClient(t *testing.T) {
 		t.Errorf("GetLogsForDeployment(dep-1) len = %d; want 1", len(dep1Logs))
 	}
 
-	clientLogs := s.GetLogsForClient("client-1")
-	if len(clientLogs) != 1 {
-		t.Errorf("GetLogsForClient(client-1) len = %d; want 1", len(clientLogs))
+	agentLogs := s.GetLogsForAgent("agent-1")
+	if len(agentLogs) != 1 {
+		t.Errorf("GetLogsForAgent(agent-1) len = %d; want 1", len(agentLogs))
 	}
 }
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
-func TestPersistence_ReopenPreservesClientAndSecret(t *testing.T) {
+func TestPersistence_ReopenPreservesAgentAndSecret(t *testing.T) {
 	dir := t.TempDir()
 
 	s1, err := store.New(dir, "")
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
-	_ = s1.SaveClient(&common.Client{
-		ID:       "c1",
+	_ = s1.SaveAgent(&common.Agent{
+		ID:       "a1",
 		Hostname: "host-1",
-		Status:   common.ClientStatusRegistered,
+		Status:   common.AgentStatusRegistered,
 	})
 	_ = s1.SetSecret("K", "V")
 
@@ -392,12 +392,12 @@ func TestPersistence_ReopenPreservesClientAndSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store.New (reopen): %v", err)
 	}
-	c, ok := s2.GetClient("c1")
+	a, ok := s2.GetAgent("a1")
 	if !ok {
-		t.Fatal("client not found after reopen")
+		t.Fatal("agent not found after reopen")
 	}
-	if c.Hostname != "host-1" {
-		t.Errorf("Hostname = %q after reopen; want host-1", c.Hostname)
+	if a.Hostname != "host-1" {
+		t.Errorf("Hostname = %q after reopen; want host-1", a.Hostname)
 	}
 	v, ok := s2.GetSecret("K")
 	if !ok || v != "V" {
