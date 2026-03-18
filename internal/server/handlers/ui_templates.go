@@ -26,7 +26,7 @@ func buildNav(active string) []navItem {
 	return []navItem{
 		{"Home", "/ui", active == "Home"},
 		{"Agents", "/ui/agents", active == "Agents"},
-		{"Secrets", "/ui/secrets", active == "Secrets"},
+		{"Vault", "/ui/vault", active == "Vault"},
 		{"Playbooks", "/ui/playbooks", active == "Playbooks"},
 		{"Deployments", "/ui/deployments", active == "Deployments"},
 		{"Artifacts", "/ui/artifacts", active == "Artifacts"},
@@ -278,8 +278,8 @@ func (e *Handler) HandleDeploymentsUI(w http.ResponseWriter, r *http.Request) {
 	renderPage(w, "deployments", newPage("Deployments", "Deployments", ""))
 }
 
-func (e *Handler) HandleSecretsUI(w http.ResponseWriter, r *http.Request) {
-	renderPage(w, "secrets", newPage("Secrets", "Secrets", ""))
+func (e *Handler) HandleVaultUI(w http.ResponseWriter, r *http.Request) {
+	renderPage(w, "vault", newPage("Vault", "Vault", ""))
 }
 
 // ── Partial handlers (all behind RequireRootAuth) ─────────────────────────────
@@ -454,7 +454,7 @@ func (e *Handler) HandlePartialPlaybooks(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-func (e *Handler) HandlePartialSecrets(w http.ResponseWriter, r *http.Request) {
+func (e *Handler) HandlePartialVault(w http.ResponseWriter, r *http.Request) {
 	q := strings.ToLower(r.URL.Query().Get("q"))
 	page := pageParam(r)
 
@@ -466,7 +466,7 @@ func (e *Handler) HandlePartialSecrets(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	renderPartialTemplate(w, "secrets-table", secretsTableData{
+	renderPartialTemplate(w, "vault-table", secretsTableData{
 		Names:      paginate(filtered, page, uiPageSize),
 		Query:      r.URL.Query().Get("q"),
 		Page:       page,

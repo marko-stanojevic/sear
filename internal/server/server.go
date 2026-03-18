@@ -41,7 +41,7 @@ func NewServer(env *handlers.Handler) http.Handler {
 	mux.Handle("/ui", http.HandlerFunc(env.HandleHomeUI))
 	mux.Handle("/ui/", http.HandlerFunc(env.HandleHomeUI))
 	mux.Handle("/ui/agents", http.HandlerFunc(env.HandleAgentsUI))
-	mux.Handle("/ui/secrets", http.HandlerFunc(env.HandleSecretsUI))
+	mux.Handle("/ui/vault", http.HandlerFunc(env.HandleVaultUI))
 	mux.Handle("/ui/playbooks", http.HandlerFunc(env.HandlePlaybooksUI))
 	mux.Handle("/ui/deployments", http.HandlerFunc(env.HandleDeploymentsUI))
 	mux.Handle("/ui/artifacts", http.HandlerFunc(env.HandleArtifactsUI))
@@ -71,7 +71,7 @@ func NewServer(env *handlers.Handler) http.Handler {
 	mux.Handle("/ui/partials/deployments", root(http.HandlerFunc(env.HandlePartialDeployments)))
 	mux.Handle("/ui/partials/deployments/", root(http.HandlerFunc(env.HandlePartialDeploymentLogs)))
 	mux.Handle("/ui/partials/playbooks", root(http.HandlerFunc(env.HandlePartialPlaybooks)))
-	mux.Handle("/ui/partials/secrets", root(http.HandlerFunc(env.HandlePartialSecrets)))
+	mux.Handle("/ui/partials/vault", root(http.HandlerFunc(env.HandlePartialVault)))
 
 	return logging(mux)
 }

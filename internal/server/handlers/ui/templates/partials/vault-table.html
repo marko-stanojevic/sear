@@ -32,14 +32,14 @@
 {{if gt .TotalPages 1}}
 <div class="pagination">
   {{if gt .Page 1}}
-  <button hx-get="/ui/partials/secrets?page={{sub .Page 1}}&q={{.Query}}" hx-target="#table-root">‹ Prev</button>
+  <button hx-get="/ui/partials/vault?page={{sub .Page 1}}&q={{.Query}}" hx-target="#table-root">‹ Prev</button>
   {{end}}
   {{range seq .TotalPages}}
   <button {{if eq . $.Page}}class="active"{{end}}
-          hx-get="/ui/partials/secrets?page={{.}}&q={{$.Query}}" hx-target="#table-root">{{.}}</button>
+          hx-get="/ui/partials/vault?page={{.}}&q={{$.Query}}" hx-target="#table-root">{{.}}</button>
   {{end}}
   {{if lt .Page .TotalPages}}
-  <button hx-get="/ui/partials/secrets?page={{add .Page 1}}&q={{.Query}}" hx-target="#table-root">Next ›</button>
+  <button hx-get="/ui/partials/vault?page={{add .Page 1}}&q={{.Query}}" hx-target="#table-root">Next ›</button>
   {{end}}
 </div>
 {{end}}

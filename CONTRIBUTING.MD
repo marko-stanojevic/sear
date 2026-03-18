@@ -133,7 +133,7 @@ Keep route structure consistent:
   - Public/client control examples: `/api/v1/register`, `/api/v1/ws`
   - Root management examples: `/api/v1/status`, `/api/v1/secrets`, `/api/v1/playbooks`, `/api/v1/clients`, `/api/v1/deployments`
 - Browser UI pages are under `/ui`.
-  - `/ui`, `/ui/clients`, `/ui/secrets`, `/ui/playbooks`, `/ui/deployments`, `/ui/artifacts`
+  - `/ui`, `/ui/clients`, `/ui/vault`, `/ui/playbooks`, `/ui/deployments`, `/ui/artifacts`
 - When adding a new resource:
   - expose API under `/api/v1/<resource>`
   - expose UI under `/ui/<resource>` when needed

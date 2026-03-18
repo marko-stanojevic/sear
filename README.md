@@ -98,7 +98,7 @@ See [`examples/playbook.yml`](examples/playbook.yml) for a full multi-phase exam
 | Playbooks | `/ui/playbooks` | Upload, edit, and assign playbooks to clients |
 | Deployments | `/ui/deployments` | Execution history, per-step logs, and status for every deployment |
 | Artifacts | `/ui/artifacts` | Upload binaries and files; manage access policies |
-| Secrets | `/ui/secrets` | Store and rotate credentials used in playbook steps |
+| Vault | `/ui/vault` | Store and rotate credentials used in playbook steps |
 
 ## Documentation
 

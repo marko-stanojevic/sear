@@ -6,14 +6,14 @@
     <span class="spacer"></span>
     <div class="search-inline">
       <input id="f-query" type="search" name="q" placeholder="Search secrets…" autocomplete="off"
-             hx-get="/ui/partials/secrets" hx-target="#table-root" hx-trigger="input changed delay:300ms, search">
+             hx-get="/ui/partials/vault" hx-target="#table-root" hx-trigger="input changed delay:300ms, search">
       <button class="btn-clear btn-muted" onclick="document.getElementById('f-query').value='';htmx.trigger(document.getElementById('f-query'),'search')" title="Clear">✕</button>
     </div>
     <button class="btn-add" onclick="openAdd()">+ Add secret</button>
-    <button hx-get="/ui/partials/secrets" hx-target="#table-root" hx-include="#f-query">Refresh</button>
+    <button hx-get="/ui/partials/vault" hx-target="#table-root" hx-include="#f-query">Refresh</button>
   </div>
   <div id="table-root"
-       hx-get="/ui/partials/secrets"
+       hx-get="/ui/partials/vault"
        hx-trigger="load"
        hx-swap="innerHTML">
     <div class="spinner"></div>
