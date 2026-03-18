@@ -31,6 +31,7 @@ import (
 func main() {
 	configPath := flag.String("config", "config.yml", "path to server config file")
 	secretsPath := flag.String("secrets", "secrets.yml", "path to server secrets file")
+	debug := flag.Bool("debug", false, "log all HTTP requests (default: WebSocket and errors only)")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
@@ -106,7 +107,7 @@ func main() {
 	}
 
 	// ── HTTP server ───────────────────────────────────────────────────────────
-	handler := server.NewServer(env)
+	handler := server.NewServer(env, *debug)
 	srv := &http.Server{
 		Addr:         cfg.ListenAddr,
 		Handler:      handler,

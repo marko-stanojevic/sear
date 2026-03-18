@@ -39,7 +39,7 @@ func TestLoggingPreservesHijacker(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusSwitchingProtocols)
-	}))
+	}), false)
 
 	handler.ServeHTTP(recorder, req)
 
@@ -73,7 +73,7 @@ func newServerTestEnv(t *testing.T) *handlers.Handler {
 
 func TestNewServer_Healthz(t *testing.T) {
 	env := newServerTestEnv(t)
-	h := NewServer(env)
+	h := NewServer(env, false)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 

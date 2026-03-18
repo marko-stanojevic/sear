@@ -12,7 +12,8 @@ import (
 )
 
 // NewServer wires all HTTP routes and returns a ready-to-use http.Handler.
-func NewServer(env *handlers.Handler) http.Handler {
+// When debug is false only WebSocket activity and HTTP errors (≥ 400) are logged.
+func NewServer(env *handlers.Handler, debug bool) http.Handler {
 	mux := http.NewServeMux()
 
 	// ── Public (no auth) ─────────────────────────────────────────────────────
@@ -73,7 +74,7 @@ func NewServer(env *handlers.Handler) http.Handler {
 	mux.Handle("/ui/partials/playbooks", root(http.HandlerFunc(env.HandlePartialPlaybooks)))
 	mux.Handle("/ui/partials/vault", root(http.HandlerFunc(env.HandlePartialVault)))
 
-	return logging(mux)
+	return logging(mux, debug)
 }
 
 // dualAuth accepts requests authenticated with either an agent JWT Bearer
@@ -91,12 +92,15 @@ func dualAuth(env *handlers.Handler, next http.Handler) http.Handler {
 }
 
 // logging logs every request with method, path, status, and duration.
-func logging(next http.Handler) http.Handler {
+// When debug is false only WebSocket upgrades and HTTP errors (≥ 400) are logged.
+func logging(next http.Handler, debug bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		lrw := &loggingResponseWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(lrw, r)
-		log.Printf("%s %s %d %s", r.Method, r.URL.Path, lrw.status, time.Since(start))
+		if debug || lrw.status >= 400 || r.URL.Path == "/api/v1/ws" {
+			log.Printf("%s %s %d %s", r.Method, r.URL.Path, lrw.status, time.Since(start))
+		}
 	})
 }
 
