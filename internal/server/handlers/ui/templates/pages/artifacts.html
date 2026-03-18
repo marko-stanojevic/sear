@@ -116,7 +116,7 @@ async function uploadArtifact(){
     if(r.status===401){showLogin('Session expired — sign in again');return;}
     if(!r.ok){errEl.textContent='Upload failed ('+r.status+')';return;}
     closeModal('modal-upload');
-    htmx.trigger(document.getElementById('table-root'),'load');
+    refreshTable();
   } catch(e){errEl.textContent='Network error: '+e.message;}
 }
 
@@ -141,7 +141,7 @@ async function savePolicy(){
     var res=await fetch(url,{method:'PATCH',headers:headersAuth()});
     if(!res.ok){var d=await res.json();throw new Error(d.error||'Failed to update policy');}
     closeModal('modal-modify');
-    htmx.trigger(document.getElementById('table-root'),'load');
+    refreshTable();
   } catch(e){err.innerText=e.message;}
 }
 
@@ -163,7 +163,7 @@ async function removeArtifact(id){
     try {
       var r=await fetch('/artifacts/'+encodeURIComponent(id),{method:'DELETE',headers:headersAuth()});
       if(r.status===401){showLogin('Session expired — sign in again');return;}
-      if(r.ok) htmx.trigger(document.getElementById('table-root'),'load');
+      if(r.ok) refreshTable();
     } catch(e){}
   });
 }

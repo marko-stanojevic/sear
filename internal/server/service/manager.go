@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 	"github.com/marko-stanojevic/kompakt/internal/server/ports"
 )
@@ -87,7 +86,7 @@ func (m *Manager) PushPlaybookIfAssigned(clientID string, force bool) {
 		}
 	} else if !isSamePlaybook || force {
 		// Start new deployment
-		deploymentID = uuid.New().String()
+		deploymentID = common.NewID()
 		newDep := &common.DeploymentState{
 			ID:           deploymentID,
 			ClientID:     clientID,

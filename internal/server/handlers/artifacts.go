@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
@@ -130,7 +129,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		if ct == "" {
 			ct = "application/octet-stream"
 		}
-		artID := uuid.New().String()
+		artID := common.NewID()
 		artDir := filepath.Join(e.ArtifactsDir, artID)
 		if err := os.MkdirAll(artDir, 0o700); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to create artifact directory")

@@ -98,7 +98,7 @@ async function savePlaybook(){
     if(r.status===401){closePBModal();showLogin('Session expired — sign in again');return;}
     if(!r.ok){var msg='Save failed ('+r.status+')';try{var d=await r.json();if(d.error)msg=d.error;}catch(_){}errEl.textContent=msg;return;}
     closePBModal();
-    htmx.trigger(document.getElementById('table-root'),'load');
+    refreshTable();
   } catch(e){errEl.textContent='Network error';}
 }
 
@@ -107,7 +107,7 @@ async function removePlaybook(id,name){
     try {
       var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(id),{method:'DELETE',headers:headersAuth()});
       if(r.status===401){showLogin('Session expired — sign in again');return;}
-      if(r.ok) htmx.trigger(document.getElementById('table-root'),'load');
+      if(r.ok) refreshTable();
     } catch(e){}
   });
 }
@@ -135,7 +135,7 @@ async function confirmAssign(){
     if(r.status===401){closeAssignModal();showLogin('Session expired — sign in again');return;}
     if(!r.ok){var msg='Assign failed ('+r.status+')';try{var d=await r.json();if(d.error)msg=d.error;}catch(_){}errEl.textContent=msg;return;}
     closeAssignModal();
-    htmx.trigger(document.getElementById('table-root'),'load');
+    refreshTable();
   } catch(e){errEl.textContent='Network error';}
 }
 

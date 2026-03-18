@@ -18,8 +18,9 @@ document.addEventListener('htmx:beforeSwap', function(e) {
   }
 });
 
-// Re-run Lucide after every HTMX swap.
+// Re-run Lucide and close stale menus after every HTMX swap.
 document.addEventListener('htmx:afterSwap', function() {
+  closeAllMenus();
   if (window.lucide) window.lucide.createIcons();
 });
 
@@ -117,6 +118,51 @@ document.getElementById('confirm-ok').addEventListener('click', function() {
   document.getElementById('confirm-modal').classList.remove('show');
   if (_confirmCb) { _confirmCb(); _confirmCb = null; }
 });
+
+// ── Kebab / card menu ─────────────────────────────────────────────────────────
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.menu-btn');
+  if (btn) {
+    e.stopPropagation();
+    var dropdown = btn.closest('.card-menu').querySelector('.menu-dropdown');
+    var isOpen = dropdown.classList.contains('open');
+    closeAllMenus();
+    if (!isOpen) {
+      var rect = btn.getBoundingClientRect();
+      dropdown.style.top  = (rect.bottom + 4) + 'px';
+      dropdown.style.left = (rect.right - dropdown.offsetWidth || rect.right - 200) + 'px';
+      dropdown.classList.add('open');
+      // Adjust left if it clips off the right edge of the viewport
+      var dr = dropdown.getBoundingClientRect();
+      if (dr.right > window.innerWidth - 8) {
+        dropdown.style.left = (window.innerWidth - dr.width - 8) + 'px';
+      }
+    }
+    return;
+  }
+  // Click inside an open dropdown — let it propagate (action fires), then close.
+  if (e.target.closest('.menu-dropdown')) return;
+  closeAllMenus();
+});
+
+function closeAllMenus() {
+  document.querySelectorAll('.menu-dropdown.open').forEach(function(d) {
+    d.classList.remove('open');
+  });
+}
+
+// ── Table refresh ─────────────────────────────────────────────────────────────
+// Use htmx.ajax() instead of htmx.trigger(el, 'load') — 'load' is a one-shot
+// HTMX trigger that does not re-fire after initialisation.
+function refreshTable() {
+  var el = document.getElementById('table-root');
+  if (!el) return;
+  var url = el.getAttribute('hx-get');
+  if (!url) return;
+  var q = document.getElementById('f-query');
+  if (q && q.value) url += (url.indexOf('?') === -1 ? '?' : '&') + 'q=' + encodeURIComponent(q.value);
+  htmx.ajax('GET', url, {target: el, swap: 'innerHTML'});
+}
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 function esc(s) {

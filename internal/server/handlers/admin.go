@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 	"github.com/marko-stanojevic/kompakt/internal/server/service"
 	"github.com/marko-stanojevic/kompakt/internal/server/store"
@@ -90,7 +89,7 @@ func (e *Handler) HandleRootPlaybooks(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "playbook must contain at least one job")
 			return
 		}
-		rec.ID = uuid.New().String()
+		rec.ID = common.NewID()
 		rec.CreatedAt = time.Now()
 		rec.UpdatedAt = time.Now()
 		if err := e.Store.SavePlaybook(&rec); err != nil {

@@ -49,7 +49,7 @@ nav a.active{color:#e6edf3;border-bottom-color:#f78166}
 .card-menu { position: relative; }
 .menu-btn { background: transparent; border: none; color: #8b949e; padding: 2px 7px; border-radius: 4px; cursor: pointer; font-size: 1.1rem; line-height: 1; }
 .menu-btn:hover { background: #30363d; color: #e6edf3; }
-.menu-dropdown { display: none; position: absolute; right: 0; top: calc(100% + 4px); background: #161b22; border: 1px solid #30363d; border-radius: 8px; min-width: 200px; z-index: 10; box-shadow: 0 8px 24px #010409cc; padding: 6px; }
+.menu-dropdown { display: none; position: fixed; background: #161b22; border: 1px solid #30363d; border-radius: 8px; min-width: 200px; z-index: 1000; box-shadow: 0 8px 24px #010409cc; padding: 6px; }
 .menu-dropdown.open { display: block; }
 .menu-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: transparent; border: none; color: #e6edf3; padding: 8px 12px; cursor: pointer; font-size: .85rem; border-radius: 6px; text-decoration: none; transition: background .2s; line-height: 1.4; white-space: nowrap; }
 .menu-item:hover { background: #21262d; color: #e6edf3; }

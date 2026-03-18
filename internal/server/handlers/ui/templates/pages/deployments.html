@@ -54,7 +54,7 @@ async function removeDeployment(id){
     try {
       var r=await fetch('/api/v1/deployments/'+encodeURIComponent(id),{method:'DELETE',headers:headersAuth()});
       if(r.status===401){showLogin('Session expired — sign in again');return;}
-      if(r.ok) htmx.trigger(document.getElementById('table-root'),'load');
+      if(r.ok) refreshTable();
     } catch(e){}
   });
 }

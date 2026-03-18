@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
@@ -240,7 +239,7 @@ func (e *Handler) HandleAgentRegister(w http.ResponseWriter, r *http.Request) {
 				existingMachineID = strings.TrimSpace(existing.Metadata["machine_id"])
 			}
 			if machineID == "" || existingMachineID == "" || existingMachineID != machineID {
-				clientID = uuid.New().String()
+				clientID = common.NewID()
 			}
 		}
 		client = &common.Client{
@@ -346,7 +345,7 @@ func decodeJSON(r *http.Request, v any) error {
 func preferredClientID(machineID string) string {
 	v := strings.TrimSpace(machineID)
 	if v == "" {
-		return uuid.New().String()
+		return common.NewID()
 	}
 
 	var b strings.Builder
@@ -367,7 +366,7 @@ func preferredClientID(machineID string) string {
 	}
 	out := strings.Trim(b.String(), "-._:")
 	if out == "" {
-		return uuid.New().String()
+		return common.NewID()
 	}
 	if len(out) > 128 {
 		out = out[:128]
