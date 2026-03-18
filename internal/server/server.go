@@ -40,7 +40,7 @@ func NewServer(env *handlers.Handler) http.Handler {
 	mux.Handle("/ui/assets/", http.HandlerFunc(handlers.ServeUIAsset))
 	mux.Handle("/ui", http.HandlerFunc(env.HandleHomeUI))
 	mux.Handle("/ui/", http.HandlerFunc(env.HandleHomeUI))
-	mux.Handle("/ui/clients", http.HandlerFunc(env.HandleAgentsUI))
+	mux.Handle("/ui/agents", http.HandlerFunc(env.HandleAgentsUI))
 	mux.Handle("/ui/secrets", http.HandlerFunc(env.HandleSecretsUI))
 	mux.Handle("/ui/playbooks", http.HandlerFunc(env.HandlePlaybooksUI))
 	mux.Handle("/ui/deployments", http.HandlerFunc(env.HandleDeploymentsUI))
@@ -50,8 +50,8 @@ func NewServer(env *handlers.Handler) http.Handler {
 	mux.Handle("/api/v1/playbooks", root(http.HandlerFunc(env.HandleRootPlaybooks)))
 	mux.Handle("/api/v1/playbooks/", root(http.HandlerFunc(env.HandleRootPlaybooks)))
 
-	mux.Handle("/api/v1/clients", root(http.HandlerFunc(env.HandleRootClients)))
-	mux.Handle("/api/v1/clients/", root(http.HandlerFunc(env.HandleRootClients)))
+	mux.Handle("/api/v1/agents", root(http.HandlerFunc(env.HandleRootAgents)))
+	mux.Handle("/api/v1/agents/", root(http.HandlerFunc(env.HandleRootAgents)))
 
 	mux.Handle("/api/v1/deployments", root(http.HandlerFunc(env.HandleRootDeployments)))
 	mux.Handle("/api/v1/deployments/", root(http.HandlerFunc(env.HandleRootDeployments)))
@@ -66,7 +66,7 @@ func NewServer(env *handlers.Handler) http.Handler {
 
 	// ── HTMX partials (root auth required) ───────────────────────────────────
 	mux.Handle("/ui/partials/home-stats", root(http.HandlerFunc(env.HandlePartialHomeStats)))
-	mux.Handle("/ui/partials/clients", root(http.HandlerFunc(env.HandlePartialClients)))
+	mux.Handle("/ui/partials/agents", root(http.HandlerFunc(env.HandlePartialAgents)))
 	mux.Handle("/ui/partials/artifacts", root(http.HandlerFunc(env.HandlePartialArtifacts)))
 	mux.Handle("/ui/partials/deployments", root(http.HandlerFunc(env.HandlePartialDeployments)))
 	mux.Handle("/ui/partials/deployments/", root(http.HandlerFunc(env.HandlePartialDeploymentLogs)))
@@ -79,13 +79,13 @@ func NewServer(env *handlers.Handler) http.Handler {
 // dualAuth accepts requests authenticated with either an agent JWT Bearer
 // token or root HTTP Basic credentials.
 func dualAuth(env *handlers.Handler, next http.Handler) http.Handler {
-	clientMW := env.RequireAgentAuth(next)
+	agentMW := env.RequireAgentAuth(next)
 	adminMW := env.RequireRootAuth(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, _, ok := r.BasicAuth(); ok {
 			adminMW.ServeHTTP(w, r)
 		} else {
-			clientMW.ServeHTTP(w, r)
+			agentMW.ServeHTTP(w, r)
 		}
 	})
 }

@@ -27,8 +27,8 @@ var errTokenRejected = errors.New("token rejected by server")
 
 // localState is persisted to disk so the agent can resume after a reboot.
 type localState struct {
-	ClientID string `json:"client_id"`
-	Token    string `json:"token"`
+	AgentID string `json:"agent_id"`
+	Token   string `json:"token"`
 }
 
 // Agent is the kompakt deployment agent.
@@ -108,9 +108,9 @@ func (c *Agent) register(ctx context.Context) error {
 	if err := c.post(ctx, "/api/v1/register", req, &resp, ""); err != nil {
 		return err
 	}
-	c.state.ClientID = resp.ClientID
+	c.state.AgentID = resp.AgentID
 	c.state.Token = resp.Token
-	log.Printf("registered as agent %s", c.state.ClientID)
+	log.Printf("registered as agent %s", c.state.AgentID)
 	return c.saveState()
 }
 
@@ -124,7 +124,7 @@ func (c *Agent) connect(ctx context.Context) error {
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
 			log.Printf("token rejected by server, will re-register")
 			c.state.Token = ""
-			c.state.ClientID = ""
+			c.state.AgentID = ""
 			_ = c.saveState()
 			return errTokenRejected
 		}

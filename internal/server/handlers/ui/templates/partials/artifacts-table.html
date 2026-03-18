@@ -16,13 +16,13 @@
     </div>
     <div class="mono">{{.Filename}}</div>
     <div>{{formatSize .Size}}</div>
-    <div><span class="badge {{policyClass (print .AccessPolicy)}}" title="{{if .AllowedClients}}{{range .AllowedClients}}{{.}} {{end}}{{end}}">{{policyLabel (print .AccessPolicy)}}</span></div>
+    <div><span class="badge {{policyClass (print .AccessPolicy)}}" title="{{if .AllowedAgents}}{{range .AllowedAgents}}{{.}} {{end}}{{end}}">{{policyLabel (print .AccessPolicy)}}</span></div>
     <div>{{formatTime .UploadedAt}}</div>
     <div class="card-top-right"><div class="card-menu">
       <button class="menu-btn" title="Actions">⋮</button>
       <div class="menu-dropdown">
         <button class="menu-item" onclick="downloadArtifact('{{.ID}}','{{.Filename}}')"><i class="m-icon" data-lucide="download"></i> Download</button>
-        <button class="menu-item" onclick="modifyPolicy('{{.ID}}','{{.Name}}','{{.AccessPolicy}}','{{range .AllowedClients}}{{.}},{{end}}')"><i class="m-icon" data-lucide="shield"></i> Modify Policy</button>
+        <button class="menu-item" onclick="modifyPolicy('{{.ID}}','{{.Name}}','{{.AccessPolicy}}','{{range .AllowedAgents}}{{.}},{{end}}')"><i class="m-icon" data-lucide="shield"></i> Modify Policy</button>
         <button class="menu-item" onclick="removeArtifact('{{.ID}}')"><i class="m-icon" data-lucide="trash-2"></i> Remove</button>
       </div>
     </div></div>

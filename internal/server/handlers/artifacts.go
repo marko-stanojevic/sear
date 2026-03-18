@@ -37,7 +37,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		if id == "" {
 			// Listing requires authentication (root or any client)
 			if !e.isRootRequest(r) {
-				if _, err := e.clientIDFromToken(r); err != nil {
+				if _, err := e.agentIDFromToken(r); err != nil {
 					writeError(w, http.StatusUnauthorized, "authentication required to list artifacts")
 					return
 				}
@@ -68,16 +68,16 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		if a.AccessPolicy != common.AccessPublic {
 			// Check for root auth first
 			if !e.isRootRequest(r) {
-				// Check for client auth
-				clientID, err := e.clientIDFromToken(r)
+				// Check for agent auth
+				agentID, err := e.agentIDFromToken(r)
 				if err != nil {
 					writeError(w, http.StatusUnauthorized, "authenticated access required")
 					return
 				}
 				if a.AccessPolicy == common.AccessRestricted {
 					allowed := false
-					for _, cid := range a.AllowedClients {
-						if cid == clientID {
+					for _, aid := range a.AllowedAgents {
+						if aid == agentID {
 							allowed = true
 							break
 						}
@@ -108,7 +108,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		// Upload requires authentication (root or any client)
 		if !e.isRootRequest(r) {
-			if _, err := e.clientIDFromToken(r); err != nil {
+			if _, err := e.agentIDFromToken(r); err != nil {
 				writeError(w, http.StatusUnauthorized, "authentication required to upload artifacts")
 				return
 			}
@@ -158,14 +158,14 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			Size:           size,
 			ContentType:    ct,
 			AccessPolicy:   common.AccessPolicy(r.URL.Query().Get("access_policy")),
-			AllowedClients: strings.Split(r.URL.Query().Get("allowed_clients"), ","),
+			AllowedAgents: strings.Split(r.URL.Query().Get("allowed_agents"), ","),
 			UploadedAt:     time.Now(),
 		}
 		if art.AccessPolicy == "" {
 			art.AccessPolicy = common.AccessAuthenticated // default
 		}
-		if len(art.AllowedClients) == 1 && art.AllowedClients[0] == "" {
-			art.AllowedClients = nil
+		if len(art.AllowedAgents) == 1 && art.AllowedAgents[0] == "" {
+			art.AllowedAgents = nil
 		}
 		if err := e.Store.SaveArtifact(art); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to save artifact metadata")
@@ -176,7 +176,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPatch:
 		// Update metadata requires authentication (root or any client)
 		if !e.isRootRequest(r) {
-			if _, err := e.clientIDFromToken(r); err != nil {
+			if _, err := e.agentIDFromToken(r); err != nil {
 				writeError(w, http.StatusUnauthorized, "authentication required to modify artifacts")
 				return
 			}
@@ -192,7 +192,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		}
 
 		policy := r.URL.Query().Get("access_policy")
-		allowedClients := r.URL.Query().Get("allowed_clients")
+		allowedClients := r.URL.Query().Get("allowed_agents")
 
 		if policy != "" {
 			a.AccessPolicy = common.AccessPolicy(policy)
@@ -206,9 +206,9 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 					filtered = append(filtered, c)
 				}
 			}
-			a.AllowedClients = filtered
-		} else if r.URL.Query().Has("allowed_clients") {
-			a.AllowedClients = nil
+			a.AllowedAgents = filtered
+		} else if r.URL.Query().Has("allowed_agents") {
+			a.AllowedAgents = nil
 		}
 
 		if err := e.Store.SaveArtifact(a); err != nil {
@@ -220,7 +220,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		// Delete requires authentication (root or any client)
 		if !e.isRootRequest(r) {
-			if _, err := e.clientIDFromToken(r); err != nil {
+			if _, err := e.agentIDFromToken(r); err != nil {
 				writeError(w, http.StatusUnauthorized, "authentication required to delete artifacts")
 				return
 			}

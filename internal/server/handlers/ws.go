@@ -19,17 +19,17 @@ var wsUpgrader = websocket.Upgrader{
 
 // HandleAgentWS upgrades GET /api/v1/ws to a WebSocket connection.
 // Authentication uses the JWT bearer token passed as ?token=<jwt> query param
-// (WebSocket clients cannot set arbitrary headers during the handshake in all
+// (WebSocket agents cannot set arbitrary headers during the handshake in all
 // environments, so the query param fallback is supported here).
 func (e *Handler) HandleAgentWS(w http.ResponseWriter, r *http.Request) {
-	clientID, err := e.clientIDFromToken(r)
+	agentID, err := e.agentIDFromToken(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
-	client, ok := e.Store.GetClient(clientID)
+	agent, ok := e.Store.GetAgent(agentID)
 	if !ok {
-		writeError(w, http.StatusNotFound, "client not found")
+		writeError(w, http.StatusNotFound, "agent not found")
 		return
 	}
 
@@ -38,28 +38,28 @@ func (e *Handler) HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn := newWSConn(clientID, ws)
+	conn := newWSConn(agentID, ws)
 	e.Hub.register(conn)
 
-	client.Status = common.ClientStatusConnected
-	client.IPAddress = requestIP(r)
-	client.LastActivityAt = time.Now()
-	_ = e.Store.SaveClient(client)
+	agent.Status = common.AgentStatusConnected
+	agent.IPAddress = requestIP(r)
+	agent.LastActivityAt = time.Now()
+	_ = e.Store.SaveAgent(agent)
 
 	defer func() {
-		e.Hub.unregister(clientID)
-		if c, ok := e.Store.GetClient(clientID); ok {
-			if c.Status == common.ClientStatusConnected {
-				c.Status = common.ClientStatusOffline
+		e.Hub.unregister(agentID)
+		if a, ok := e.Store.GetAgent(agentID); ok {
+			if a.Status == common.AgentStatusConnected {
+				a.Status = common.AgentStatusOffline
 			}
-			_ = e.Store.SaveClient(c)
+			_ = e.Store.SaveAgent(a)
 		}
 		_ = ws.Close()
 	}()
 
 	// Push playbook immediately if one is assigned.
 	if e.Service != nil {
-		e.Service.PushPlaybookIfAssigned(clientID, false)
+		e.Service.PushPlaybookIfAssigned(agentID, false)
 	}
 
 	// Read loop.
@@ -70,7 +70,7 @@ func (e *Handler) HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 		return ws.SetReadDeadline(time.Now().Add(90 * time.Second))
 	})
 
-	// Send pings every 30 s so the client resets its read deadline and replies
+	// Send pings every 30 s so the agent resets its read deadline and replies
 	// with a pong that resets ours.  WriteControl is safe to call concurrently.
 	pingDone := make(chan struct{})
 	defer close(pingDone)
@@ -97,18 +97,18 @@ func (e *Handler) HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 		if err := ws.SetReadDeadline(time.Now().Add(90 * time.Second)); err != nil {
 			return
 		}
-		e.handleWSMessage(clientID, data)
+		e.handleWSMessage(agentID, data)
 	}
 }
 
-// handleWSMessage dispatches an inbound WebSocket message from a client.
-func (e *Handler) handleWSMessage(clientID string, data []byte) {
+// handleWSMessage dispatches an inbound WebSocket message from an agent.
+func (e *Handler) handleWSMessage(agentID string, data []byte) {
 	var envelope struct {
 		Type common.WSMessageType `json:"type"`
 		Data json.RawMessage      `json:"data"`
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
-		slog.Error("failed to parse websocket envelope", "client_id", clientID, "err", err)
+		slog.Error("failed to parse websocket envelope", "agent_id", agentID, "err", err)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (e *Handler) handleWSMessage(clientID string, data []byte) {
 	case common.WSMsgLog:
 		var d common.WSLogData
 		if err := json.Unmarshal(envelope.Data, &d); err != nil {
-			slog.Error("failed to parse log message", "client_id", clientID, "err", err)
+			slog.Error("failed to parse log message", "agent_id", agentID, "err", err)
 			return
 		}
 		entry := &common.LogEntry{
@@ -132,7 +132,7 @@ func (e *Handler) handleWSMessage(clientID string, data []byte) {
 	case common.WSMsgStepStart:
 		var d common.WSStepData
 		if err := json.Unmarshal(envelope.Data, &d); err != nil {
-			slog.Error("failed to parse step-start message", "client_id", clientID, "err", err)
+			slog.Error("failed to parse step-start message", "agent_id", agentID, "err", err)
 			return
 		}
 		stepName := d.StepName
@@ -151,7 +151,7 @@ func (e *Handler) handleWSMessage(clientID string, data []byte) {
 	case common.WSMsgStepComplete:
 		var d common.WSStepData
 		if err := json.Unmarshal(envelope.Data, &d); err != nil {
-			slog.Error("failed to parse step-complete message", "client_id", clientID, "err", err)
+			slog.Error("failed to parse step-complete message", "agent_id", agentID, "err", err)
 			return
 		}
 		stepName := d.StepName
@@ -169,7 +169,7 @@ func (e *Handler) handleWSMessage(clientID string, data []byte) {
 	case common.WSMsgStepFailed:
 		var d common.WSStepData
 		if err := json.Unmarshal(envelope.Data, &d); err != nil {
-			slog.Error("failed to parse step-failed message", "client_id", clientID, "err", err)
+			slog.Error("failed to parse step-failed message", "agent_id", agentID, "err", err)
 			return
 		}
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -180,7 +180,7 @@ func (e *Handler) handleWSMessage(clientID string, data []byte) {
 	case common.WSMsgReboot:
 		var d common.WSRebootData
 		if err := json.Unmarshal(envelope.Data, &d); err != nil {
-			slog.Error("failed to parse reboot message", "client_id", clientID, "err", err)
+			slog.Error("failed to parse reboot message", "agent_id", agentID, "err", err)
 			return
 		}
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
@@ -191,7 +191,7 @@ func (e *Handler) handleWSMessage(clientID string, data []byte) {
 	case common.WSMsgDeployDone:
 		var d common.WSStepData
 		if err := json.Unmarshal(envelope.Data, &d); err != nil {
-			slog.Error("failed to parse deploy-done message", "client_id", clientID, "err", err)
+			slog.Error("failed to parse deploy-done message", "agent_id", agentID, "err", err)
 			return
 		}
 		if e.Service != nil {
@@ -204,15 +204,15 @@ func (e *Handler) handleWSMessage(clientID string, data []byte) {
 			dep.Status = common.DeploymentStatusDone
 			dep.FinishedAt = &now
 		})
-		if c, ok := e.Store.GetClient(clientID); ok {
-			c.Status = common.ClientStatusDone
-			_ = e.Store.SaveClient(c)
+		if a, ok := e.Store.GetAgent(agentID); ok {
+			a.Status = common.AgentStatusDone
+			_ = e.Store.SaveAgent(a)
 		}
 
 	case common.WSMsgDeployFailed:
 		var d common.WSStepData
 		if err := json.Unmarshal(envelope.Data, &d); err != nil {
-			slog.Error("failed to parse deploy-failed message", "client_id", clientID, "err", err)
+			slog.Error("failed to parse deploy-failed message", "agent_id", agentID, "err", err)
 			return
 		}
 		playbookName := "playbook"
@@ -232,9 +232,9 @@ func (e *Handler) handleWSMessage(clientID string, data []byte) {
 			dep.ErrorDetail = d.Error
 			dep.FinishedAt = &now
 		})
-		if c, ok := e.Store.GetClient(clientID); ok {
-			c.Status = common.ClientStatusFailed
-			_ = e.Store.SaveClient(c)
+		if a, ok := e.Store.GetAgent(agentID); ok {
+			a.Status = common.AgentStatusFailed
+			_ = e.Store.SaveAgent(a)
 		}
 
 	case common.WSMsgPong:

@@ -19,7 +19,7 @@ import (
 
 // StatusResponse is returned by GET /api/v1/status (JSON) and used by the /ui status dashboard.
 type StatusResponse struct {
-	Clients     []*common.Client          `json:"clients"`
+	Agents      []*common.Agent           `json:"agents"`
 	Deployments []*common.DeploymentState `json:"deployments"`
 }
 
@@ -32,8 +32,8 @@ type StatusResponse struct {
 //	GET    /api/v1/playbooks/{id}         – get one
 //	PUT    /api/v1/playbooks/{id}         – update
 //	DELETE /api/v1/playbooks/{id}         – delete
-//	POST   /api/v1/playbooks/{id}/assign  – assign to a client (pushes immediately
-//	                                         if client is connected via WebSocket)
+//	POST   /api/v1/playbooks/{id}/assign  – assign to an agent (pushes immediately
+//	                                         if agent is connected via WebSocket)
 func (e *Handler) HandleRootPlaybooks(w http.ResponseWriter, r *http.Request) {
 	// Strip prefix to isolate the path tail.
 	tail := strings.TrimPrefix(r.URL.Path, "/api/v1/playbooks")
@@ -183,11 +183,11 @@ func decodePlaybookWritePayload(r *http.Request) (store.PlaybookRecord, error) {
 	return out, nil
 }
 
-// assignPlaybook assigns a playbook to a client and immediately pushes it
-// if the client is connected via WebSocket.
+// assignPlaybook assigns a playbook to an agent and immediately pushes it
+// if the agent is connected via WebSocket.
 func (e *Handler) assignPlaybook(w http.ResponseWriter, r *http.Request, playbookID string) {
 	var body struct {
-		ClientID string `json:"client_id"`
+		AgentID string `json:"agent_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
@@ -197,9 +197,9 @@ func (e *Handler) assignPlaybook(w http.ResponseWriter, r *http.Request, playboo
 		writeError(w, http.StatusInternalServerError, "service not configured")
 		return
 	}
-	if err := e.Service.AssignPlaybookToClient(playbookID, body.ClientID); err != nil {
+	if err := e.Service.AssignPlaybookToAgent(playbookID, body.AgentID); err != nil {
 		switch {
-		case errors.Is(err, service.ErrClientNotFound), errors.Is(err, service.ErrPlaybookNotFound):
+		case errors.Is(err, service.ErrAgentNotFound), errors.Is(err, service.ErrPlaybookNotFound):
 			writeError(w, http.StatusNotFound, err.Error())
 		default:
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -209,45 +209,45 @@ func (e *Handler) assignPlaybook(w http.ResponseWriter, r *http.Request, playboo
 	writeJSON(w, http.StatusOK, map[string]string{"status": "assigned"})
 }
 
-// ── /api/v1/clients ───────────────────────────────────────────────────────────────
+// ── /api/v1/agents ────────────────────────────────────────────────────────────────
 
-// HandleRootClients dispatches CRUD on clients.
+// HandleRootAgents dispatches CRUD on agents.
 //
-//	GET    /api/v1/clients          – list all
-//	GET    /api/v1/clients/{id}     – get one
-//	PUT    /api/v1/clients/{id}     – update (e.g. assign playbook, set status)
-//	DELETE /api/v1/clients/{id}     – delete
-func (e *Handler) HandleRootClients(w http.ResponseWriter, r *http.Request) {
-	tail := strings.TrimPrefix(r.URL.Path, "/api/v1/clients")
+//	GET    /api/v1/agents          – list all
+//	GET    /api/v1/agents/{id}     – get one
+//	PUT    /api/v1/agents/{id}     – update (e.g. assign playbook, set status)
+//	DELETE /api/v1/agents/{id}     – delete
+func (e *Handler) HandleRootAgents(w http.ResponseWriter, r *http.Request) {
+	tail := strings.TrimPrefix(r.URL.Path, "/api/v1/agents")
 	tail = strings.TrimPrefix(tail, "/")
 	id := tail
 
 	switch r.Method {
 	case http.MethodGet:
 		if id == "" {
-			writeJSON(w, http.StatusOK, e.Store.ListClients())
+			writeJSON(w, http.StatusOK, e.Store.ListAgents())
 			return
 		}
-		c, ok := e.Store.GetClient(id)
+		a, ok := e.Store.GetAgent(id)
 		if !ok {
-			writeError(w, http.StatusNotFound, "client not found")
+			writeError(w, http.StatusNotFound, "agent not found")
 			return
 		}
-		writeJSON(w, http.StatusOK, c)
+		writeJSON(w, http.StatusOK, a)
 
 	case http.MethodPut:
 		if id == "" {
-			writeError(w, http.StatusBadRequest, "client ID required in path")
+			writeError(w, http.StatusBadRequest, "agent ID required in path")
 			return
 		}
-		existing, ok := e.Store.GetClient(id)
+		existing, ok := e.Store.GetAgent(id)
 		if !ok {
-			writeError(w, http.StatusNotFound, "client not found")
+			writeError(w, http.StatusNotFound, "agent not found")
 			return
 		}
 		var patch struct {
-			PlaybookID string              `json:"playbook_id"`
-			Status     common.ClientStatus `json:"status"`
+			PlaybookID string             `json:"playbook_id"`
+			Status     common.AgentStatus `json:"status"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
@@ -259,19 +259,19 @@ func (e *Handler) HandleRootClients(w http.ResponseWriter, r *http.Request) {
 		if patch.Status != "" {
 			existing.Status = patch.Status
 		}
-		if err := e.Store.SaveClient(existing); err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to update client")
+		if err := e.Store.SaveAgent(existing); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to update agent")
 			return
 		}
 		writeJSON(w, http.StatusOK, existing)
 
 	case http.MethodDelete:
 		if id == "" {
-			writeError(w, http.StatusBadRequest, "client ID required in path")
+			writeError(w, http.StatusBadRequest, "agent ID required in path")
 			return
 		}
-		if err := e.Store.DeleteClient(id); err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to delete client")
+		if err := e.Store.DeleteAgent(id); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to delete agent")
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -339,14 +339,13 @@ func (e *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
-	clients := e.Store.ListClients()
+	agents := e.Store.ListAgents()
 	deployments := e.Store.ListDeployments()
 	if e.Service != nil {
-		clients, deployments = e.Service.StatusSnapshot()
+		agents, deployments = e.Service.StatusSnapshot()
 	}
 	writeJSON(w, http.StatusOK, StatusResponse{
-		Clients:     clients,
+		Agents:      agents,
 		Deployments: deployments,
 	})
 }
-

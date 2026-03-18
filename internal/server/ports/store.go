@@ -7,14 +7,14 @@ import (
 
 // Store defines persistence capabilities used by handler/service layers.
 type Store interface {
-	SaveClient(c *common.Client) error
-	GetClient(id string) (*common.Client, bool)
-	ListClients() []*common.Client
-	DeleteClient(id string) error
+	SaveAgent(a *common.Agent) error
+	GetAgent(id string) (*common.Agent, bool)
+	ListAgents() []*common.Agent
+	DeleteAgent(id string) error
 
 	SaveDeployment(d *common.DeploymentState) error
 	GetDeployment(id string) (*common.DeploymentState, bool)
-	GetActiveDeploymentForClient(clientID string) (*common.DeploymentState, bool)
+	GetActiveDeploymentForAgent(agentID string) (*common.DeploymentState, bool)
 	ListDeployments() []*common.DeploymentState
 	DeleteDeployment(id string) error
 
@@ -38,11 +38,11 @@ type Store interface {
 
 	AppendLogs(entries []*common.LogEntry) error
 	GetLogsForDeployment(deploymentID string) []*common.LogEntry
-	GetLogsForClient(clientID string) []*common.LogEntry
+	GetLogsForAgent(agentID string) []*common.LogEntry
 }
 
 // Hub defines websocket coordination capabilities used by services.
 type Hub interface {
-	IsConnected(clientID string) bool
-	Send(clientID string, msg common.WSMessage) bool
+	IsConnected(agentID string) bool
+	Send(agentID string, msg common.WSMessage) bool
 }

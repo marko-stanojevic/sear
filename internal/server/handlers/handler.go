@@ -33,12 +33,12 @@ type Handler struct {
 // Hub manages all active WebSocket connections.
 type Hub struct {
 	mu    sync.RWMutex
-	conns map[string]*WSConn // clientID → connection
+	conns map[string]*WSConn // agentID → connection
 }
 
-// WSConn wraps a single client WebSocket connection with an outbound queue.
+// WSConn wraps a single agent WebSocket connection with an outbound queue.
 type WSConn struct {
-	clientID string
+	agentID string
 	ws       *websocket.Conn
 	send     chan []byte
 	done     chan struct{}
@@ -49,43 +49,43 @@ func NewHub() *Hub {
 	return &Hub{conns: make(map[string]*WSConn)}
 }
 
-// register adds (or replaces) the connection for a client.
+// register adds (or replaces) the connection for an agent.
 func (h *Hub) register(conn *WSConn) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if old, ok := h.conns[conn.clientID]; ok {
+	if old, ok := h.conns[conn.agentID]; ok {
 		close(old.done)
 		_ = old.ws.Close()
 	}
-	h.conns[conn.clientID] = conn
+	h.conns[conn.agentID] = conn
 }
 
-// unregister removes the connection for a client.
-func (h *Hub) unregister(clientID string) {
+// unregister removes the connection for an agent.
+func (h *Hub) unregister(agentID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	delete(h.conns, clientID)
+	delete(h.conns, agentID)
 }
 
-// IsConnected reports whether a client has an open WebSocket connection.
-func (h *Hub) IsConnected(clientID string) bool {
+// IsConnected reports whether an agent has an open WebSocket connection.
+func (h *Hub) IsConnected(agentID string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	_, ok := h.conns[clientID]
+	_, ok := h.conns[agentID]
 	return ok
 }
 
-// Send queues a message for the named client. Returns false if not connected.
-func (h *Hub) Send(clientID string, msg common.WSMessage) bool {
+// Send queues a message for the named agent. Returns false if not connected.
+func (h *Hub) Send(agentID string, msg common.WSMessage) bool {
 	h.mu.RLock()
-	conn, ok := h.conns[clientID]
+	conn, ok := h.conns[agentID]
 	h.mu.RUnlock()
 	if !ok {
 		return false
 	}
 	data, err := json.Marshal(msg)
 	if err != nil {
-		slog.Error("failed to marshal websocket message", "client_id", clientID, "msg_type", msg.Type, "err", err)
+		slog.Error("failed to marshal websocket message", "agent_id", agentID, "msg_type", msg.Type, "err", err)
 		return false
 	}
 	select {
@@ -97,9 +97,9 @@ func (h *Hub) Send(clientID string, msg common.WSMessage) bool {
 }
 
 // newWSConn creates a WSConn and starts its write pump goroutine.
-func newWSConn(clientID string, ws *websocket.Conn) *WSConn {
+func newWSConn(agentID string, ws *websocket.Conn) *WSConn {
 	c := &WSConn{
-		clientID: clientID,
+		agentID: agentID,
 		ws:       ws,
 		send:     make(chan []byte, 64),
 		done:     make(chan struct{}),

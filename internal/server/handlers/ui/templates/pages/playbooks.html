@@ -43,7 +43,7 @@
     <div class="modal-head"><h2>Assign Playbook</h2></div>
     <div class="modal-body">
       <div class="form-group"><label>Playbook</label><input id="assign-pb-name" type="text" readonly></div>
-      <div class="form-group"><label>Client</label><select id="assign-client"></select></div>
+      <div class="form-group"><label>Agent</label><select id="assign-agent"></select></div>
     </div>
     <div class="modal-err" id="assign-modal-err"></div>
     <div class="modal-actions">
@@ -116,22 +116,22 @@ function openAssign(id,name){
   _assigningID=id;
   document.getElementById('assign-pb-name').value=name+' ('+id+')';
   document.getElementById('assign-modal-err').textContent='';
-  // Fetch fresh client list
-  fetch('/api/v1/clients',{headers:headersAuth()}).then(function(r){return r.json();}).then(function(clients){
-    var sel=document.getElementById('assign-client');
-    sel.innerHTML=(clients||[]).map(function(c){return '<option value="'+esc(c.id)+'">'+esc((c.hostname||c.id)+' – '+(c.status||'unknown'))+'</option>';}).join('');
-    document.getElementById('assign-modal-err').textContent=clients.length?'':'No clients available';
-  }).catch(function(){document.getElementById('assign-modal-err').textContent='Failed to load clients';});
+  // Fetch fresh agent list
+  fetch('/api/v1/agents',{headers:headersAuth()}).then(function(r){return r.json();}).then(function(agents){
+    var sel=document.getElementById('assign-agent');
+    sel.innerHTML=(agents||[]).map(function(a){return '<option value="'+esc(a.id)+'">'+esc((a.hostname||a.id)+' – '+(a.status||'unknown'))+'</option>';}).join('');
+    document.getElementById('assign-modal-err').textContent=agents.length?'':'No agents available';
+  }).catch(function(){document.getElementById('assign-modal-err').textContent='Failed to load agents';});
   document.getElementById('assign-modal-bg').classList.add('show');
 }
 function closeAssignModal(){document.getElementById('assign-modal-bg').classList.remove('show');}
 
 async function confirmAssign(){
   var errEl=document.getElementById('assign-modal-err');
-  var clientID=document.getElementById('assign-client').value;
-  if(!clientID){errEl.textContent='Select a client';return;}
+  var agentID=document.getElementById('assign-agent').value;
+  if(!agentID){errEl.textContent='Select an agent';return;}
   try {
-    var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(_assigningID)+'/assign',{method:'POST',headers:headersJSON(),body:JSON.stringify({client_id:clientID})});
+    var r=await fetch('/api/v1/playbooks/'+encodeURIComponent(_assigningID)+'/assign',{method:'POST',headers:headersJSON(),body:JSON.stringify({agent_id:agentID})});
     if(r.status===401){closeAssignModal();showLogin('Session expired — sign in again');return;}
     if(!r.ok){var msg='Assign failed ('+r.status+')';try{var d=await r.json();if(d.error)msg=d.error;}catch(_){}errEl.textContent=msg;return;}
     closeAssignModal();

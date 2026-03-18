@@ -1,10 +1,10 @@
 {{template "layout" .}}
 {{define "scripts"}}
 <script>
-async function removeClient(id, hostname){
-  showConfirm('Remove Client','Remove "'+hostname+'"? This cannot be undone.',async function(){
+async function removeAgent(id, hostname){
+  showConfirm('Remove Agent','Remove "'+hostname+'"? This cannot be undone.',async function(){
     try {
-      var r=await fetch('/api/v1/clients/'+encodeURIComponent(id),{method:'DELETE',headers:headersAuth()});
+      var r=await fetch('/api/v1/agents/'+encodeURIComponent(id),{method:'DELETE',headers:headersAuth()});
       if(r.status===401){showLogin('Session expired — sign in again');return;}
       if(r.ok) refreshTable();
     } catch(e){}
@@ -18,14 +18,14 @@ async function removeClient(id, hostname){
     <span id="counts-bar">Loading…</span>
     <span class="spacer"></span>
     <div class="search-inline">
-      <input id="f-query" type="search" name="q" placeholder="Search clients…" autocomplete="off"
-             hx-get="/ui/partials/clients" hx-target="#table-root" hx-trigger="input changed delay:300ms, search">
+      <input id="f-query" type="search" name="q" placeholder="Search agents…" autocomplete="off"
+             hx-get="/ui/partials/agents" hx-target="#table-root" hx-trigger="input changed delay:300ms, search">
       <button class="btn-clear btn-muted" onclick="document.getElementById('f-query').value='';htmx.trigger(document.getElementById('f-query'),'search')" title="Clear">✕</button>
     </div>
-    <button hx-get="/ui/partials/clients" hx-target="#table-root" hx-include="#f-query">Refresh</button>
+    <button hx-get="/ui/partials/agents" hx-target="#table-root" hx-include="#f-query">Refresh</button>
   </div>
   <div id="table-root"
-       hx-get="/ui/partials/clients"
+       hx-get="/ui/partials/agents"
        hx-trigger="load, every 10s"
        hx-swap="innerHTML">
     <div class="spinner"></div>

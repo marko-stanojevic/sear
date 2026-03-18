@@ -25,7 +25,7 @@ type navItem struct {
 func buildNav(active string) []navItem {
 	return []navItem{
 		{"Home", "/ui", active == "Home"},
-		{"Clients", "/ui/clients", active == "Clients"},
+		{"Agents", "/ui/agents", active == "Agents"},
 		{"Secrets", "/ui/secrets", active == "Secrets"},
 		{"Playbooks", "/ui/playbooks", active == "Playbooks"},
 		{"Deployments", "/ui/deployments", active == "Deployments"},
@@ -48,14 +48,14 @@ func newPage(title, active, search string) pageData {
 // ── Partial data types ────────────────────────────────────────────────────────
 
 type homeStatsData struct {
-	Clients     int
+	Agents      int
 	Playbooks   int
 	Deployments int
 	Artifacts   int
 }
 
-type clientsTableData struct {
-	Rows        []clientRow
+type agentsTableData struct {
+	Rows        []agentRow
 	Query       string
 	Page        int
 	TotalPages  int
@@ -65,8 +65,8 @@ type clientsTableData struct {
 	Deploying   int
 }
 
-type clientRow struct {
-	*common.Client
+type agentRow struct {
+	*common.Agent
 	DeployStep string
 	StatusStr  string
 }
@@ -89,7 +89,7 @@ type deploymentsTableData struct {
 
 type playbooksTableData struct {
 	Rows       []playbookRow
-	Clients    []*common.Client
+	Agents     []*common.Agent
 	Query      string
 	Page       int
 	TotalPages int
@@ -263,7 +263,7 @@ func (e *Handler) HandleHomeUI(w http.ResponseWriter, r *http.Request) {
 
 func (e *Handler) HandleAgentsUI(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
-	renderPage(w, "clients", newPage("Clients", "Clients", q))
+	renderPage(w, "agents", newPage("Agents", "Agents", q))
 }
 
 func (e *Handler) HandleArtifactsUI(w http.ResponseWriter, r *http.Request) {
@@ -285,9 +285,9 @@ func (e *Handler) HandleSecretsUI(w http.ResponseWriter, r *http.Request) {
 // ── Partial handlers (all behind RequireRootAuth) ─────────────────────────────
 
 func (e *Handler) HandlePartialHomeStats(w http.ResponseWriter, r *http.Request) {
-	clients, deployments := e.Store.ListClients(), e.Store.ListDeployments()
+	agents, deployments := e.Store.ListAgents(), e.Store.ListDeployments()
 	if e.Service != nil {
-		clients, deployments = e.Service.StatusSnapshot()
+		agents, deployments = e.Service.StatusSnapshot()
 	}
 	running := 0
 	for _, d := range deployments {
@@ -296,66 +296,66 @@ func (e *Handler) HandlePartialHomeStats(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	renderPartialTemplate(w, "home-stats", homeStatsData{
-		Clients:     len(clients),
+		Agents:      len(agents),
 		Playbooks:   len(e.Store.ListPlaybooks()),
 		Deployments: running,
 		Artifacts:   len(e.Store.ListArtifacts()),
 	})
 }
 
-func (e *Handler) HandlePartialClients(w http.ResponseWriter, r *http.Request) {
+func (e *Handler) HandlePartialAgents(w http.ResponseWriter, r *http.Request) {
 	q := strings.ToLower(r.URL.Query().Get("q"))
 	page := pageParam(r)
 
-	clients, deployments := e.Store.ListClients(), e.Store.ListDeployments()
+	agents, deployments := e.Store.ListAgents(), e.Store.ListDeployments()
 	if e.Service != nil {
-		clients, deployments = e.Service.StatusSnapshot()
+		agents, deployments = e.Service.StatusSnapshot()
 	}
-	depByClient := make(map[string]*common.DeploymentState, len(deployments))
+	depByAgent := make(map[string]*common.DeploymentState, len(deployments))
 	for _, d := range deployments {
-		depByClient[d.ClientID] = d
+		depByAgent[d.AgentID] = d
 	}
 
 	// Filter
-	var filtered []*common.Client
-	for _, c := range clients {
+	var filtered []*common.Agent
+	for _, a := range agents {
 		if q != "" {
-			hay := strings.ToLower((c.Hostname + " " + c.OS + " " + c.Vendor + " " + c.Model + " " + c.IPAddress + " " + string(c.ID)))
+			hay := strings.ToLower((a.Hostname + " " + a.OS + " " + a.Vendor + " " + a.Model + " " + a.IPAddress + " " + string(a.ID)))
 			if !strings.Contains(hay, q) {
 				continue
 			}
 		}
-		filtered = append(filtered, c)
+		filtered = append(filtered, a)
 	}
 
 	connected, deploying := 0, 0
-	for _, c := range filtered {
-		if c.Status == common.ClientStatusConnected {
+	for _, a := range filtered {
+		if a.Status == common.AgentStatusConnected {
 			connected++
 		}
-		if c.Status == common.ClientStatusDeploying {
+		if a.Status == common.AgentStatusDeploying {
 			deploying++
 		}
 	}
 
 	paged := paginate(filtered, page, uiPageSize)
-	rows := make([]clientRow, len(paged))
-	for i, c := range paged {
+	rows := make([]agentRow, len(paged))
+	for i, a := range paged {
 		step := "-"
-		status := string(c.Status)
-		if dep, ok := depByClient[c.ID]; ok {
+		status := string(a.Status)
+		if dep, ok := depByAgent[a.ID]; ok {
 			step = "#" + strconv.Itoa(dep.ResumeStepIndex)
 			status = string(dep.Status)
 		}
-		rows[i] = clientRow{Client: c, DeployStep: step, StatusStr: status}
+		rows[i] = agentRow{Agent: a, DeployStep: step, StatusStr: status}
 	}
 
-	renderPartialTemplate(w, "clients-table", clientsTableData{
+	renderPartialTemplate(w, "agents-table", agentsTableData{
 		Rows:       rows,
 		Query:      r.URL.Query().Get("q"),
 		Page:       page,
 		TotalPages: totalPages(len(filtered), uiPageSize),
-		Total:      len(clients),
+		Total:      len(agents),
 		Shown:      len(filtered),
 		Connected:  connected,
 		Deploying:  deploying,
@@ -395,7 +395,7 @@ func (e *Handler) HandlePartialDeployments(w http.ResponseWriter, r *http.Reques
 	var filtered []*common.DeploymentState
 	for _, d := range all {
 		if q != "" {
-			hay := strings.ToLower(d.ID + " " + d.ClientID + " " + d.PlaybookID + " " + d.Hostname + " " + d.PlaybookName)
+			hay := strings.ToLower(d.ID + " " + d.AgentID + " " + d.PlaybookID + " " + d.Hostname + " " + d.PlaybookName)
 			if !strings.Contains(hay, q) {
 				continue
 			}
@@ -424,7 +424,7 @@ func (e *Handler) HandlePartialPlaybooks(w http.ResponseWriter, r *http.Request)
 	page := pageParam(r)
 
 	all := e.Store.ListPlaybooks()
-	clients := e.Store.ListClients()
+	agents := e.Store.ListAgents()
 
 	var filtered []playbookRow
 	for _, pb := range all {
@@ -446,7 +446,7 @@ func (e *Handler) HandlePartialPlaybooks(w http.ResponseWriter, r *http.Request)
 
 	renderPartialTemplate(w, "playbooks-table", playbooksTableData{
 		Rows:       paginate(filtered, page, uiPageSize),
-		Clients:    clients,
+		Agents:     agents,
 		Query:      r.URL.Query().Get("q"),
 		Page:       page,
 		TotalPages: totalPages(len(filtered), uiPageSize),

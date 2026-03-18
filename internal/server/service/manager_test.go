@@ -11,8 +11,8 @@ import (
 )
 
 type sentMessage struct {
-	clientID string
-	msg      common.WSMessage
+	agentID string
+	msg     common.WSMessage
 }
 
 type fakeHub struct {
@@ -20,12 +20,12 @@ type fakeHub struct {
 	sent      []sentMessage
 }
 
-func (h *fakeHub) IsConnected(clientID string) bool {
-	return h.connected[clientID]
+func (h *fakeHub) IsConnected(agentID string) bool {
+	return h.connected[agentID]
 }
 
-func (h *fakeHub) Send(clientID string, msg common.WSMessage) bool {
-	h.sent = append(h.sent, sentMessage{clientID: clientID, msg: msg})
+func (h *fakeHub) Send(agentID string, msg common.WSMessage) bool {
+	h.sent = append(h.sent, sentMessage{agentID: agentID, msg: msg})
 	return true
 }
 
@@ -44,18 +44,18 @@ func newTestManager(t *testing.T) (*service.Manager, *store.Store, *fakeHub) {
 	return mgr, st, hub
 }
 
-func saveClientAndPlaybook(t *testing.T, st *store.Store, clientID, playbookID string) {
+func saveAgentAndPlaybook(t *testing.T, st *store.Store, agentID, playbookID string) {
 	t.Helper()
 	now := time.Now()
-	if err := st.SaveClient(&common.Client{
-		ID:             clientID,
+	if err := st.SaveAgent(&common.Agent{
+		ID:             agentID,
 		Hostname:       "edge-1",
 		Platform:       common.PlatformLinux,
-		Status:         common.ClientStatusRegistered,
+		Status:         common.AgentStatusRegistered,
 		RegisteredAt:   now,
 		LastActivityAt: now,
 	}); err != nil {
-		t.Fatalf("SaveClient: %v", err)
+		t.Fatalf("SaveAgent: %v", err)
 	}
 	if err := st.SavePlaybook(&store.PlaybookRecord{
 		ID:   playbookID,
@@ -80,52 +80,52 @@ func saveClientAndPlaybook(t *testing.T, st *store.Store, clientID, playbookID s
 func TestStatusSnapshot(t *testing.T) {
 	mgr, st, _ := newTestManager(t)
 	now := time.Now()
-	_ = st.SaveClient(&common.Client{ID: "c1", Hostname: "h1", Platform: common.PlatformLinux, Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now})
-	_ = st.SaveDeployment(&common.DeploymentState{ID: "d1", ClientID: "c1", PlaybookID: "p1", Status: common.DeploymentStatusRunning, StartedAt: now, UpdatedAt: now})
+	_ = st.SaveAgent(&common.Agent{ID: "c1", Hostname: "h1", Platform: common.PlatformLinux, Status: common.AgentStatusRegistered, RegisteredAt: now, LastActivityAt: now})
+	_ = st.SaveDeployment(&common.DeploymentState{ID: "d1", AgentID: "c1", PlaybookID: "p1", Status: common.DeploymentStatusRunning, StartedAt: now, UpdatedAt: now})
 
-	clients, deployments := mgr.StatusSnapshot()
-	if len(clients) != 1 {
-		t.Fatalf("clients len = %d; want 1", len(clients))
+	agents, deployments := mgr.StatusSnapshot()
+	if len(agents) != 1 {
+		t.Fatalf("agents len = %d; want 1", len(agents))
 	}
 	if len(deployments) != 1 {
 		t.Fatalf("deployments len = %d; want 1", len(deployments))
 	}
 }
 
-func TestAssignPlaybookToClientErrors(t *testing.T) {
+func TestAssignPlaybookToAgentErrors(t *testing.T) {
 	mgr, st, _ := newTestManager(t)
 
-	err := mgr.AssignPlaybookToClient("pb-1", "missing-client")
-	if !errors.Is(err, service.ErrClientNotFound) {
-		t.Fatalf("expected ErrClientNotFound, got %v", err)
+	err := mgr.AssignPlaybookToAgent("pb-1", "missing-agent")
+	if !errors.Is(err, service.ErrAgentNotFound) {
+		t.Fatalf("expected ErrAgentNotFound, got %v", err)
 	}
 
 	now := time.Now()
-	_ = st.SaveClient(&common.Client{ID: "c1", Hostname: "h1", Platform: common.PlatformLinux, Status: common.ClientStatusRegistered, RegisteredAt: now, LastActivityAt: now})
-	err = mgr.AssignPlaybookToClient("missing-playbook", "c1")
+	_ = st.SaveAgent(&common.Agent{ID: "c1", Hostname: "h1", Platform: common.PlatformLinux, Status: common.AgentStatusRegistered, RegisteredAt: now, LastActivityAt: now})
+	err = mgr.AssignPlaybookToAgent("missing-playbook", "c1")
 	if !errors.Is(err, service.ErrPlaybookNotFound) {
 		t.Fatalf("expected ErrPlaybookNotFound, got %v", err)
 	}
 }
 
-func TestAssignPlaybookToClientConnectedPushesPlaybook(t *testing.T) {
+func TestAssignPlaybookToAgentConnectedPushesPlaybook(t *testing.T) {
 	mgr, st, hub := newTestManager(t)
-	saveClientAndPlaybook(t, st, "c1", "pb-1")
+	saveAgentAndPlaybook(t, st, "c1", "pb-1")
 	hub.connected["c1"] = true
 
-	if err := mgr.AssignPlaybookToClient("pb-1", "c1"); err != nil {
-		t.Fatalf("AssignPlaybookToClient: %v", err)
+	if err := mgr.AssignPlaybookToAgent("pb-1", "c1"); err != nil {
+		t.Fatalf("AssignPlaybookToAgent: %v", err)
 	}
 
-	client, ok := st.GetClient("c1")
+	agent, ok := st.GetAgent("c1")
 	if !ok {
-		t.Fatal("client not found")
+		t.Fatal("agent not found")
 	}
-	if client.PlaybookID != "pb-1" {
-		t.Fatalf("PlaybookID = %q; want pb-1", client.PlaybookID)
+	if agent.PlaybookID != "pb-1" {
+		t.Fatalf("PlaybookID = %q; want pb-1", agent.PlaybookID)
 	}
-	if client.Status != common.ClientStatusDeploying {
-		t.Fatalf("Status = %q; want %q", client.Status, common.ClientStatusDeploying)
+	if agent.Status != common.AgentStatusDeploying {
+		t.Fatalf("Status = %q; want %q", agent.Status, common.AgentStatusDeploying)
 	}
 
 	if len(hub.sent) != 1 {
@@ -146,16 +146,16 @@ func TestAssignPlaybookToClientConnectedPushesPlaybook(t *testing.T) {
 
 func TestPushPlaybookIfAssignedResumesActiveDeployment(t *testing.T) {
 	mgr, st, hub := newTestManager(t)
-	saveClientAndPlaybook(t, st, "c1", "pb-1")
+	saveAgentAndPlaybook(t, st, "c1", "pb-1")
 
-	client, _ := st.GetClient("c1")
-	client.PlaybookID = "pb-1"
-	_ = st.SaveClient(client)
+	agent, _ := st.GetAgent("c1")
+	agent.PlaybookID = "pb-1"
+	_ = st.SaveAgent(agent)
 
 	now := time.Now()
 	_ = st.SaveDeployment(&common.DeploymentState{
 		ID:              "dep-1",
-		ClientID:        "c1",
+		AgentID:         "c1",
 		PlaybookID:      "pb-1",
 		Status:          common.DeploymentStatusRunning,
 		ResumeStepIndex: 3,
@@ -182,16 +182,16 @@ func TestPushPlaybookIfAssignedResumesActiveDeployment(t *testing.T) {
 
 func TestPushPlaybookIfAssignedSkipsCompleted(t *testing.T) {
 	mgr, st, hub := newTestManager(t)
-	saveClientAndPlaybook(t, st, "c1", "pb-1")
+	saveAgentAndPlaybook(t, st, "c1", "pb-1")
 
-	client, _ := st.GetClient("c1")
-	client.PlaybookID = "pb-1"
-	_ = st.SaveClient(client)
+	agent, _ := st.GetAgent("c1")
+	agent.PlaybookID = "pb-1"
+	_ = st.SaveAgent(agent)
 
 	now := time.Now()
 	_ = st.SaveDeployment(&common.DeploymentState{
 		ID:         "dep-done",
-		ClientID:   "c1",
+		AgentID:    "c1",
 		PlaybookID: "pb-1",
 		Status:     common.DeploymentStatusDone,
 		StartedAt:  now.Add(-time.Hour),
@@ -247,7 +247,7 @@ func TestAppendDeploymentLogAndResolvePlaybookName(t *testing.T) {
 		CreatedAt: now,
 		UpdatedAt: now,
 	})
-	_ = st.SaveDeployment(&common.DeploymentState{ID: "dep-2", ClientID: "c1", PlaybookID: "pb-2", Status: common.DeploymentStatusRunning, StartedAt: now, UpdatedAt: now})
+	_ = st.SaveDeployment(&common.DeploymentState{ID: "dep-2", AgentID: "c1", PlaybookID: "pb-2", Status: common.DeploymentStatusRunning, StartedAt: now, UpdatedAt: now})
 
 	if got := mgr.ResolvePlaybookNameByDeployment("dep-2"); got != "yaml-name" {
 		t.Fatalf("playbook name = %q; want yaml-name", got)

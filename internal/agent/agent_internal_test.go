@@ -35,7 +35,7 @@ func TestSaveLoadStateRoundTrip(t *testing.T) {
 	stateFile := filepath.Join(t.TempDir(), "state.json")
 	cfg := &common.AgentConfig{StateFile: stateFile}
 	c := New(cfg)
-	c.state = localState{ClientID: "c1", Token: "t1"}
+	c.state = localState{AgentID: "c1", Token: "t1"}
 
 	if err := c.saveState(); err != nil {
 		t.Fatalf("saveState: %v", err)
@@ -45,7 +45,7 @@ func TestSaveLoadStateRoundTrip(t *testing.T) {
 	if err := c2.loadState(); err != nil {
 		t.Fatalf("loadState: %v", err)
 	}
-	if c2.state.ClientID != "c1" || c2.state.Token != "t1" {
+	if c2.state.AgentID != "c1" || c2.state.Token != "t1" {
 		t.Fatalf("loaded state mismatch: %+v", c2.state)
 	}
 }
@@ -93,8 +93,8 @@ func TestRegisterSuccess(t *testing.T) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(common.RegistrationResponse{
-			ClientID: "client-reg-1",
-			Token:    "token-reg-1",
+			AgentID: "agent-reg-1",
+			Token:   "token-reg-1",
 		})
 	}))
 	defer ts.Close()
@@ -109,7 +109,7 @@ func TestRegisterSuccess(t *testing.T) {
 	if err := c.register(context.Background()); err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if c.state.ClientID != "client-reg-1" || c.state.Token != "token-reg-1" {
+	if c.state.AgentID != "agent-reg-1" || c.state.Token != "token-reg-1" {
 		t.Fatalf("unexpected state after register: %+v", c.state)
 	}
 	if _, err := os.Stat(stateFile); err != nil {
@@ -129,14 +129,14 @@ func TestConnectUnauthorizedClearsState(t *testing.T) {
 
 	stateFile := filepath.Join(t.TempDir(), "state.json")
 	c := New(&common.AgentConfig{ServerURL: ts.URL, StateFile: stateFile})
-	c.state.ClientID = "c1"
+	c.state.AgentID = "c1"
 	c.state.Token = "t1"
 
 	err := c.connect(context.Background())
 	if !errors.Is(err, errTokenRejected) {
 		t.Fatalf("expected errTokenRejected, got %v", err)
 	}
-	if c.state.ClientID != "" || c.state.Token != "" {
+	if c.state.AgentID != "" || c.state.Token != "" {
 		t.Fatalf("state should be cleared after token rejection, got %+v", c.state)
 	}
 }

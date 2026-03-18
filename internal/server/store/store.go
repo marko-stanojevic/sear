@@ -1,6 +1,6 @@
 // Package store provides a JSON-file-backed persistence layer for the kompakt server.
 // Design notes:
-//   - All client/deployment/playbook/artifact/secret state lives in state.json.
+//   - All agent/deployment/playbook/artifact/secret state lives in state.json.
 //   - Logs are stored in per-deployment files under logsDir/{deploymentID}.json
 //     so that a large deployment never inflates the main state snapshot.
 package store
@@ -33,11 +33,11 @@ type Store struct {
 	mu          sync.RWMutex
 	stateFile   string
 	logsDir     string
-	clients     map[string]*common.Client
+	agents      map[string]*common.Agent
 	deployments map[string]*common.DeploymentState
 	playbooks   map[string]*PlaybookRecord
 	artifacts   map[string]*common.Artifact
-	secrets     map[string]string // client secrets (name→value)
+	secrets     map[string]string // agent secrets (name→value)
 
 	// logMutexesMu protects logMutexes; logMutexes holds a per-deployment mutex so that
 	// concurrent log reads/writes for the same deployment are serialised without
@@ -49,7 +49,7 @@ type Store struct {
 // snapshot is the structure serialised to state.json.
 // Logs are intentionally excluded — they live in separate files.
 type snapshot struct {
-	Clients     map[string]*common.Client          `json:"clients"`
+	Agents      map[string]*common.Agent          `json:"agents"`
 	Deployments map[string]*common.DeploymentState `json:"deployments"`
 	Playbooks   map[string]*PlaybookRecord         `json:"playbooks"`
 	Artifacts   map[string]*common.Artifact        `json:"artifacts"`
@@ -71,7 +71,7 @@ func New(dir string, logsDir string) (*Store, error) {
 	s := &Store{
 		stateFile:   filepath.Join(dir, "state.json"),
 		logsDir:     logsDir,
-		clients:     make(map[string]*common.Client),
+		agents:      make(map[string]*common.Agent),
 		deployments: make(map[string]*common.DeploymentState),
 		playbooks:   make(map[string]*PlaybookRecord),
 		artifacts:   make(map[string]*common.Artifact),
@@ -105,8 +105,8 @@ func (s *Store) load() error {
 	if err := json.Unmarshal(data, &snap); err != nil {
 		return fmt.Errorf("parsing store: %w", err)
 	}
-	if snap.Clients != nil {
-		s.clients = snap.Clients
+	if snap.Agents != nil {
+		s.agents = snap.Agents
 	}
 	if snap.Deployments != nil {
 		s.deployments = snap.Deployments
@@ -120,28 +120,28 @@ func (s *Store) load() error {
 	if snap.Secrets != nil {
 		s.secrets = snap.Secrets
 	}
-	for _, c := range s.clients {
-		migrateLegacyClientFields(c)
+	for _, a := range s.agents {
+		migrateLegacyAgentFields(a)
 	}
 	return nil
 }
 
-func migrateLegacyClientFields(c *common.Client) {
-	if c == nil || c.Metadata == nil {
+func migrateLegacyAgentFields(a *common.Agent) {
+	if a == nil || a.Metadata == nil {
 		return
 	}
-	if strings.TrimSpace(c.OS) == "" {
-		if osDesc := strings.TrimSpace(c.Metadata["os_description"]); osDesc != "" {
-			c.OS = osDesc
-		} else if osName := strings.TrimSpace(c.Metadata["os"]); osName != "" {
-			c.OS = osName
+	if strings.TrimSpace(a.OS) == "" {
+		if osDesc := strings.TrimSpace(a.Metadata["os_description"]); osDesc != "" {
+			a.OS = osDesc
+		} else if osName := strings.TrimSpace(a.Metadata["os"]); osName != "" {
+			a.OS = osName
 		}
 	}
-	if strings.TrimSpace(c.Vendor) == "" {
-		c.Vendor = strings.TrimSpace(c.Metadata["vendor"])
+	if strings.TrimSpace(a.Vendor) == "" {
+		a.Vendor = strings.TrimSpace(a.Metadata["vendor"])
 	}
-	if strings.TrimSpace(c.Model) == "" {
-		c.Model = strings.TrimSpace(c.Metadata["model"])
+	if strings.TrimSpace(a.Model) == "" {
+		a.Model = strings.TrimSpace(a.Metadata["model"])
 	}
 }
 
@@ -186,7 +186,7 @@ func platformFromOS(osName string, metadata map[string]string) common.PlatformTy
 // save must be called with s.mu held (write lock).
 func (s *Store) save() error {
 	snap := snapshot{
-		Clients:     s.clients,
+		Agents:      s.agents,
 		Deployments: s.deployments,
 		Playbooks:   s.playbooks,
 		Artifacts:   s.artifacts,
@@ -203,33 +203,33 @@ func (s *Store) save() error {
 	return os.Rename(tmp, s.stateFile)
 }
 
-// ── Clients ───────────────────────────────────────────────────────────────────
+// ── Agents ────────────────────────────────────────────────────────────────────
 
-func (s *Store) SaveClient(c *common.Client) error {
+func (s *Store) SaveAgent(a *common.Agent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	c.Platform = normalizePlatform(c.Platform, c.OS, c.Metadata)
-	cc := cloneClient(c)
-	s.clients[cc.ID] = cc
+	a.Platform = normalizePlatform(a.Platform, a.OS, a.Metadata)
+	ac := cloneAgent(a)
+	s.agents[ac.ID] = ac
 	return s.save()
 }
 
-func (s *Store) GetClient(id string) (*common.Client, bool) {
+func (s *Store) GetAgent(id string) (*common.Agent, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	c, ok := s.clients[id]
+	a, ok := s.agents[id]
 	if !ok {
 		return nil, false
 	}
-	return cloneClient(c), true
+	return cloneAgent(a), true
 }
 
-func (s *Store) ListClients() []*common.Client {
+func (s *Store) ListAgents() []*common.Agent {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]*common.Client, 0, len(s.clients))
-	for _, c := range s.clients {
-		out = append(out, cloneClient(c))
+	out := make([]*common.Agent, 0, len(s.agents))
+	for _, a := range s.agents {
+		out = append(out, cloneAgent(a))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		hi := strings.ToLower(strings.TrimSpace(out[i].Hostname))
@@ -248,10 +248,10 @@ func (s *Store) ListClients() []*common.Client {
 	return out
 }
 
-func (s *Store) DeleteClient(id string) error {
+func (s *Store) DeleteAgent(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.clients, id)
+	delete(s.agents, id)
 	return s.save()
 }
 
@@ -275,14 +275,14 @@ func (s *Store) GetDeployment(id string) (*common.DeploymentState, bool) {
 	return d, true
 }
 
-// GetActiveDeploymentForClient returns the most recent non-terminal deployment
-// for a client (running or rebooting), or any deployment if none is active.
-func (s *Store) GetActiveDeploymentForClient(clientID string) (*common.DeploymentState, bool) {
+// GetActiveDeploymentForAgent returns the most recent non-terminal deployment
+// for an agent (running or rebooting), or any deployment if none is active.
+func (s *Store) GetActiveDeploymentForAgent(agentID string) (*common.DeploymentState, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var latest *common.DeploymentState
 	for _, d := range s.deployments {
-		if d.ClientID != clientID {
+		if d.AgentID != agentID {
 			continue
 		}
 		if latest == nil || d.StartedAt.After(latest.StartedAt) {
@@ -313,10 +313,10 @@ func (s *Store) enrichDeploymentLocked(d *common.DeploymentState) {
 	if d == nil {
 		return
 	}
-	if c, ok := s.clients[d.ClientID]; ok {
-		d.Hostname = c.Hostname
+	if a, ok := s.agents[d.AgentID]; ok {
+		d.Hostname = a.Hostname
 	} else {
-		d.Hostname = "Deleted Client"
+		d.Hostname = "Deleted Agent"
 	}
 	if p, ok := s.playbooks[d.PlaybookID]; ok {
 		d.PlaybookName = p.Name
@@ -419,7 +419,7 @@ func (s *Store) ListArtifacts() []*common.Artifact {
 	return out
 }
 
-func cloneClient(in *common.Client) *common.Client {
+func cloneAgent(in *common.Agent) *common.Agent {
 	if in == nil {
 		return nil
 	}
@@ -637,12 +637,12 @@ func (s *Store) GetLogsForDeployment(deploymentID string) []*common.LogEntry {
 	return s.readDeploymentLogsLocked(s.logPath(deploymentID))
 }
 
-// GetLogsForClient returns all log entries for every deployment of a client.
-func (s *Store) GetLogsForClient(clientID string) []*common.LogEntry {
+// GetLogsForAgent returns all log entries for every deployment of an agent.
+func (s *Store) GetLogsForAgent(agentID string) []*common.LogEntry {
 	s.mu.RLock()
 	deploymentIDs := make([]string, 0)
 	for _, d := range s.deployments {
-		if d.ClientID == clientID {
+		if d.AgentID == agentID {
 			deploymentIDs = append(deploymentIDs, d.ID)
 		}
 	}

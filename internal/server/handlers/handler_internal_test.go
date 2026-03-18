@@ -11,11 +11,11 @@ import (
 
 // makeTestConn builds a WSConn suitable for unit tests: the ws field is nil
 // because Hub.Send and Hub.IsConnected never touch it.
-func makeTestConn(clientID string, bufSize int) *WSConn {
+func makeTestConn(agentID string, bufSize int) *WSConn {
 	return &WSConn{
-		clientID: clientID,
-		send:     make(chan []byte, bufSize),
-		done:     make(chan struct{}),
+		agentID: agentID,
+		send:    make(chan []byte, bufSize),
+		done:    make(chan struct{}),
 	}
 }
 
@@ -38,7 +38,7 @@ func TestHub_IsConnectedAndSend(t *testing.T) {
 	}
 
 	if !h.Send("c1", common.WSMessage{Type: common.WSMsgLog}) {
-		t.Fatal("Send should return true for connected client")
+		t.Fatal("Send should return true for connected agent")
 	}
 
 	select {
@@ -63,7 +63,7 @@ func TestHub_IsConnectedAndSend(t *testing.T) {
 func TestHub_Send_NotConnected(t *testing.T) {
 	h := NewHub()
 	if h.Send("ghost", common.WSMessage{Type: common.WSMsgLog}) {
-		t.Error("Send should return false for unconnected client")
+		t.Error("Send should return false for unconnected agent")
 	}
 }
 
@@ -82,7 +82,7 @@ func TestHub_Send_QueueFull(t *testing.T) {
 	}
 }
 
-func TestHub_Register_NewClient(t *testing.T) {
+func TestHub_Register_NewAgent(t *testing.T) {
 	h := NewHub()
 	conn := makeTestConn("c3", 8)
 	// register() with no prior entry for c3 must not close any ws.
@@ -93,11 +93,11 @@ func TestHub_Register_NewClient(t *testing.T) {
 }
 
 func TestHub_Unregister_Unknown(t *testing.T) {
-	// Unregistering a client that was never registered should not panic.
+	// Unregistering an agent that was never registered should not panic.
 	h := NewHub()
 	h.unregister("nobody")
 	if h.IsConnected("nobody") {
-		t.Error("IsConnected should be false for unknown client")
+		t.Error("IsConnected should be false for unknown agent")
 	}
 }
 
