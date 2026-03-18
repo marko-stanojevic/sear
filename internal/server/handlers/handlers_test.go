@@ -188,12 +188,12 @@ func TestHandleRegister_Idempotent(t *testing.T) {
 	if r1.ClientID != r2.ClientID {
 		t.Errorf("second registration should reuse client ID: %q != %q", r1.ClientID, r2.ClientID)
 	}
-	if r1.ClientID != "machine-003" {
-		t.Errorf("client_id = %q; want %q", r1.ClientID, "machine-003")
+	if len(r1.ClientID) != 26 {
+		t.Errorf("client_id %q is not a 26-char ULID", r1.ClientID)
 	}
 }
 
-func TestHandleRegister_ClientIDSanitizedFromMachineID(t *testing.T) {
+func TestHandleRegister_ClientIDIsULID(t *testing.T) {
 	env := newTestEnv(t)
 	rr := postJSON(t, env.HandleAgentRegister, "/api/v1/register", common.RegistrationRequest{
 		Platform: common.PlatformLinux,
@@ -207,8 +207,8 @@ func TestHandleRegister_ClientIDSanitizedFromMachineID(t *testing.T) {
 		t.Fatalf("status = %d (body: %s)", rr.Code, rr.Body.String())
 	}
 	resp := decode[common.RegistrationResponse](t, rr)
-	if resp.ClientID != "HPE-ProLiant-Gen10-SN-1234" {
-		t.Errorf("client_id = %q; want %q", resp.ClientID, "HPE-ProLiant-Gen10-SN-1234")
+	if len(resp.ClientID) != 26 {
+		t.Errorf("client_id %q is not a 26-char ULID", resp.ClientID)
 	}
 }
 
@@ -1056,7 +1056,7 @@ func TestHandleArtifacts_ErrorPaths(t *testing.T) {
 
 func TestHandleArtifacts_AccessPolicy(t *testing.T) {
 	env := newTestEnv(t)
-	_, token := registerAgent(t, env, "client-1", "host-1")
+	clientID, token := registerAgent(t, env, "client-1", "host-1")
 	_, otherToken := registerAgent(t, env, "client-2", "host-2")
 
 	// 1. Upload Public Artifact
@@ -1073,8 +1073,8 @@ func TestHandleArtifacts_AccessPolicy(t *testing.T) {
 	env.HandleArtifacts(authRR, authReq)
 	authArt := decode[common.Artifact](t, authRR)
 
-	// 3. Upload Restricted Artifact for client-1
-	restReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=rest.bin&access_policy=restricted&allowed_clients=client-1", bytes.NewBufferString("rest content"))
+	// 3. Upload Restricted Artifact for client-1 (use the actual ULID assigned at registration)
+	restReq := httptest.NewRequest(http.MethodPost, "/artifacts?name=rest.bin&access_policy=restricted&allowed_clients="+clientID, bytes.NewBufferString("rest content"))
 	restReq.SetBasicAuth("root", env.RootPassword)
 	restRR := httptest.NewRecorder()
 	env.HandleArtifacts(restRR, restReq)
