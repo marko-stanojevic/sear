@@ -35,6 +35,7 @@ func newTestManager(t *testing.T) (*service.Manager, *store.Store, *fakeHub) {
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
+	t.Cleanup(func() { _ = st.Close() })
 	hub := &fakeHub{connected: map[string]bool{}}
 	mgr := &service.Manager{
 		Store:     st,

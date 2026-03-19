@@ -1,19 +1,15 @@
-// Package store provides a JSON-file-backed persistence layer for the kompakt server.
-// Design notes:
-//   - All agent/deployment/playbook/artifact/secret state lives in state.json.
-//   - Logs are stored in per-deployment files under logsDir/{deploymentID}.json
-//     so that a large deployment never inflates the main state snapshot.
+// Package store provides a SQLite-backed persistence layer for the kompakt server.
 package store
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
-	"sync"
 	"time"
+
+	_ "modernc.org/sqlite" // SQLite driver
 
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
@@ -28,632 +24,656 @@ type PlaybookRecord struct {
 	UpdatedAt   time.Time        `json:"updated_at"`
 }
 
-// Store holds all persistent state for the server.
+// Store holds the SQLite database connection.
 type Store struct {
-	mu          sync.RWMutex
-	stateFile   string
-	logsDir     string
-	agents      map[string]*common.Agent
-	deployments map[string]*common.DeploymentState
-	playbooks   map[string]*PlaybookRecord
-	artifacts   map[string]*common.Artifact
-	secrets     map[string]string // agent secrets (name→value)
-
-	// logMutexesMu protects logMutexes; logMutexes holds a per-deployment mutex so that
-	// concurrent log reads/writes for the same deployment are serialised without
-	// blocking unrelated deployments.
-	logMutexesMu sync.Mutex
-	logMutexes   map[string]*sync.Mutex
+	db *sql.DB
 }
 
-// snapshot is the structure serialised to state.json.
-// Logs are intentionally excluded — they live in separate files.
-type snapshot struct {
-	Agents      map[string]*common.Agent          `json:"agents"`
-	Deployments map[string]*common.DeploymentState `json:"deployments"`
-	Playbooks   map[string]*PlaybookRecord         `json:"playbooks"`
-	Artifacts   map[string]*common.Artifact        `json:"artifacts"`
-	Secrets     map[string]string                  `json:"secrets"`
-}
+const schema = `
+CREATE TABLE IF NOT EXISTS agents (
+    id               TEXT PRIMARY KEY,
+    hostname         TEXT NOT NULL DEFAULT '',
+    platform         TEXT NOT NULL DEFAULT '',
+    os               TEXT NOT NULL DEFAULT '',
+    model            TEXT NOT NULL DEFAULT '',
+    vendor           TEXT NOT NULL DEFAULT '',
+    ip_address       TEXT NOT NULL DEFAULT '',
+    metadata_json    TEXT NOT NULL DEFAULT '{}',
+    status           TEXT NOT NULL DEFAULT '',
+    playbook_id      TEXT NOT NULL DEFAULT '',
+    registered_at    TEXT NOT NULL DEFAULT '',
+    last_activity_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_agents_hostname ON agents (hostname COLLATE NOCASE);
 
-// New creates (or reopens) a store rooted at dir.
-// Logs are stored under logsDir; if empty, dir/logs is used.
-func New(dir string, logsDir string) (*Store, error) {
+CREATE TABLE IF NOT EXISTS deployments (
+    id                TEXT PRIMARY KEY,
+    agent_id          TEXT NOT NULL DEFAULT '',
+    playbook_id       TEXT NOT NULL DEFAULT '',
+    status            TEXT NOT NULL DEFAULT '',
+    resume_step_index INTEGER NOT NULL DEFAULT 0,
+    started_at        TEXT NOT NULL DEFAULT '',
+    updated_at        TEXT NOT NULL DEFAULT '',
+    finished_at       TEXT,
+    error_detail      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_deployments_agent_id      ON deployments (agent_id);
+CREATE INDEX IF NOT EXISTS idx_deployments_agent_started ON deployments (agent_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS playbooks (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL DEFAULT '',
+    description   TEXT NOT NULL DEFAULT '',
+    playbook_json TEXT NOT NULL DEFAULT '{}',
+    created_at    TEXT NOT NULL DEFAULT '',
+    updated_at    TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS artifacts (
+    id                   TEXT PRIMARY KEY,
+    name                 TEXT NOT NULL DEFAULT '',
+    filename             TEXT NOT NULL DEFAULT '',
+    size                 INTEGER NOT NULL DEFAULT 0,
+    content_type         TEXT NOT NULL DEFAULT '',
+    access_policy        TEXT NOT NULL DEFAULT '',
+    allowed_agents_json  TEXT NOT NULL DEFAULT '[]',
+    uploaded_at          TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_artifacts_name ON artifacts (name);
+
+CREATE TABLE IF NOT EXISTS secrets (
+    name  TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS logs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    deployment_id TEXT NOT NULL DEFAULT '',
+    job_name      TEXT NOT NULL DEFAULT '',
+    step_index    INTEGER NOT NULL DEFAULT 0,
+    level         TEXT NOT NULL DEFAULT '',
+    message       TEXT NOT NULL DEFAULT '',
+    timestamp     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_logs_deployment_id ON logs (deployment_id);
+`
+
+// New opens (or creates) the SQLite store at dir/kompakt.db.
+// The logsDir parameter is accepted for API compatibility but is not used.
+func New(dir string, _ string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("creating store dir: %w", err)
 	}
-	if logsDir == "" {
-		logsDir = filepath.Join(dir, "logs")
-	}
-	if err := os.MkdirAll(logsDir, 0o700); err != nil {
-		return nil, fmt.Errorf("creating logs dir: %w", err)
-	}
-	s := &Store{
-		stateFile:   filepath.Join(dir, "state.json"),
-		logsDir:     logsDir,
-		agents:      make(map[string]*common.Agent),
-		deployments: make(map[string]*common.DeploymentState),
-		playbooks:   make(map[string]*PlaybookRecord),
-		artifacts:   make(map[string]*common.Artifact),
-		secrets:     make(map[string]string),
-		logMutexes:  make(map[string]*sync.Mutex),
-	}
-	if err := s.load(); err != nil {
-		return nil, err
-	}
-	if _, err := os.Stat(s.stateFile); os.IsNotExist(err) {
-		if err := s.save(); err != nil {
-			return nil, fmt.Errorf("initializing store: %w", err)
-		}
-	} else if err != nil {
-		return nil, fmt.Errorf("checking store state file: %w", err)
-	}
-	return s, nil
-}
-
-// ── Persistence ───────────────────────────────────────────────────────────────
-
-func (s *Store) load() error {
-	data, err := os.ReadFile(s.stateFile)
-	if os.IsNotExist(err) {
-		return nil // first run
-	}
+	dbPath := filepath.Join(dir, "kompakt.db")
+	dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		return fmt.Errorf("reading store: %w", err)
+		return nil, fmt.Errorf("opening sqlite: %w", err)
 	}
-	var snap snapshot
-	if err := json.Unmarshal(data, &snap); err != nil {
-		return fmt.Errorf("parsing store: %w", err)
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(schema); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("applying schema: %w", err)
 	}
-	if snap.Agents != nil {
-		s.agents = snap.Agents
-	}
-	if snap.Deployments != nil {
-		s.deployments = snap.Deployments
-	}
-	if snap.Playbooks != nil {
-		s.playbooks = snap.Playbooks
-	}
-	if snap.Artifacts != nil {
-		s.artifacts = snap.Artifacts
-	}
-	if snap.Secrets != nil {
-		s.secrets = snap.Secrets
-	}
-	for _, a := range s.agents {
-		migrateLegacyAgentFields(a)
-	}
-	return nil
+	return &Store{db: db}, nil
 }
 
-func migrateLegacyAgentFields(a *common.Agent) {
-	if a == nil || a.Metadata == nil {
-		return
-	}
-	if strings.TrimSpace(a.OS) == "" {
-		if osDesc := strings.TrimSpace(a.Metadata["os_description"]); osDesc != "" {
-			a.OS = osDesc
-		} else if osName := strings.TrimSpace(a.Metadata["os"]); osName != "" {
-			a.OS = osName
-		}
-	}
-	if strings.TrimSpace(a.Vendor) == "" {
-		a.Vendor = strings.TrimSpace(a.Metadata["vendor"])
-	}
-	if strings.TrimSpace(a.Model) == "" {
-		a.Model = strings.TrimSpace(a.Metadata["model"])
-	}
+// Close releases the database connection.
+func (s *Store) Close() error {
+	return s.db.Close()
 }
 
-func normalizePlatform(platform common.PlatformType, osName string, metadata map[string]string) common.PlatformType {
-	current := strings.ToLower(strings.TrimSpace(string(platform)))
-	switch current {
-	case "", "auto":
-		return platformFromOS(osName, metadata)
-	case "linux":
-		return common.PlatformLinux
-	case "mac":
-		return common.PlatformMac
-	case "windows":
-		return common.PlatformWindows
-	default:
-		return platformFromOS(osName, metadata)
-	}
+// ── Time helpers ──────────────────────────────────────────────────────────────
+
+func encodeTime(t time.Time) string {
+	return t.UTC().Format(time.RFC3339Nano)
 }
 
-func platformFromOS(osName string, metadata map[string]string) common.PlatformType {
-	normalizedOS := strings.ToLower(strings.TrimSpace(osName))
-	if normalizedOS == "" && metadata != nil {
-		normalizedOS = strings.ToLower(strings.TrimSpace(metadata["os"]))
-		if normalizedOS == "" {
-			normalizedOS = strings.ToLower(strings.TrimSpace(metadata["type"]))
-		}
-		if normalizedOS == "" {
-			normalizedOS = strings.ToLower(strings.TrimSpace(metadata["os_type"]))
-		}
-	}
-
-	switch normalizedOS {
-	case "darwin":
-		return common.PlatformMac
-	case "windows":
-		return common.PlatformWindows
-	default:
-		return common.PlatformLinux
-	}
+func decodeTime(s string) time.Time {
+	t, _ := time.Parse(time.RFC3339Nano, s)
+	return t
 }
 
-// save must be called with s.mu held (write lock).
-func (s *Store) save() error {
-	snap := snapshot{
-		Agents:      s.agents,
-		Deployments: s.deployments,
-		Playbooks:   s.playbooks,
-		Artifacts:   s.artifacts,
-		Secrets:     s.secrets,
+func encodeTimePtr(t *time.Time) sql.NullString {
+	if t == nil {
+		return sql.NullString{}
 	}
-	data, err := json.MarshalIndent(snap, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshalling store: %w", err)
+	return sql.NullString{String: encodeTime(*t), Valid: true}
+}
+
+func decodeTimePtr(ns sql.NullString) *time.Time {
+	if !ns.Valid {
+		return nil
 	}
-	tmp := s.stateFile + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("writing store tmp: %w", err)
-	}
-	return os.Rename(tmp, s.stateFile)
+	t, _ := time.Parse(time.RFC3339Nano, ns.String)
+	return &t
 }
 
 // ── Agents ────────────────────────────────────────────────────────────────────
 
 func (s *Store) SaveAgent(a *common.Agent) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	a.Platform = normalizePlatform(a.Platform, a.OS, a.Metadata)
-	ac := cloneAgent(a)
-	s.agents[ac.ID] = ac
-	return s.save()
+	meta, err := json.Marshal(a.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshalling agent metadata: %w", err)
+	}
+	_, err = s.db.Exec(`
+		INSERT INTO agents (id, hostname, platform, os, model, vendor, ip_address,
+		                    metadata_json, status, playbook_id, registered_at, last_activity_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(id) DO UPDATE SET
+		    hostname=excluded.hostname, platform=excluded.platform, os=excluded.os,
+		    model=excluded.model, vendor=excluded.vendor, ip_address=excluded.ip_address,
+		    metadata_json=excluded.metadata_json, status=excluded.status,
+		    playbook_id=excluded.playbook_id, last_activity_at=excluded.last_activity_at`,
+		a.ID, a.Hostname, string(a.Platform), a.OS, a.Model, a.Vendor, a.IPAddress,
+		string(meta), string(a.Status), a.PlaybookID,
+		encodeTime(a.RegisteredAt), encodeTime(a.LastActivityAt),
+	)
+	return err
 }
 
 func (s *Store) GetAgent(id string) (*common.Agent, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	a, ok := s.agents[id]
-	if !ok {
+	row := s.db.QueryRow(`
+		SELECT id, hostname, platform, os, model, vendor, ip_address,
+		       metadata_json, status, playbook_id, registered_at, last_activity_at
+		FROM agents WHERE id = ?`, id)
+	a, err := scanAgent(row)
+	if err != nil {
 		return nil, false
 	}
-	return cloneAgent(a), true
+	return a, true
 }
 
 func (s *Store) ListAgents() []*common.Agent {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]*common.Agent, 0, len(s.agents))
-	for _, a := range s.agents {
-		out = append(out, cloneAgent(a))
+	rows, err := s.db.Query(`
+		SELECT id, hostname, platform, os, model, vendor, ip_address,
+		       metadata_json, status, playbook_id, registered_at, last_activity_at
+		FROM agents
+		ORDER BY
+		    CASE WHEN TRIM(hostname) = '' THEN 1 ELSE 0 END ASC,
+		    LOWER(TRIM(hostname)) ASC,
+		    id ASC`)
+	if err != nil {
+		return nil
 	}
-	sort.Slice(out, func(i, j int) bool {
-		hi := strings.ToLower(strings.TrimSpace(out[i].Hostname))
-		hj := strings.ToLower(strings.TrimSpace(out[j].Hostname))
-		if hi == hj {
-			return out[i].ID < out[j].ID
+	defer rows.Close()
+	var out []*common.Agent
+	for rows.Next() {
+		a, err := scanAgent(rows)
+		if err == nil {
+			out = append(out, a)
 		}
-		if hi == "" {
-			return false
-		}
-		if hj == "" {
-			return true
-		}
-		return hi < hj
-	})
+	}
 	return out
 }
 
 func (s *Store) DeleteAgent(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.agents, id)
-	return s.save()
+	_, err := s.db.Exec(`DELETE FROM agents WHERE id = ?`, id)
+	return err
+}
+
+// scanner is satisfied by both *sql.Row and *sql.Rows.
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanAgent(r scanner) (*common.Agent, error) {
+	var (
+		id, hostname, platform, os_, model, vendor, ipAddress string
+		metaJSON, status, playbookID                          string
+		registeredAt, lastActivityAt                          string
+	)
+	if err := r.Scan(&id, &hostname, &platform, &os_, &model, &vendor, &ipAddress,
+		&metaJSON, &status, &playbookID, &registeredAt, &lastActivityAt); err != nil {
+		return nil, err
+	}
+	var meta map[string]string
+	_ = json.Unmarshal([]byte(metaJSON), &meta)
+	return &common.Agent{
+		ID:             id,
+		Hostname:       hostname,
+		Platform:       common.PlatformType(platform),
+		OS:             os_,
+		Model:          model,
+		Vendor:         vendor,
+		IPAddress:      ipAddress,
+		Metadata:       meta,
+		Status:         common.AgentStatus(status),
+		PlaybookID:     playbookID,
+		RegisteredAt:   decodeTime(registeredAt),
+		LastActivityAt: decodeTime(lastActivityAt),
+	}, nil
 }
 
 // ── Deployments ───────────────────────────────────────────────────────────────
 
 func (s *Store) SaveDeployment(d *common.DeploymentState) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.deployments[d.ID] = cloneDeployment(d)
-	return s.save()
+	_, err := s.db.Exec(`
+		INSERT INTO deployments (id, agent_id, playbook_id, status, resume_step_index,
+		                         started_at, updated_at, finished_at, error_detail)
+		VALUES (?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(id) DO UPDATE SET
+		    agent_id=excluded.agent_id, playbook_id=excluded.playbook_id,
+		    status=excluded.status, resume_step_index=excluded.resume_step_index,
+		    updated_at=excluded.updated_at, finished_at=excluded.finished_at,
+		    error_detail=excluded.error_detail`,
+		d.ID, d.AgentID, d.PlaybookID, string(d.Status), d.ResumeStepIndex,
+		encodeTime(d.StartedAt), encodeTime(d.UpdatedAt),
+		encodeTimePtr(d.FinishedAt), d.ErrorDetail,
+	)
+	return err
 }
 
 func (s *Store) GetDeployment(id string) (*common.DeploymentState, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	d := cloneDeployment(s.deployments[id])
-	if d == nil {
+	row := s.db.QueryRow(`
+		SELECT id, agent_id, playbook_id, status, resume_step_index,
+		       started_at, updated_at, finished_at, error_detail
+		FROM deployments WHERE id = ?`, id)
+	d, err := scanDeployment(row)
+	if err != nil {
 		return nil, false
 	}
-	s.enrichDeploymentLocked(d)
+	s.enrichDeployment(d)
 	return d, true
 }
 
-// GetActiveDeploymentForAgent returns the most recent non-terminal deployment
-// for an agent (running or rebooting), or any deployment if none is active.
 func (s *Store) GetActiveDeploymentForAgent(agentID string) (*common.DeploymentState, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var latest *common.DeploymentState
-	for _, d := range s.deployments {
-		if d.AgentID != agentID {
-			continue
-		}
-		if latest == nil || d.StartedAt.After(latest.StartedAt) {
-			latest = d
-		}
-	}
-	if latest == nil {
+	row := s.db.QueryRow(`
+		SELECT id, agent_id, playbook_id, status, resume_step_index,
+		       started_at, updated_at, finished_at, error_detail
+		FROM deployments
+		WHERE agent_id = ?
+		ORDER BY started_at DESC
+		LIMIT 1`, agentID)
+	d, err := scanDeployment(row)
+	if err != nil {
 		return nil, false
 	}
-	d := cloneDeployment(latest)
-	s.enrichDeploymentLocked(d)
+	s.enrichDeployment(d)
 	return d, true
 }
 
 func (s *Store) ListDeployments() []*common.DeploymentState {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]*common.DeploymentState, 0, len(s.deployments))
-	for _, d := range s.deployments {
-		cp := cloneDeployment(d)
-		s.enrichDeploymentLocked(cp)
-		out = append(out, cp)
+	rows, err := s.db.Query(`
+		SELECT id, agent_id, playbook_id, status, resume_step_index,
+		       started_at, updated_at, finished_at, error_detail
+		FROM deployments`)
+	if err != nil {
+		return nil
+	}
+	// Collect all rows before closing the cursor so the connection is free
+	// for the enrichDeployment sub-queries.
+	var out []*common.DeploymentState
+	for rows.Next() {
+		d, err := scanDeployment(rows)
+		if err == nil {
+			out = append(out, d)
+		}
+	}
+	rows.Close()
+	for _, d := range out {
+		s.enrichDeployment(d)
 	}
 	return out
 }
 
-func (s *Store) enrichDeploymentLocked(d *common.DeploymentState) {
+func (s *Store) DeleteDeployment(id string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`DELETE FROM deployments WHERE id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM logs WHERE deployment_id = ?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func scanDeployment(r scanner) (*common.DeploymentState, error) {
+	var (
+		id, agentID, playbookID, status string
+		resumeStepIndex                 int
+		startedAt, updatedAt            string
+		finishedAt                      sql.NullString
+		errorDetail                     string
+	)
+	if err := r.Scan(&id, &agentID, &playbookID, &status, &resumeStepIndex,
+		&startedAt, &updatedAt, &finishedAt, &errorDetail); err != nil {
+		return nil, err
+	}
+	return &common.DeploymentState{
+		ID:              id,
+		AgentID:         agentID,
+		PlaybookID:      playbookID,
+		Status:          common.DeploymentStatus(status),
+		ResumeStepIndex: resumeStepIndex,
+		StartedAt:       decodeTime(startedAt),
+		UpdatedAt:       decodeTime(updatedAt),
+		FinishedAt:      decodeTimePtr(finishedAt),
+		ErrorDetail:     errorDetail,
+	}, nil
+}
+
+// enrichDeployment fills the derived Hostname and PlaybookName fields.
+func (s *Store) enrichDeployment(d *common.DeploymentState) {
 	if d == nil {
 		return
 	}
-	if a, ok := s.agents[d.AgentID]; ok {
-		d.Hostname = a.Hostname
-	} else {
+	var hostname string
+	err := s.db.QueryRow(`SELECT hostname FROM agents WHERE id = ?`, d.AgentID).Scan(&hostname)
+	if err != nil {
 		d.Hostname = "Deleted Agent"
-	}
-	if p, ok := s.playbooks[d.PlaybookID]; ok {
-		d.PlaybookName = p.Name
 	} else {
-		d.PlaybookName = "Deleted Playbook"
+		d.Hostname = hostname
 	}
-}
-
-func (s *Store) DeleteDeployment(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.deployments, id)
-
-	// Clean up log file
-	path := s.logPath(id)
-	_ = os.Remove(path)
-	_ = os.Remove(path + ".tmp")
-
-	// Clean up mutex
-	s.logMutexesMu.Lock()
-	delete(s.logMutexes, id)
-	s.logMutexesMu.Unlock()
-
-	return s.save()
+	var playbookName string
+	err = s.db.QueryRow(`SELECT name FROM playbooks WHERE id = ?`, d.PlaybookID).Scan(&playbookName)
+	if err != nil {
+		d.PlaybookName = "Deleted Playbook"
+	} else {
+		d.PlaybookName = playbookName
+	}
 }
 
 // ── Playbooks ─────────────────────────────────────────────────────────────────
 
 func (s *Store) SavePlaybook(p *PlaybookRecord) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.playbooks[p.ID] = clonePlaybookRecord(p)
-	return s.save()
+	pbJSON, err := json.Marshal(p.Playbook)
+	if err != nil {
+		return fmt.Errorf("marshalling playbook: %w", err)
+	}
+	_, err = s.db.Exec(`
+		INSERT INTO playbooks (id, name, description, playbook_json, created_at, updated_at)
+		VALUES (?,?,?,?,?,?)
+		ON CONFLICT(id) DO UPDATE SET
+		    name=excluded.name, description=excluded.description,
+		    playbook_json=excluded.playbook_json, updated_at=excluded.updated_at`,
+		p.ID, p.Name, p.Description, string(pbJSON),
+		encodeTime(p.CreatedAt), encodeTime(p.UpdatedAt),
+	)
+	return err
 }
 
 func (s *Store) GetPlaybook(id string) (*PlaybookRecord, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	p, ok := s.playbooks[id]
-	if !ok {
+	row := s.db.QueryRow(`
+		SELECT id, name, description, playbook_json, created_at, updated_at
+		FROM playbooks WHERE id = ?`, id)
+	p, err := scanPlaybook(row)
+	if err != nil {
 		return nil, false
 	}
-	return clonePlaybookRecord(p), true
+	return p, true
 }
 
 func (s *Store) ListPlaybooks() []*PlaybookRecord {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]*PlaybookRecord, 0, len(s.playbooks))
-	for _, p := range s.playbooks {
-		out = append(out, clonePlaybookRecord(p))
+	rows, err := s.db.Query(`
+		SELECT id, name, description, playbook_json, created_at, updated_at
+		FROM playbooks`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []*PlaybookRecord
+	for rows.Next() {
+		p, err := scanPlaybook(rows)
+		if err == nil {
+			out = append(out, p)
+		}
 	}
 	return out
 }
 
 func (s *Store) DeletePlaybook(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.playbooks, id)
-	return s.save()
+	_, err := s.db.Exec(`DELETE FROM playbooks WHERE id = ?`, id)
+	return err
+}
+
+func scanPlaybook(r scanner) (*PlaybookRecord, error) {
+	var id, name, description, pbJSON, createdAt, updatedAt string
+	if err := r.Scan(&id, &name, &description, &pbJSON, &createdAt, &updatedAt); err != nil {
+		return nil, err
+	}
+	var pb common.Playbook
+	_ = json.Unmarshal([]byte(pbJSON), &pb)
+	return &PlaybookRecord{
+		ID:          id,
+		Name:        name,
+		Description: description,
+		Playbook:    &pb,
+		CreatedAt:   decodeTime(createdAt),
+		UpdatedAt:   decodeTime(updatedAt),
+	}, nil
 }
 
 // ── Artifacts ─────────────────────────────────────────────────────────────────
 
 func (s *Store) SaveArtifact(a *common.Artifact) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.artifacts[a.ID] = cloneArtifact(a)
-	return s.save()
+	agentsJSON, err := json.Marshal(a.AllowedAgents)
+	if err != nil {
+		return fmt.Errorf("marshalling allowed agents: %w", err)
+	}
+	_, err = s.db.Exec(`
+		INSERT INTO artifacts (id, name, filename, size, content_type,
+		                       access_policy, allowed_agents_json, uploaded_at)
+		VALUES (?,?,?,?,?,?,?,?)
+		ON CONFLICT(id) DO UPDATE SET
+		    name=excluded.name, filename=excluded.filename, size=excluded.size,
+		    content_type=excluded.content_type, access_policy=excluded.access_policy,
+		    allowed_agents_json=excluded.allowed_agents_json`,
+		a.ID, a.Name, a.Filename, a.Size, a.ContentType,
+		string(a.AccessPolicy), string(agentsJSON), encodeTime(a.UploadedAt),
+	)
+	return err
 }
 
 func (s *Store) GetArtifact(id string) (*common.Artifact, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	a, ok := s.artifacts[id]
-	if !ok {
+	row := s.db.QueryRow(`
+		SELECT id, name, filename, size, content_type, access_policy, allowed_agents_json, uploaded_at
+		FROM artifacts WHERE id = ?`, id)
+	a, err := scanArtifact(row)
+	if err != nil {
 		return nil, false
 	}
-	return cloneArtifact(a), true
+	return a, true
 }
 
 func (s *Store) GetArtifactByName(name string) (*common.Artifact, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, a := range s.artifacts {
-		if a.Name == name {
-			return cloneArtifact(a), true
-		}
+	row := s.db.QueryRow(`
+		SELECT id, name, filename, size, content_type, access_policy, allowed_agents_json, uploaded_at
+		FROM artifacts WHERE name = ?`, name)
+	a, err := scanArtifact(row)
+	if err != nil {
+		return nil, false
 	}
-	return nil, false
+	return a, true
 }
 
 func (s *Store) ListArtifacts() []*common.Artifact {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]*common.Artifact, 0, len(s.artifacts))
-	for _, a := range s.artifacts {
-		out = append(out, cloneArtifact(a))
-	}
-	return out
-}
-
-func cloneAgent(in *common.Agent) *common.Agent {
-	if in == nil {
+	rows, err := s.db.Query(`
+		SELECT id, name, filename, size, content_type, access_policy, allowed_agents_json, uploaded_at
+		FROM artifacts`)
+	if err != nil {
 		return nil
 	}
-	out := *in
-	if in.Metadata != nil {
-		out.Metadata = make(map[string]string, len(in.Metadata))
-		for k, v := range in.Metadata {
-			out.Metadata[k] = v
-		}
-	}
-	return &out
-}
-
-func cloneDeployment(in *common.DeploymentState) *common.DeploymentState {
-	if in == nil {
-		return nil
-	}
-	out := *in
-	if in.FinishedAt != nil {
-		t := *in.FinishedAt
-		out.FinishedAt = &t
-	}
-	return &out
-}
-
-func clonePlaybookRecord(in *PlaybookRecord) *PlaybookRecord {
-	if in == nil {
-		return nil
-	}
-	out := *in
-	out.Playbook = clonePlaybook(in.Playbook)
-	return &out
-}
-
-func clonePlaybook(in *common.Playbook) *common.Playbook {
-	if in == nil {
-		return nil
-	}
-	out := &common.Playbook{Name: in.Name}
-	if in.Env != nil {
-		out.Env = make(map[string]string, len(in.Env))
-		for k, v := range in.Env {
-			out.Env[k] = v
-		}
-	}
-	if len(in.Jobs) > 0 {
-		out.Jobs = make([]common.Job, len(in.Jobs))
-		for i, job := range in.Jobs {
-			out.Jobs[i].Name = job.Name
-			if len(job.Steps) > 0 {
-				out.Jobs[i].Steps = make([]common.Step, len(job.Steps))
-				for j, st := range job.Steps {
-					out.Jobs[i].Steps[j] = st
-					if st.With != nil {
-						m := make(map[string]string, len(st.With))
-						for k, v := range st.With {
-							m[k] = v
-						}
-						out.Jobs[i].Steps[j].With = m
-					}
-					if st.Env != nil {
-						m := make(map[string]string, len(st.Env))
-						for k, v := range st.Env {
-							m[k] = v
-						}
-						out.Jobs[i].Steps[j].Env = m
-					}
-				}
-			}
+	defer rows.Close()
+	var out []*common.Artifact
+	for rows.Next() {
+		a, err := scanArtifact(rows)
+		if err == nil {
+			out = append(out, a)
 		}
 	}
 	return out
-}
-
-func cloneArtifact(in *common.Artifact) *common.Artifact {
-	if in == nil {
-		return nil
-	}
-	out := *in
-	return &out
 }
 
 func (s *Store) DeleteArtifact(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.artifacts, id)
-	return s.save()
+	_, err := s.db.Exec(`DELETE FROM artifacts WHERE id = ?`, id)
+	return err
+}
+
+func scanArtifact(r scanner) (*common.Artifact, error) {
+	var (
+		id, name, filename, contentType, accessPolicy string
+		size                                          int64
+		agentsJSON, uploadedAt                        string
+	)
+	if err := r.Scan(&id, &name, &filename, &size, &contentType,
+		&accessPolicy, &agentsJSON, &uploadedAt); err != nil {
+		return nil, err
+	}
+	var agents []string
+	_ = json.Unmarshal([]byte(agentsJSON), &agents)
+	return &common.Artifact{
+		ID:            id,
+		Name:          name,
+		Filename:      filename,
+		Size:          size,
+		ContentType:   contentType,
+		AccessPolicy:  common.AccessPolicy(accessPolicy),
+		AllowedAgents: agents,
+		UploadedAt:    decodeTime(uploadedAt),
+	}, nil
 }
 
 // ── Secrets ───────────────────────────────────────────────────────────────────
 
 func (s *Store) SetSecret(name, value string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.secrets[name] = value
-	return s.save()
+	_, err := s.db.Exec(`INSERT INTO secrets (name, value) VALUES (?,?)
+		ON CONFLICT(name) DO UPDATE SET value=excluded.value`, name, value)
+	return err
 }
 
 func (s *Store) GetSecret(name string) (string, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	v, ok := s.secrets[name]
-	return v, ok
+	var value string
+	err := s.db.QueryRow(`SELECT value FROM secrets WHERE name = ?`, name).Scan(&value)
+	if err != nil {
+		return "", false
+	}
+	return value, true
 }
 
 func (s *Store) ListSecretNames() []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]string, 0, len(s.secrets))
-	for k := range s.secrets {
-		out = append(out, k)
+	rows, err := s.db.Query(`SELECT name FROM secrets ORDER BY name`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err == nil {
+			out = append(out, name)
+		}
 	}
 	return out
 }
 
 func (s *Store) DeleteSecret(name string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.secrets, name)
-	return s.save()
+	_, err := s.db.Exec(`DELETE FROM secrets WHERE name = ?`, name)
+	return err
 }
 
-// MergeSecrets bulk-imports secrets without overwriting existing entries.
+// MergeSecrets bulk-imports secrets, overwriting existing entries.
 // Used on startup to seed values from secrets.yml.
 func (s *Store) MergeSecrets(m map[string]string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for k, v := range m {
-		s.secrets[k] = v
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
 	}
-	return s.save()
+	defer func() { _ = tx.Rollback() }()
+	for k, v := range m {
+		if _, err := tx.Exec(`INSERT INTO secrets (name, value) VALUES (?,?)
+			ON CONFLICT(name) DO UPDATE SET value=excluded.value`, k, v); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // AllSecrets returns a copy of all secrets for injection into playbooks.
 func (s *Store) AllSecrets() map[string]string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	cp := make(map[string]string, len(s.secrets))
-	for k, v := range s.secrets {
-		cp[k] = v
+	rows, err := s.db.Query(`SELECT name, value FROM secrets`)
+	if err != nil {
+		return map[string]string{}
 	}
-	return cp
-}
-
-// ── Logs — per-deployment files ───────────────────────────────────────────────
-
-func (s *Store) logPath(deploymentID string) string {
-	return filepath.Join(s.logsDir, deploymentID+".json")
-}
-
-// logMutex returns (and lazily creates) the mutex for a specific deployment ID.
-func (s *Store) logMutex(deploymentID string) *sync.Mutex {
-	s.logMutexesMu.Lock()
-	defer s.logMutexesMu.Unlock()
-	if mu, ok := s.logMutexes[deploymentID]; ok {
-		return mu
+	defer rows.Close()
+	out := make(map[string]string)
+	for rows.Next() {
+		var name, value string
+		if err := rows.Scan(&name, &value); err == nil {
+			out[name] = value
+		}
 	}
-	mu := &sync.Mutex{}
-	s.logMutexes[deploymentID] = mu
-	return mu
+	return out
 }
 
-// AppendLogs appends log entries to their respective per-deployment log files.
-// Multiple deployments in a single batch are handled correctly.
+// ── Logs ──────────────────────────────────────────────────────────────────────
+
 func (s *Store) AppendLogs(entries []*common.LogEntry) error {
-	// Group by deployment ID.
-	byDep := make(map[string][]*common.LogEntry)
-	for _, e := range entries {
-		byDep[e.DeploymentID] = append(byDep[e.DeploymentID], e)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
 	}
-	for deploymentID, batch := range byDep {
-		if err := s.appendDeploymentLogs(deploymentID, batch); err != nil {
+	defer func() { _ = tx.Rollback() }()
+	stmt, err := tx.Prepare(`INSERT INTO logs (deployment_id, job_name, step_index, level, message, timestamp)
+		VALUES (?,?,?,?,?,?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, e := range entries {
+		if _, err := stmt.Exec(e.DeploymentID, e.JobName, e.StepIndex,
+			string(e.Level), e.Message, encodeTime(e.Timestamp)); err != nil {
 			return err
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
-func (s *Store) appendDeploymentLogs(deploymentID string, entries []*common.LogEntry) error {
-	mu := s.logMutex(deploymentID)
-	mu.Lock()
-	defer mu.Unlock()
-
-	path := s.logPath(deploymentID)
-	existing := s.readDeploymentLogsLocked(path)
-	existing = append(existing, entries...)
-	data, err := json.MarshalIndent(existing, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
-}
-
-// readDeploymentLogsLocked reads log entries from path. The caller must hold the
-// per-deployment log mutex.
-func (s *Store) readDeploymentLogsLocked(path string) []*common.LogEntry {
-	data, err := os.ReadFile(path)
+func (s *Store) GetLogsForDeployment(deploymentID string) []*common.LogEntry {
+	rows, err := s.db.Query(`
+		SELECT deployment_id, job_name, step_index, level, message, timestamp
+		FROM logs WHERE deployment_id = ? ORDER BY id ASC`, deploymentID)
 	if err != nil {
 		return nil
 	}
-	var out []*common.LogEntry
-	_ = json.Unmarshal(data, &out)
-	return out
+	defer rows.Close()
+	return scanLogs(rows)
 }
 
-// GetLogsForDeployment returns all log entries for a specific deployment.
-func (s *Store) GetLogsForDeployment(deploymentID string) []*common.LogEntry {
-	mu := s.logMutex(deploymentID)
-	mu.Lock()
-	defer mu.Unlock()
-	return s.readDeploymentLogsLocked(s.logPath(deploymentID))
-}
-
-// GetLogsForAgent returns all log entries for every deployment of an agent.
 func (s *Store) GetLogsForAgent(agentID string) []*common.LogEntry {
-	s.mu.RLock()
-	deploymentIDs := make([]string, 0)
-	for _, d := range s.deployments {
-		if d.AgentID == agentID {
-			deploymentIDs = append(deploymentIDs, d.ID)
+	rows, err := s.db.Query(`
+		SELECT l.deployment_id, l.job_name, l.step_index, l.level, l.message, l.timestamp
+		FROM logs l
+		JOIN deployments d ON l.deployment_id = d.id
+		WHERE d.agent_id = ?
+		ORDER BY l.id ASC`, agentID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	return scanLogs(rows)
+}
+
+func scanLogs(rows *sql.Rows) []*common.LogEntry {
+	var out []*common.LogEntry
+	for rows.Next() {
+		var deploymentID, jobName, level, message, timestamp string
+		var stepIndex int
+		if err := rows.Scan(&deploymentID, &jobName, &stepIndex, &level, &message, &timestamp); err == nil {
+			out = append(out, &common.LogEntry{
+				DeploymentID: deploymentID,
+				JobName:      jobName,
+				StepIndex:    stepIndex,
+				Level:        common.LogLevel(level),
+				Message:      message,
+				Timestamp:    decodeTime(timestamp),
+			})
 		}
 	}
-	s.mu.RUnlock()
-
-	var out []*common.LogEntry
-	for _, deploymentID := range deploymentIDs {
-		mu := s.logMutex(deploymentID)
-		mu.Lock()
-		out = append(out, s.readDeploymentLogsLocked(s.logPath(deploymentID))...)
-		mu.Unlock()
-	}
 	return out
 }
+

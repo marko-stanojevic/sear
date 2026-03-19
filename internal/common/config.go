@@ -73,10 +73,6 @@ type AgentConfig struct {
 	// RegistrationSecret must match one of the server's registration_secrets values.
 	RegistrationSecret string `yaml:"registration_secret"`
 
-	// Platform hint: linux | mac | windows | auto (default).
-	// When "auto", the agent detects the platform from the OS.
-	Platform string `yaml:"platform"`
-
 	// StateFile is where the agent persists its token and resume position
 	// so that deployment can be resumed after a reboot.
 	// Default: /var/lib/kompakt/state.json (Linux), C:\ProgramData\kompakt\state.json (Windows).
@@ -144,11 +140,5 @@ func (c *AgentConfig) Validate() error {
 	if strings.TrimSpace(c.RegistrationSecret) == "" {
 		return fmt.Errorf("registration_secret is required")
 	}
-	platform := strings.ToLower(strings.TrimSpace(c.Platform))
-	switch platform {
-	case "", "auto", "linux", "mac", "windows":
-		return nil
-	default:
-		return fmt.Errorf("platform must be one of auto, linux, mac, or windows")
-	}
+	return nil
 }

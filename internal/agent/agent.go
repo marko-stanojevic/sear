@@ -96,7 +96,7 @@ func (c *Agent) Run(ctx context.Context) error {
 // ── Registration ─────────────────────────────────────────────────────────────
 
 func (c *Agent) register(ctx context.Context) error {
-	pf := identity.Collect(c.cfg.Platform)
+	pf := identity.Collect()
 	req := common.RegistrationRequest{
 		Platform:           common.PlatformType(pf.Platform),
 		Hostname:           pf.Hostname,

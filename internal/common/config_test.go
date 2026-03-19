@@ -260,10 +260,7 @@ func TestLoadAgentConfig_MissingRequiredFields(t *testing.T) {
 			name:    "missing registration_secret",
 			content: "server_url: http://kompakt:8080\n",
 		},
-		{
-			name:    "invalid platform",
-			content: "server_url: http://kompakt:8080\nregistration_secret: abc\nplatform: foobar\n",
-		},
+
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

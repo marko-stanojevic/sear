@@ -11,7 +11,7 @@ func newTestAgent(serverURL string) *agent.Agent {
 	cfg := &common.AgentConfig{
 		ServerURL:          serverURL,
 		RegistrationSecret: "test-secret",
-		Platform:           "auto",
+
 	}
 	return agent.New(cfg)
 }
