@@ -433,7 +433,7 @@ func (c *Agent) runCommand(ctx context.Context, writer *WSOutboundWriter, cd *co
 		cmd = exec.CommandContext(ctx, "bash", "-c", cd.Command)
 	}
 	if tmpFile != "" {
-		defer os.Remove(tmpFile)
+		defer func() { _ = os.Remove(tmpFile) }()
 	}
 
 	if c.cfg.WorkDir != "" {
