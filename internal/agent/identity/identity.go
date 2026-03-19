@@ -5,7 +5,7 @@ package identity
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -267,7 +267,7 @@ func hardwareInfo() (vendor string, model string) {
 	if runtime.GOOS == "linux" && vendor == "" && model == "" {
 		if cv, cm := detectContainer(); cv != "" {
 			vendor, model = cv, cm
-			log.Printf("hardware: DMI unavailable, detected container runtime: %s", cv)
+			slog.Warn("DMI unavailable, detected container runtime", "runtime", cv)
 		}
 	}
 

@@ -3,7 +3,7 @@ package server
 
 import (
 	"bufio"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -12,8 +12,7 @@ import (
 )
 
 // NewServer wires all HTTP routes and returns a ready-to-use http.Handler.
-// When debug is false only WebSocket activity and HTTP errors (≥ 400) are logged.
-func NewServer(env *handlers.Handler, debug bool) http.Handler {
+func NewServer(env *handlers.Handler) http.Handler {
 	mux := http.NewServeMux()
 
 	// ── Public (no auth) ─────────────────────────────────────────────────────
@@ -74,7 +73,7 @@ func NewServer(env *handlers.Handler, debug bool) http.Handler {
 	mux.Handle("/ui/partials/playbooks", root(http.HandlerFunc(env.HandlePartialPlaybooks)))
 	mux.Handle("/ui/partials/vault", root(http.HandlerFunc(env.HandlePartialVault)))
 
-	return logging(mux, debug)
+	return logging(mux)
 }
 
 // dualAuth accepts requests authenticated with either an agent JWT Bearer
@@ -92,14 +91,23 @@ func dualAuth(env *handlers.Handler, next http.Handler) http.Handler {
 }
 
 // logging logs every request with method, path, status, and duration.
-// When debug is false only WebSocket upgrades and HTTP errors (≥ 400) are logged.
-func logging(next http.Handler, debug bool) http.Handler {
+// Errors (≥ 400) and WebSocket upgrades are logged at Warn/Info; everything
+// else at Debug so they are hidden unless --debug is passed.
+func logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		lrw := &loggingResponseWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(lrw, r)
-		if debug || lrw.status >= 400 || r.URL.Path == "/api/v1/ws" {
-			log.Printf("%s %s %d %s", r.Method, r.URL.Path, lrw.status, time.Since(start))
+		args := []any{"method", r.Method, "path", r.URL.Path, "status", lrw.status, "duration", time.Since(start)}
+		switch {
+		case lrw.status >= 500:
+			slog.Error("request", args...)
+		case lrw.status >= 400:
+			slog.Warn("request", args...)
+		case r.URL.Path == "/api/v1/ws":
+			slog.Info("request", args...)
+		default:
+			slog.Debug("request", args...)
 		}
 	})
 }

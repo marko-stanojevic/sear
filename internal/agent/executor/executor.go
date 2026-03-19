@@ -139,13 +139,13 @@ func runShell(ctx context.Context, step common.Step, secrets, stepEnv map[string
 				chunk := leftover + string(buf[:n])
 				lines := strings.Split(chunk, "\n")
 				for _, line := range lines[:len(lines)-1] {
-					log(common.LogLevelInfo, line)
+					log(common.LogLevelInfo, strings.TrimRight(line, "\r"))
 				}
 				leftover = lines[len(lines)-1]
 			}
 			if err != nil {
 				if leftover != "" {
-					log(common.LogLevelInfo, leftover)
+					log(common.LogLevelInfo, strings.TrimRight(leftover, "\r"))
 				}
 				break
 			}
