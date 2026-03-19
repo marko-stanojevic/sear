@@ -92,6 +92,6 @@ Artifacts use the `/artifacts` prefix (not `/api/v1`). Access is controlled per 
 
 ## Notes
 
-- All deployment logs are persisted in the daemon's logs directory, not in `state.json`.
+- All state (agents, deployments, playbooks, artifacts, secrets, logs) is persisted in a single SQLite database (`kompakt.db`) in the server's data directory.
 - Agents resume deployments automatically after reboot or crash using the stored `resume_step_index`.
 - Secrets are injected into playbook steps via `${{ secrets.NAME }}` at execution time.

@@ -18,7 +18,7 @@ go test ./... -v -count=1
 go test ./... -race -count=1
 
 # Run a single package's tests
-go test ./internal/daemon/handlers/... -v -count=1
+go test ./internal/server/handlers/... -v -count=1
 
 # Lint (requires golangci-lint)
 golangci-lint run ./...
@@ -41,7 +41,7 @@ go run ./cmd/kompakt-agent -config examples/client.config.yml
 
 The project is a two-binary deployment automation system:
 
-- **`cmd/kompakt`** — the central server/daemon. Exposes an HTTP API and web UI. Manages clients, playbooks, deployments, artifacts, and secrets via a JSON-file-backed store (`internal/daemon/store`).
+- **`cmd/kompakt`** — the central server/daemon. Exposes an HTTP API and web UI. Manages agents, playbooks, deployments, artifacts, and secrets via a SQLite-backed store (`internal/server/store`).
 - **`cmd/kompakt-agent`** — the edge execution agent. Registers with the daemon, receives playbooks over WebSocket, executes them step-by-step, and streams logs back.
 
 ### Key packages
@@ -49,13 +49,13 @@ The project is a two-binary deployment automation system:
 | Package | Role |
 | --- | --- |
 | `internal/common` | Shared types, config loading, playbook model, secret resolution |
-| `internal/daemon` | HTTP server wiring, route definitions |
-| `internal/daemon/handlers` | All HTTP/WebSocket handlers; auth middleware (JWT for agents, HTTP Basic for root) |
-| `internal/daemon/service` | Business logic (deployment dispatch, hub management) |
-| `internal/daemon/store` | JSON-file persistence for all daemon state |
-| `internal/client` | Agent run loop: registration, WebSocket connect/reconnect, playbook execution |
-| `internal/client/executor` | Step execution engine (shell, reboot, download/upload artifact) |
-| `internal/client/identity` | Hardware/platform identifier collection for registration |
+| `internal/server` | HTTP server wiring, route definitions |
+| `internal/server/handlers` | All HTTP/WebSocket handlers; auth middleware (JWT for agents, HTTP Basic for root) |
+| `internal/server/service` | Business logic (deployment dispatch, hub management) |
+| `internal/server/store` | SQLite persistence for all server state (`kompakt.db`) |
+| `internal/agent` | Agent run loop: registration, WebSocket connect/reconnect, playbook execution |
+| `internal/agent/executor` | Step execution engine (shell, reboot, download/upload artifact) |
+| `internal/agent/identity` | Hardware/platform identifier collection for registration |
 
 ### Auth model
 
@@ -69,7 +69,7 @@ Playbooks are YAML with ordered `jobs` (list), each containing `steps`. Steps us
 ### Configuration
 
 - Daemon: `config.yml` (paths, TLS, JWT) + `secrets.yml` (root password, registration secrets, client secrets)
-- Agent: `client.config.yml` (server URL, registration secret, platform hint, state file path)
+- Agent: `client.config.yml` (server URL, registration secret, state file path); platform is detected automatically from the OS
 - Both configs are optional on first run — the daemon auto-generates missing credentials and prints them.
 
 ## Module path
