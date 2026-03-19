@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 	"github.com/marko-stanojevic/kompakt/internal/server/handlers"
 	"github.com/marko-stanojevic/kompakt/internal/server/service"
@@ -1237,5 +1238,147 @@ func TestPlaybookJobOrderPreserved(t *testing.T) {
 	}
 	if flat[1].JobName != "aaa-first" {
 		t.Errorf("second job = %q; want aaa-first", flat[1].JobName)
+	}
+}
+
+// ── UI pages ─────────────────────────────────────────────────────────────────
+
+func TestHandleHomeUI(t *testing.T) {
+	env := newTestEnv(t)
+	rr := getRequest(t, env.HandleHomeUI, "/ui", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d; want 200", rr.Code)
+	}
+	if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Fatalf("Content-Type = %q; expected text/html", ct)
+	}
+}
+
+func TestHandleArtifactsUI(t *testing.T) {
+	env := newTestEnv(t)
+	rr := getRequest(t, env.HandleArtifactsUI, "/ui/artifacts", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d; want 200", rr.Code)
+	}
+}
+
+// ── UI partials ───────────────────────────────────────────────────────────────
+
+func TestHandlePartials_AllReturn200(t *testing.T) {
+	env := newTestEnv(t)
+
+	// Populate some data so partial templates have something to render.
+	now := time.Now()
+	_ = env.Store.SaveAgent(&common.Agent{
+		ID: "a1", Hostname: "host-1", Platform: common.PlatformLinux,
+		Status: common.AgentStatusConnected, RegisteredAt: now, LastActivityAt: now,
+	})
+	_ = env.Store.SaveDeployment(&common.DeploymentState{
+		ID: "dep-partial-1", AgentID: "a1", PlaybookID: "pb-partial-1",
+		Status: common.DeploymentStatusRunning, StartedAt: now, UpdatedAt: now,
+	})
+	_ = env.Store.SavePlaybook(&store.PlaybookRecord{
+		ID: "pb-partial-1", Name: "my-pb",
+		Playbook:  &common.Playbook{Name: "my-pb", Jobs: []common.Job{{Name: "j1", Steps: []common.Step{{Run: "echo hi"}}}}},
+		CreatedAt: now, UpdatedAt: now,
+	})
+	_ = env.Store.SetSecret("MY_KEY", "value")
+
+	tests := []struct {
+		name    string
+		path    string
+		handler http.HandlerFunc
+	}{
+		{"home-stats", "/ui/partials/home-stats", env.HandlePartialHomeStats},
+		{"agents", "/ui/partials/agents", env.HandlePartialAgents},
+		{"artifacts", "/ui/partials/artifacts", env.HandlePartialArtifacts},
+		{"deployments", "/ui/partials/deployments", env.HandlePartialDeployments},
+		{"playbooks", "/ui/partials/playbooks", env.HandlePartialPlaybooks},
+		{"vault", "/ui/partials/vault", env.HandlePartialVault},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := getRequest(t, tt.handler, tt.path, "")
+			if rr.Code != http.StatusOK {
+				t.Fatalf("%s: status = %d; want 200 (body: %.200s)", tt.name, rr.Code, rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestHandlePartialDeploymentLogs(t *testing.T) {
+	env := newTestEnv(t)
+	now := time.Now()
+	_ = env.Store.SaveDeployment(&common.DeploymentState{
+		ID: "dep-logs-1", AgentID: "a1",
+		Status: common.DeploymentStatusRunning, StartedAt: now, UpdatedAt: now,
+	})
+	_ = env.Store.AppendLogs([]*common.LogEntry{
+		{DeploymentID: "dep-logs-1", Level: common.LogLevelInfo, Message: "hello", Timestamp: now},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/partials/deployments/dep-logs-1/logs", nil)
+	req.URL.Path = "/ui/partials/deployments/dep-logs-1/logs"
+	rr := httptest.NewRecorder()
+	env.HandlePartialDeploymentLogs(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d; want 200 (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+// ── GenerateSecret ────────────────────────────────────────────────────────────
+
+func TestGenerateSecret(t *testing.T) {
+	s, err := handlers.GenerateSecret(16)
+	if err != nil {
+		t.Fatalf("GenerateSecret: %v", err)
+	}
+	// 16 bytes → 32 hex chars.
+	if len(s) != 32 {
+		t.Errorf("len = %d; want 32", len(s))
+	}
+	// Two calls must not be equal.
+	s2, _ := handlers.GenerateSecret(16)
+	if s == s2 {
+		t.Error("GenerateSecret should not produce duplicate values")
+	}
+}
+
+// ── HandleAgentRegister: invalid platform ─────────────────────────────────────
+
+func TestHandleRegister_InvalidPlatform(t *testing.T) {
+	env := newTestEnv(t)
+	rr := postJSON(t, env.HandleAgentRegister, "/api/v1/register", common.RegistrationRequest{
+		Hostname:           "edge-bad",
+		Platform:           "xbox",
+		RegistrationSecret: "reg-secret-1",
+	}, "")
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d; want 400 (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+// ── HandleAgentWS: agent not found ───────────────────────────────────────────
+
+func TestHandleWS_AgentNotFound(t *testing.T) {
+	env := newTestEnv(t)
+
+	// Sign a JWT for an agent ID that does not exist in the store.
+	claims := jwt.RegisteredClaims{
+		Subject:   "ghost-agent-id",
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+	}
+	tok, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(env.AgentJWTSecret)
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/ws?token="+tok, nil)
+	rr := httptest.NewRecorder()
+	env.HandleAgentWS(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d; want 404", rr.Code)
 	}
 }

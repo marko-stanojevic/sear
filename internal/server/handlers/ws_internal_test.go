@@ -119,6 +119,82 @@ func TestHandleWSMessage_LogAndLifecycleUpdates(t *testing.T) {
 	}
 }
 
+func TestHandleWSMessage_StepFailed(t *testing.T) {
+	e := newConnectTestEnv(t)
+	saveAgent(t, e, "c-fail")
+	saveDeployment(t, e, "dep-fail", "c-fail", common.DeploymentStatusRunning)
+
+	// With an explicit step name.
+	sendWS(t, e, "c-fail", common.WSMsgStepFailed, common.WSStepData{
+		DeploymentID: "dep-fail",
+		JobName:      "job1",
+		StepName:     "install",
+		StepIndex:    1,
+		Error:        "exit status 1",
+	})
+	dep, _ := e.Store.GetDeployment("dep-fail")
+	if dep.Status != common.DeploymentStatusFailed {
+		t.Fatalf("status = %q; want failed", dep.Status)
+	}
+	if dep.ErrorDetail != "exit status 1" {
+		t.Fatalf("error_detail = %q; want 'exit status 1'", dep.ErrorDetail)
+	}
+}
+
+func TestHandleWSMessage_StepFailedEmptyName(t *testing.T) {
+	e := newConnectTestEnv(t)
+	saveAgent(t, e, "c-fail2")
+	saveDeployment(t, e, "dep-fail2", "c-fail2", common.DeploymentStatusRunning)
+
+	// Empty StepName should fall back to "step-N" without panicking.
+	sendWS(t, e, "c-fail2", common.WSMsgStepFailed, common.WSStepData{
+		DeploymentID: "dep-fail2",
+		JobName:      "job1",
+		StepIndex:    3,
+		Error:        "boom",
+	})
+	dep, _ := e.Store.GetDeployment("dep-fail2")
+	if dep.Status != common.DeploymentStatusFailed {
+		t.Fatalf("status = %q; want failed", dep.Status)
+	}
+}
+
+func TestHandleWSMessage_LogLevelVariants(t *testing.T) {
+	e := newConnectTestEnv(t)
+	saveAgent(t, e, "c-log")
+	saveDeployment(t, e, "dep-log", "c-log", common.DeploymentStatusRunning)
+
+	for _, level := range []common.LogLevel{common.LogLevelWarn, common.LogLevelError} {
+		sendWS(t, e, "c-log", common.WSMsgLog, common.WSLogData{
+			DeploymentID: "dep-log",
+			JobName:      "job1",
+			Level:        level,
+			Message:      "msg-" + string(level),
+		})
+	}
+	logs := e.Store.GetLogsForDeployment("dep-log")
+	if len(logs) != 2 {
+		t.Fatalf("logs len = %d; want 2", len(logs))
+	}
+}
+
+func TestHandleWSMessage_StepStartEmptyName(t *testing.T) {
+	e := newConnectTestEnv(t)
+	saveAgent(t, e, "c-start-empty")
+	saveDeployment(t, e, "dep-start-empty", "c-start-empty", common.DeploymentStatusPending)
+
+	sendWS(t, e, "c-start-empty", common.WSMsgStepStart, common.WSStepData{
+		DeploymentID: "dep-start-empty",
+		JobName:      "job1",
+		StepIndex:    0,
+		// StepName intentionally left empty to exercise the fallback.
+	})
+	dep, _ := e.Store.GetDeployment("dep-start-empty")
+	if dep.Status != common.DeploymentStatusRunning {
+		t.Fatalf("status = %q; want running", dep.Status)
+	}
+}
+
 func TestHandleWSMessage_UnknownType(t *testing.T) {
 	e := newConnectTestEnv(t)
 	saveAgent(t, e,"c-unknown")
