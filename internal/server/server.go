@@ -91,8 +91,7 @@ func dualAuth(env *handlers.Handler, next http.Handler) http.Handler {
 }
 
 // logging logs every request with method, path, status, and duration.
-// Errors (≥ 400) and WebSocket upgrades are logged at Warn/Info; everything
-// else at Debug so they are hidden unless --debug is passed.
+// 5xx → Error, 4xx → Warn, WS → Info, everything else → Debug.
 func logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

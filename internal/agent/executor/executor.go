@@ -10,11 +10,27 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
+
+// ansiEscape matches ANSI/VT100 escape sequences (colours, cursor movement, etc.).
+var ansiEscape = regexp.MustCompile(`\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])`)
+
+// sanitizeLine strips ANSI escape sequences and ASCII control characters from
+// shell output so they cannot corrupt the terminal cursor position in the log.
+func sanitizeLine(s string) string {
+	s = ansiEscape.ReplaceAllString(s, "")
+	return strings.Map(func(r rune) rune {
+		if (r < 0x20 && r != '\t') || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
+}
 
 // Logger is a function the executor calls to emit log lines.
 type Logger func(level common.LogLevel, msg string)
@@ -139,13 +155,13 @@ func runShell(ctx context.Context, step common.Step, secrets, stepEnv map[string
 				chunk := leftover + string(buf[:n])
 				lines := strings.Split(chunk, "\n")
 				for _, line := range lines[:len(lines)-1] {
-					log(common.LogLevelInfo, strings.TrimRight(line, "\r"))
+					log(common.LogLevelInfo, sanitizeLine(line))
 				}
 				leftover = lines[len(lines)-1]
 			}
 			if err != nil {
 				if leftover != "" {
-					log(common.LogLevelInfo, strings.TrimRight(leftover, "\r"))
+					log(common.LogLevelInfo, sanitizeLine(leftover))
 				}
 				break
 			}

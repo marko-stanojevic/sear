@@ -45,6 +45,7 @@ func (e *Handler) HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 	agent.IPAddress = requestIP(r)
 	agent.LastActivityAt = time.Now()
 	_ = e.Store.SaveAgent(agent)
+	slog.Info("agent connected", "agent_id", agentID, "hostname", agent.Hostname, "ip", agent.IPAddress)
 
 	defer func() {
 		e.Hub.unregister(agentID)
@@ -55,6 +56,7 @@ func (e *Handler) HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 			_ = e.Store.SaveAgent(a)
 		}
 		_ = ws.Close()
+		slog.Info("agent disconnected", "agent_id", agentID)
 	}()
 
 	// Push playbook immediately if one is assigned.
@@ -128,6 +130,14 @@ func (e *Handler) handleWSMessage(agentID string, data []byte) {
 			Timestamp:    time.Now(),
 		}
 		_ = e.Store.AppendLogs([]*common.LogEntry{entry})
+		switch d.Level {
+		case common.LogLevelError:
+			slog.Error(d.Message, "agent_id", agentID, "deployment_id", d.DeploymentID, "job", d.JobName)
+		case common.LogLevelWarn:
+			slog.Warn(d.Message, "agent_id", agentID, "deployment_id", d.DeploymentID, "job", d.JobName)
+		default:
+			slog.Debug(d.Message, "agent_id", agentID, "deployment_id", d.DeploymentID, "job", d.JobName)
+		}
 
 	case common.WSMsgStepStart:
 		var d common.WSStepData
@@ -143,6 +153,7 @@ func (e *Handler) handleWSMessage(agentID string, data []byte) {
 			e.Service.AppendDeploymentLog(d.DeploymentID, d.JobName, d.StepIndex, common.LogLevelInfo,
 				fmt.Sprintf("[%s / %s] starting", d.JobName, stepName))
 		}
+		slog.Info("step starting", "agent_id", agentID, "deployment_id", d.DeploymentID, "job", d.JobName, "step", stepName)
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.Status = common.DeploymentStatusRunning
 			dep.ResumeStepIndex = d.StepIndex
@@ -162,6 +173,7 @@ func (e *Handler) handleWSMessage(agentID string, data []byte) {
 			e.Service.AppendDeploymentLog(d.DeploymentID, d.JobName, d.StepIndex, common.LogLevelInfo,
 				fmt.Sprintf("[%s / %s] completed", d.JobName, stepName))
 		}
+		slog.Info("step completed", "agent_id", agentID, "deployment_id", d.DeploymentID, "job", d.JobName, "step", stepName)
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.ResumeStepIndex = d.StepIndex + 1
 		})
@@ -172,6 +184,11 @@ func (e *Handler) handleWSMessage(agentID string, data []byte) {
 			slog.Error("failed to parse step-failed message", "agent_id", agentID, "err", err)
 			return
 		}
+		stepName := d.StepName
+		if stepName == "" {
+			stepName = fmt.Sprintf("step-%d", d.StepIndex)
+		}
+		slog.Error("step failed", "agent_id", agentID, "deployment_id", d.DeploymentID, "job", d.JobName, "step", stepName, "error", d.Error)
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.Status = common.DeploymentStatusFailed
 			dep.ErrorDetail = d.Error
@@ -183,6 +200,7 @@ func (e *Handler) handleWSMessage(agentID string, data []byte) {
 			slog.Error("failed to parse reboot message", "agent_id", agentID, "err", err)
 			return
 		}
+		slog.Info("agent rebooting", "agent_id", agentID, "deployment_id", d.DeploymentID, "resume_step", d.ResumeStepIndex)
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.Status = common.DeploymentStatusRebooting
 			dep.ResumeStepIndex = d.ResumeStepIndex
@@ -194,11 +212,13 @@ func (e *Handler) handleWSMessage(agentID string, data []byte) {
 			slog.Error("failed to parse deploy-done message", "agent_id", agentID, "err", err)
 			return
 		}
+		playbookName := ""
 		if e.Service != nil {
-			playbookName := e.Service.ResolvePlaybookNameByDeployment(d.DeploymentID)
+			playbookName = e.Service.ResolvePlaybookNameByDeployment(d.DeploymentID)
 			e.Service.AppendDeploymentLog(d.DeploymentID, "", 0, common.LogLevelInfo,
 				fmt.Sprintf("playbook %q completed successfully", playbookName))
 		}
+		slog.Info("playbook completed", "agent_id", agentID, "deployment_id", d.DeploymentID, "playbook", playbookName)
 		now := time.Now()
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.Status = common.DeploymentStatusDone
@@ -226,6 +246,7 @@ func (e *Handler) handleWSMessage(agentID string, data []byte) {
 		if e.Service != nil {
 			e.Service.AppendDeploymentLog(d.DeploymentID, d.JobName, d.StepIndex, common.LogLevelError, msg)
 		}
+		slog.Error("playbook failed", "agent_id", agentID, "deployment_id", d.DeploymentID, "playbook", playbookName, "error", d.Error)
 		now := time.Now()
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
 			dep.Status = common.DeploymentStatusFailed
