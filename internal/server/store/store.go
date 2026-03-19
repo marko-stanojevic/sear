@@ -115,6 +115,12 @@ func New(dir string, _ string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("applying schema: %w", err)
 	}
+	// Additive migrations: ignore errors when column already exists.
+	for _, m := range []string{
+		`ALTER TABLE agents ADD COLUMN shells_json TEXT NOT NULL DEFAULT '[]'`,
+	} {
+		_, _ = db.Exec(m)
+	}
 	return &Store{db: db}, nil
 }
 
@@ -156,17 +162,22 @@ func (s *Store) SaveAgent(a *common.Agent) error {
 	if err != nil {
 		return fmt.Errorf("marshalling agent metadata: %w", err)
 	}
+	shells, err := json.Marshal(a.Shells)
+	if err != nil {
+		return fmt.Errorf("marshalling agent shells: %w", err)
+	}
 	_, err = s.db.Exec(`
 		INSERT INTO agents (id, hostname, platform, os, model, vendor, ip_address,
-		                    metadata_json, status, playbook_id, registered_at, last_activity_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+		                    metadata_json, shells_json, status, playbook_id, registered_at, last_activity_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET
 		    hostname=excluded.hostname, platform=excluded.platform, os=excluded.os,
 		    model=excluded.model, vendor=excluded.vendor, ip_address=excluded.ip_address,
-		    metadata_json=excluded.metadata_json, status=excluded.status,
-		    playbook_id=excluded.playbook_id, last_activity_at=excluded.last_activity_at`,
+		    metadata_json=excluded.metadata_json, shells_json=excluded.shells_json,
+		    status=excluded.status, playbook_id=excluded.playbook_id,
+		    last_activity_at=excluded.last_activity_at`,
 		a.ID, a.Hostname, string(a.Platform), a.OS, a.Model, a.Vendor, a.IPAddress,
-		string(meta), string(a.Status), a.PlaybookID,
+		string(meta), string(shells), string(a.Status), a.PlaybookID,
 		encodeTime(a.RegisteredAt), encodeTime(a.LastActivityAt),
 	)
 	return err
@@ -175,7 +186,7 @@ func (s *Store) SaveAgent(a *common.Agent) error {
 func (s *Store) GetAgent(id string) (*common.Agent, bool) {
 	row := s.db.QueryRow(`
 		SELECT id, hostname, platform, os, model, vendor, ip_address,
-		       metadata_json, status, playbook_id, registered_at, last_activity_at
+		       metadata_json, shells_json, status, playbook_id, registered_at, last_activity_at
 		FROM agents WHERE id = ?`, id)
 	a, err := scanAgent(row)
 	if err != nil {
@@ -187,7 +198,7 @@ func (s *Store) GetAgent(id string) (*common.Agent, bool) {
 func (s *Store) ListAgents() []*common.Agent {
 	rows, err := s.db.Query(`
 		SELECT id, hostname, platform, os, model, vendor, ip_address,
-		       metadata_json, status, playbook_id, registered_at, last_activity_at
+		       metadata_json, shells_json, status, playbook_id, registered_at, last_activity_at
 		FROM agents
 		ORDER BY
 		    CASE WHEN TRIM(hostname) = '' THEN 1 ELSE 0 END ASC,
@@ -220,15 +231,17 @@ type scanner interface {
 func scanAgent(r scanner) (*common.Agent, error) {
 	var (
 		id, hostname, platform, os_, model, vendor, ipAddress string
-		metaJSON, status, playbookID                          string
+		metaJSON, shellsJSON, status, playbookID              string
 		registeredAt, lastActivityAt                          string
 	)
 	if err := r.Scan(&id, &hostname, &platform, &os_, &model, &vendor, &ipAddress,
-		&metaJSON, &status, &playbookID, &registeredAt, &lastActivityAt); err != nil {
+		&metaJSON, &shellsJSON, &status, &playbookID, &registeredAt, &lastActivityAt); err != nil {
 		return nil, err
 	}
 	var meta map[string]string
 	_ = json.Unmarshal([]byte(metaJSON), &meta)
+	var shells []string
+	_ = json.Unmarshal([]byte(shellsJSON), &shells)
 	return &common.Agent{
 		ID:             id,
 		Hostname:       hostname,
@@ -238,6 +251,7 @@ func scanAgent(r scanner) (*common.Agent, error) {
 		Vendor:         vendor,
 		IPAddress:      ipAddress,
 		Metadata:       meta,
+		Shells:         shells,
 		Status:         common.AgentStatus(status),
 		PlaybookID:     playbookID,
 		RegisteredAt:   decodeTime(registeredAt),

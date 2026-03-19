@@ -33,6 +33,7 @@
     <div class="card-top-right"><div class="card-menu">
       <button class="menu-btn" title="Actions">⋮</button>
       <div class="menu-dropdown">
+        <button class="menu-item" onclick="if(typeof showCommand==='function')showCommand('{{.ID}}','{{or .Hostname .ID}}','{{shellsList .Shells}}')"><i class="m-icon" data-lucide="terminal"></i> Run Command</button>
         <button class="menu-item" onclick="removeAgent('{{.ID}}','{{or .Hostname .ID}}')"><i class="m-icon" data-lucide="trash-2"></i> Remove Agent</button>
       </div>
     </div></div>

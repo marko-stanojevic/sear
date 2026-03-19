@@ -136,6 +136,7 @@ type RegistrationRequest struct {
 	Vendor             string            `json:"vendor,omitempty"`
 	RegistrationSecret string            `json:"registration_secret"`
 	Metadata           map[string]string `json:"metadata,omitempty"`
+	Shells             []string          `json:"shells,omitempty"` // available shell interpreters
 }
 
 // RegistrationResponse is returned to a successfully registered agent.
@@ -166,6 +167,7 @@ type Agent struct {
 	Vendor         string            `json:"vendor,omitempty"`
 	IPAddress      string            `json:"ip_address,omitempty"`
 	Metadata       map[string]string `json:"metadata,omitempty"`
+	Shells         []string          `json:"shells,omitempty"` // available shell interpreters reported at registration
 	Status         AgentStatus       `json:"status"`
 	PlaybookID     string            `json:"playbook_id,omitempty"`
 	RegisteredAt   time.Time         `json:"registered_at"`
@@ -258,18 +260,21 @@ type WSMessageType string
 
 const (
 	// Server → Client
-	WSMsgPlaybook WSMessageType = "playbook" // push deployment instructions
-	WSMsgPing     WSMessageType = "ping"
+	WSMsgPlaybook   WSMessageType = "playbook"    // push deployment instructions
+	WSMsgPing       WSMessageType = "ping"
+	WSMsgCommand  WSMessageType = "command"  // request ad-hoc command execution
 
 	// Agent → Server
-	WSMsgLog          WSMessageType = "log"           // stream a log line
-	WSMsgStepStart    WSMessageType = "step_start"    // step beginning
-	WSMsgStepComplete WSMessageType = "step_complete" // step succeeded
-	WSMsgStepFailed   WSMessageType = "step_failed"   // step error
-	WSMsgReboot       WSMessageType = "reboot"        // agent about to reboot
-	WSMsgDeployDone   WSMessageType = "deploy_done"   // all steps complete
-	WSMsgDeployFailed WSMessageType = "deploy_failed" // fatal deployment error
-	WSMsgPong         WSMessageType = "pong"
+	WSMsgLog           WSMessageType = "log"            // stream a log line
+	WSMsgStepStart     WSMessageType = "step_start"     // step beginning
+	WSMsgStepComplete  WSMessageType = "step_complete"  // step succeeded
+	WSMsgStepFailed    WSMessageType = "step_failed"    // step error
+	WSMsgReboot        WSMessageType = "reboot"         // agent about to reboot
+	WSMsgDeployDone    WSMessageType = "deploy_done"    // all steps complete
+	WSMsgDeployFailed  WSMessageType = "deploy_failed"  // fatal deployment error
+	WSMsgCommandStream    WSMessageType = "command_stream"    // chunk of command output
+	WSMsgCommandCompleted WSMessageType = "command_completed" // command finished
+	WSMsgPong          WSMessageType = "pong"
 )
 
 // WSMessage is the JSON envelope for every WebSocket message.
@@ -311,4 +316,26 @@ type WSRebootData struct {
 	DeploymentID    string `json:"deployment_id"`
 	ResumeStepIndex int    `json:"resume_step_index"`
 	Reason          string `json:"reason"`
+}
+
+// WSCommandData is the payload of a WSMsgCommand message (server → agent).
+type WSCommandData struct {
+	CmdID   string `json:"cmd_id"`
+	Command string `json:"command"`
+	// Shell selects the interpreter: bash, sh, pwsh, cmd.
+	// If empty the agent uses the platform default (bash on Linux, cmd on Windows).
+	Shell string `json:"shell,omitempty"`
+}
+
+// WSCommandChunk is the payload of a WSMsgCommandStream message (agent → server).
+type WSCommandChunk struct {
+	CmdID  string `json:"cmd_id"`
+	Output string `json:"output"`
+}
+
+// WSCommandStatus is the payload of a WSMsgCommandCompleted message (agent → server).
+type WSCommandStatus struct {
+	CmdID    string `json:"cmd_id"`
+	ExitCode int    `json:"exit_code"`
+	Error    string `json:"error,omitempty"`
 }

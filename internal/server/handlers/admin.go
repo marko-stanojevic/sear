@@ -220,7 +220,17 @@ func (e *Handler) assignPlaybook(w http.ResponseWriter, r *http.Request, playboo
 func (e *Handler) HandleRootAgents(w http.ResponseWriter, r *http.Request) {
 	tail := strings.TrimPrefix(r.URL.Path, "/api/v1/agents")
 	tail = strings.TrimPrefix(tail, "/")
-	id := tail
+	parts := strings.SplitN(tail, "/", 2)
+	id := parts[0]
+	sub := ""
+	if len(parts) == 2 {
+		sub = parts[1]
+	}
+
+	if strings.HasPrefix(sub, "command") {
+		e.HandleCommand(w, r, id, strings.TrimPrefix(sub, "command"))
+		return
+	}
 
 	switch r.Method {
 	case http.MethodGet:
