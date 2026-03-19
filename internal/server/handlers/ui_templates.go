@@ -370,7 +370,7 @@ func (e *Handler) HandlePartialArtifacts(w http.ResponseWriter, r *http.Request)
 	var filtered []*common.Artifact
 	for _, a := range all {
 		if q != "" {
-			hay := strings.ToLower(a.ID + " " + a.Name + " " + a.Filename)
+			hay := strings.ToLower(a.ID + " " + a.Name + " " + a.FileName)
 			if !strings.Contains(hay, q) {
 				continue
 			}

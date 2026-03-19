@@ -463,7 +463,7 @@ func (s *Store) SaveArtifact(a *common.Artifact) error {
 		    name=excluded.name, filename=excluded.filename, size=excluded.size,
 		    content_type=excluded.content_type, access_policy=excluded.access_policy,
 		    allowed_agents_json=excluded.allowed_agents_json`,
-		a.ID, a.Name, a.Filename, a.Size, a.ContentType,
+		a.ID, a.Name, a.FileName, a.Size, a.ContentType,
 		string(a.AccessPolicy), string(agentsJSON), encodeTime(a.UploadedAt),
 	)
 	return err
@@ -529,7 +529,7 @@ func scanArtifact(r scanner) (*common.Artifact, error) {
 	return &common.Artifact{
 		ID:            id,
 		Name:          name,
-		Filename:      filename,
+		FileName:      filename,
 		Size:          size,
 		ContentType:   contentType,
 		AccessPolicy:  common.AccessPolicy(accessPolicy),

@@ -235,7 +235,7 @@ func TestArtifactCRUD(t *testing.T) {
 	a := &common.Artifact{
 		ID:         "art-1",
 		Name:       "myapp",
-		Filename:   "myapp.tar.gz",
+		FileName:   "myapp.tar.gz",
 		Size:       1024,
 		UploadedAt: time.Now(),
 	}
@@ -247,8 +247,8 @@ func TestArtifactCRUD(t *testing.T) {
 	if !ok {
 		t.Fatal("GetArtifact: not found")
 	}
-	if got.Filename != "myapp.tar.gz" {
-		t.Errorf("Filename = %q; want myapp.tar.gz", got.Filename)
+	if got.FileName != "myapp.tar.gz" {
+		t.Errorf("FileName = %q; want myapp.tar.gz", got.FileName)
 	}
 
 	byName, ok := s.GetArtifactByName("myapp")
