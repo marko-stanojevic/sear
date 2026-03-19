@@ -13,7 +13,7 @@ jobs:
       contents: write # Needed to delete releases and tags
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Delete old releases
         env:
