@@ -4,7 +4,8 @@
       "Bash(grep -n \"^func\\\\|^type\\\\|^const\" /c/git/kompakt/internal/daemon/service/*.go)",
       "Bash(wc -l /c/git/kompakt/internal/daemon/handlers/*.go)",
       "Bash(grep -r \"\"\"clients\"\"\\\\|clients\\\\.html\\\\|clients-table\\\\|partials/clients\" internal/ --include=\"*.go\")",
-      "Bash(go get:*)"
+      "Bash(go get:*)",
+      "Bash(wc -l /c/git/kompakt/internal/server/handlers/*.go)"
     ]
   }
 }

@@ -76,9 +76,22 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run integration tests
+        uses: ./.github/actions/go-integration-test
+
   build:
     name: Build
-    needs: [lint, test]
+    needs: [lint, test, integration-test]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -90,7 +90,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		filePath := filepath.Join(e.ArtifactsDir, a.ID, a.Filename)
+		filePath := filepath.Join(e.ArtifactsDir, a.ID, a.FileName)
 		f, err := os.Open(filePath)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "artifact file missing on server")
@@ -102,8 +102,8 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 			ct = "application/octet-stream"
 		}
 		w.Header().Set("Content-Type", ct)
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, a.Filename))
-		http.ServeContent(w, r, a.Filename, time.Now(), f)
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, a.FileName))
+		http.ServeContent(w, r, a.FileName, time.Now(), f)
 
 	case http.MethodPost:
 		// Upload requires authentication (root or any client)
@@ -154,7 +154,7 @@ func (e *Handler) HandleArtifacts(w http.ResponseWriter, r *http.Request) {
 		art := &common.Artifact{
 			ID:             artID,
 			Name:           name,
-			Filename:       filename,
+			FileName:       filename,
 			Size:           size,
 			ContentType:    ct,
 			AccessPolicy:   common.AccessPolicy(r.URL.Query().Get("access_policy")),

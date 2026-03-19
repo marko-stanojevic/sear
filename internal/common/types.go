@@ -234,7 +234,7 @@ type LogBatch struct {
 type Artifact struct {
 	ID             string       `json:"id"`
 	Name           string       `json:"name"`
-	Filename       string       `json:"filename"`
+	FileName       string       `json:"filename"`
 	Size           int64        `json:"size"`
 	ContentType    string       `json:"content_type"`
 	AccessPolicy  AccessPolicy `json:"access_policy"`

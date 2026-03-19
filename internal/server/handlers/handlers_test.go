@@ -1013,7 +1013,7 @@ func TestHandleArtifacts_ErrorPaths(t *testing.T) {
 	})
 
 	t.Run("download missing file on disk", func(t *testing.T) {
-		art := &common.Artifact{ID: "art-missing-file", Name: "ghost", Filename: "ghost.bin"}
+		art := &common.Artifact{ID: "art-missing-file", Name: "ghost", FileName: "ghost.bin"}
 		if err := env.Store.SaveArtifact(art); err != nil {
 			t.Fatalf("SaveArtifact: %v", err)
 		}
