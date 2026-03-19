@@ -196,7 +196,7 @@ func (s *Store) ListAgents() []*common.Agent {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*common.Agent
 	for rows.Next() {
 		a, err := scanAgent(rows)
@@ -310,7 +310,7 @@ func (s *Store) ListDeployments() []*common.DeploymentState {
 			out = append(out, d)
 		}
 	}
-	rows.Close()
+	_ = rows.Close()
 	for _, d := range out {
 		s.enrichDeployment(d)
 	}
@@ -415,7 +415,7 @@ func (s *Store) ListPlaybooks() []*PlaybookRecord {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*PlaybookRecord
 	for rows.Next() {
 		p, err := scanPlaybook(rows)
@@ -623,7 +623,7 @@ func (s *Store) AppendLogs(entries []*common.LogEntry) error {
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 	for _, e := range entries {
 		if _, err := stmt.Exec(e.DeploymentID, e.JobName, e.StepIndex,
 			string(e.Level), e.Message, encodeTime(e.Timestamp)); err != nil {
