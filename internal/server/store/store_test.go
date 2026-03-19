@@ -1,8 +1,6 @@
 package store_test
 
 import (
-	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +14,7 @@ func newTestStore(t *testing.T) *store.Store {
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 
@@ -386,12 +385,14 @@ func TestPersistence_ReopenPreservesAgentAndSecret(t *testing.T) {
 		Status:   common.AgentStatusRegistered,
 	})
 	_ = s1.SetSecret("K", "V")
+	_ = s1.Close()
 
 	// Reopen and verify.
 	s2, err := store.New(dir, "")
 	if err != nil {
 		t.Fatalf("store.New (reopen): %v", err)
 	}
+	t.Cleanup(func() { _ = s2.Close() })
 	a, ok := s2.GetAgent("a1")
 	if !ok {
 		t.Fatal("agent not found after reopen")
@@ -436,20 +437,30 @@ func TestDeleteDeployment(t *testing.T) {
 	}
 }
 
-func TestLogsNotInStateFile(t *testing.T) {
-	// Verify that logs are stored in separate files, not inflating state.json.
+func TestLogsPersistAcrossReopen(t *testing.T) {
 	dir := t.TempDir()
-	s, _ := store.New(dir, "")
 	now := time.Now()
-	_ = s.AppendLogs([]*common.LogEntry{
+
+	s1, err := store.New(dir, "")
+	if err != nil {
+		t.Fatalf("store.New: %v", err)
+	}
+	_ = s1.AppendLogs([]*common.LogEntry{
 		{DeploymentID: "dep-x", Level: common.LogLevelInfo, Message: "sentinellogline", Timestamp: now},
 	})
+	_ = s1.Close()
 
-	data, err := os.ReadFile(dir + "/state.json")
+	s2, err := store.New(dir, "")
 	if err != nil {
-		t.Fatalf("reading state.json: %v", err)
+		t.Fatalf("store.New (reopen): %v", err)
 	}
-	if strings.Contains(string(data), "sentinellogline") {
-		t.Error("state.json must not contain log entries")
+	t.Cleanup(func() { _ = s2.Close() })
+
+	logs := s2.GetLogsForDeployment("dep-x")
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 log after reopen; got %d", len(logs))
+	}
+	if logs[0].Message != "sentinellogline" {
+		t.Errorf("message = %q; want sentinellogline", logs[0].Message)
 	}
 }

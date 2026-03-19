@@ -22,8 +22,8 @@ type PlatformInfo struct {
 	Metadata map[string]string
 }
 
-// Collect gathers platform info and resolves the configured platform hint.
-func Collect(platformHint string) PlatformInfo {
+// Collect gathers platform info using runtime detection.
+func Collect() PlatformInfo {
 	hostname, _ := os.Hostname()
 	if hostname == "" {
 		hostname = "unknown"
@@ -41,32 +41,15 @@ func Collect(platformHint string) PlatformInfo {
 		meta["model"] = model
 	}
 
-	platform := normalizePlatformHint(platformHint)
 	if id := collectID(meta); id != "" {
 		meta["machine_id"] = id
 	}
 	return PlatformInfo{
-		Platform: platform,
+		Platform: detectPlatform(),
 		Hostname: hostname,
 		Model:    model,
 		Vendor:   vendor,
 		Metadata: meta,
-	}
-}
-
-func normalizePlatformHint(hint string) string {
-	v := strings.ToLower(strings.TrimSpace(hint))
-	switch v {
-	case "", "auto":
-		return detectPlatform()
-	case "linux":
-		return "linux"
-	case "mac":
-		return "mac"
-	case "windows":
-		return "windows"
-	default:
-		return detectPlatform()
 	}
 }
 

@@ -57,6 +57,7 @@ func newServerTestEnv(t *testing.T) *handlers.Handler {
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
+	t.Cleanup(func() { _ = st.Close() })
 	hub := handlers.NewHub()
 	return &handlers.Handler{
 		Store:               st,

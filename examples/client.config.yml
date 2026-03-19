@@ -7,10 +7,6 @@ server_url: "http://kompakt:8080"
 # Must match one of the daemon's registration_secrets values.
 registration_secret: "replace-with-a-strong-random-value"
 
-# Platform hint. Use "auto" to let the agent detect the OS.
-# Options: auto | linux | mac | windows
-platform: "auto"
-
 # Where the agent persists its token and resume position across reboots.
 # Defaults: /var/lib/kompakt/state.json (Linux/macOS), C:\ProgramData\kompakt\state.json (Windows)
 # state_file: "/var/lib/kompakt/state.json"

@@ -102,7 +102,6 @@ func TestRegisterSuccess(t *testing.T) {
 	c := New(&common.AgentConfig{
 		ServerURL:          ts.URL,
 		RegistrationSecret: "secret",
-		Platform:           "auto",
 		StateFile:          stateFile,
 	})
 

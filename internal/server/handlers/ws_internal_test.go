@@ -15,6 +15,7 @@ func newConnectTestEnv(t *testing.T) *Handler {
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
+	t.Cleanup(func() { _ = st.Close() })
 	return &Handler{Store: st, Hub: NewHub()}
 }
 
