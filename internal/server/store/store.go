@@ -498,7 +498,7 @@ func (s *Store) ListArtifacts() []*common.Artifact {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*common.Artifact
 	for rows.Next() {
 		a, err := scanArtifact(rows)
@@ -560,7 +560,7 @@ func (s *Store) ListSecretNames() []string {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []string
 	for rows.Next() {
 		var name string
@@ -599,7 +599,7 @@ func (s *Store) AllSecrets() map[string]string {
 	if err != nil {
 		return map[string]string{}
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make(map[string]string)
 	for rows.Next() {
 		var name, value string
@@ -640,7 +640,7 @@ func (s *Store) GetLogsForDeployment(deploymentID string) []*common.LogEntry {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanLogs(rows)
 }
 
@@ -654,7 +654,7 @@ func (s *Store) GetLogsForAgent(agentID string) []*common.LogEntry {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanLogs(rows)
 }
 
