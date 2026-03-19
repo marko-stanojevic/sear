@@ -405,6 +405,37 @@ func TestPersistence_ReopenPreservesAgentAndSecret(t *testing.T) {
 	}
 }
 
+func TestDeleteDeployment(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now()
+
+	dep := &common.DeploymentState{
+		ID:        "dep-del-1",
+		AgentID:   "agent-del",
+		Status:    common.DeploymentStatusRunning,
+		StartedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.SaveDeployment(dep); err != nil {
+		t.Fatalf("SaveDeployment: %v", err)
+	}
+	// Append some logs so the log file exists.
+	_ = s.AppendLogs([]*common.LogEntry{
+		{DeploymentID: "dep-del-1", Level: common.LogLevelInfo, Message: "test", Timestamp: now},
+	})
+
+	if err := s.DeleteDeployment("dep-del-1"); err != nil {
+		t.Fatalf("DeleteDeployment: %v", err)
+	}
+	if _, ok := s.GetDeployment("dep-del-1"); ok {
+		t.Error("deployment should be deleted")
+	}
+	// Logs for that deployment should now be empty.
+	if logs := s.GetLogsForDeployment("dep-del-1"); len(logs) != 0 {
+		t.Errorf("expected 0 logs after delete; got %d", len(logs))
+	}
+}
+
 func TestLogsNotInStateFile(t *testing.T) {
 	// Verify that logs are stored in separate files, not inflating state.json.
 	dir := t.TempDir()

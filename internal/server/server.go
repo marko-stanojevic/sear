@@ -3,7 +3,7 @@ package server
 
 import (
 	"bufio"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -91,12 +91,23 @@ func dualAuth(env *handlers.Handler, next http.Handler) http.Handler {
 }
 
 // logging logs every request with method, path, status, and duration.
+// 5xx → Error, 4xx → Warn, WS → Info, everything else → Debug.
 func logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		lrw := &loggingResponseWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(lrw, r)
-		log.Printf("%s %s %d %s", r.Method, r.URL.Path, lrw.status, time.Since(start))
+		args := []any{"method", r.Method, "path", r.URL.Path, "status", lrw.status, "duration", time.Since(start)}
+		switch {
+		case lrw.status >= 500:
+			slog.Error("request", args...)
+		case lrw.status >= 400:
+			slog.Warn("request", args...)
+		case r.URL.Path == "/api/v1/ws":
+			slog.Info("request", args...)
+		default:
+			slog.Debug("request", args...)
+		}
 	})
 }
 

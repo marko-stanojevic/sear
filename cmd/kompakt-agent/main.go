@@ -8,13 +8,14 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/marko-stanojevic/kompakt/internal/agent"
 	"github.com/marko-stanojevic/kompakt/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/terminal"
 )
 
 var runAgent = func(ctx context.Context, cfg *common.AgentConfig) error {
@@ -24,12 +25,16 @@ var runAgent = func(ctx context.Context, cfg *common.AgentConfig) error {
 
 func main() {
 	configPath := flag.String("config", "client.config.yml", "path to client config file")
+	debug := flag.Bool("debug", false, "enable verbose debug logging")
 	flag.Parse()
+
+	terminal.Setup(*debug)
+
 	if err := runWithConfig(*configPath); err != nil {
-		log.Fatalf("agent: %v", err)
+		slog.Error("agent error", "error", err)
+		os.Exit(1)
 	}
-	log.Println("kompakt-agent stopped")
-	os.Exit(0)
+	slog.Info("kompakt-agent stopped")
 }
 
 func runWithConfig(configPath string) error {

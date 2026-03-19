@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,6 +24,7 @@ import (
 // errTokenRejected is returned by connect when the server responds with 401,
 // signalling that the caller should re-register immediately without sleeping.
 var errTokenRejected = errors.New("token rejected by server")
+
 
 // localState is persisted to disk so the agent can resume after a reboot.
 type localState struct {
@@ -62,7 +63,7 @@ func New(cfg *common.AgentConfig) *Agent {
 // via WebSocket until ctx is cancelled.
 func (c *Agent) Run(ctx context.Context) error {
 	if err := c.loadState(); err != nil {
-		log.Printf("warn: could not load local state: %v", err)
+		slog.Warn("could not load local state", "error", err)
 	}
 
 	interval := time.Duration(c.cfg.ReconnectIntervalSeconds) * time.Second
@@ -73,7 +74,7 @@ func (c *Agent) Run(ctx context.Context) error {
 		if err := c.register(ctx); err != nil {
 			return fmt.Errorf("registration: %w", err)
 		}
-		log.Printf("connecting to %s", c.cfg.ServerURL)
+		slog.Info("connecting to server", "url", c.cfg.ServerURL)
 		if err := c.connect(ctx); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -82,7 +83,7 @@ func (c *Agent) Run(ctx context.Context) error {
 				// Token was cleared; re-register immediately without sleeping.
 				continue
 			}
-			log.Printf("connection lost: %v — retrying in %s", err, interval)
+			slog.Warn("connection lost, retrying", "error", err, "retry_in", interval)
 		}
 		select {
 		case <-ctx.Done():
@@ -110,7 +111,7 @@ func (c *Agent) register(ctx context.Context) error {
 	}
 	c.state.AgentID = resp.AgentID
 	c.state.Token = resp.Token
-	log.Printf("registered as agent %s", c.state.AgentID)
+	slog.Info("registered", "agent_id", c.state.AgentID)
 	return c.saveState()
 }
 
@@ -122,7 +123,7 @@ func (c *Agent) connect(ctx context.Context) error {
 	ws, resp, err := dialer.DialContext(ctx, wsURL, nil)
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
-			log.Printf("token rejected by server, will re-register")
+			slog.Warn("token rejected by server, will re-register")
 			c.state.Token = ""
 			c.state.AgentID = ""
 			_ = c.saveState()
@@ -134,7 +135,7 @@ func (c *Agent) connect(ctx context.Context) error {
 	writer := newWSOutboundWriter(ws)
 	defer writer.Stop()
 
-	log.Printf("WebSocket connected")
+	slog.Info("WebSocket connected")
 
 	ws.SetPingHandler(func(appData string) error {
 		// Reset the read deadline so the server's periodic pings keep the
@@ -169,7 +170,7 @@ func (c *Agent) connect(ctx context.Context) error {
 
 		var msg common.WSMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
-			log.Printf("warn: invalid WS message: %v", err)
+			slog.Warn("invalid WS message", "error", err)
 			continue
 		}
 
@@ -177,7 +178,7 @@ func (c *Agent) connect(ctx context.Context) error {
 			raw, _ := json.Marshal(msg.Data)
 			var pd common.WSPlaybookData
 			if err := json.Unmarshal(raw, &pd); err != nil {
-				log.Printf("warn: invalid playbook message: %v", err)
+				slog.Warn("invalid playbook message", "error", err)
 				continue
 			}
 			c.runPlaybook(ctx, writer, &pd)
@@ -210,7 +211,7 @@ func wsEndpoint(serverURL, token string) string {
 func (c *Agent) runPlaybook(ctx context.Context, writer *WSOutboundWriter, pd *common.WSPlaybookData) {
 	pb := pd.Playbook
 	deploymentID := pd.DeploymentID
-	log.Printf("starting playbook %q (deployment %s, resume step %d)", pb.Name, deploymentID, pd.ResumeStepIndex)
+	slog.Info("starting playbook", "name", pb.Name, "deployment_id", deploymentID, "resume_step", pd.ResumeStepIndex)
 
 	flat := common.FlattenPlaybook(pb)
 
@@ -223,7 +224,7 @@ func (c *Agent) runPlaybook(ctx context.Context, writer *WSOutboundWriter, pd *c
 		if stepName == "" {
 			stepName = fmt.Sprintf("step-%d", fs.GlobalIndex)
 		}
-		log.Printf("[%s / %s] starting", fs.JobName, stepName)
+		slog.Info("step starting", "job", fs.JobName, "step", stepName)
 
 		writer.Send(common.WSMessage{
 			Type:      common.WSMsgStepStart,
@@ -237,7 +238,14 @@ func (c *Agent) runPlaybook(ctx context.Context, writer *WSOutboundWriter, pd *c
 		})
 
 		logger := func(level common.LogLevel, msg string) {
-			log.Printf("[%s] %s", level, msg)
+			switch level {
+			case common.LogLevelError:
+				slog.Error(msg)
+			case common.LogLevelWarn:
+				slog.Warn(msg)
+			default:
+				slog.Info(msg)
+			}
 			writer.Send(common.WSMessage{
 				Type:      common.WSMsgLog,
 				Timestamp: time.Now(),
@@ -269,7 +277,7 @@ func (c *Agent) runPlaybook(ctx context.Context, writer *WSOutboundWriter, pd *c
 			// Give the server a moment to persist the state before rebooting.
 			time.Sleep(500 * time.Millisecond)
 			if err := rebootOS(); err != nil {
-				log.Printf("error: reboot failed: %v", err)
+				slog.Error("reboot failed", "error", err)
 			}
 			return
 		}
@@ -305,7 +313,7 @@ func (c *Agent) runPlaybook(ctx context.Context, writer *WSOutboundWriter, pd *c
 			return
 		}
 
-		log.Printf("[%s / %s] completed", fs.JobName, stepName)
+		slog.Info("step completed", "job", fs.JobName, "step", stepName)
 		writer.Send(common.WSMessage{
 			Type:      common.WSMsgStepComplete,
 			Timestamp: time.Now(),
@@ -318,7 +326,7 @@ func (c *Agent) runPlaybook(ctx context.Context, writer *WSOutboundWriter, pd *c
 		})
 	}
 
-	log.Printf("playbook %q completed successfully", pb.Name)
+	slog.Info("playbook completed", "name", pb.Name, "deployment_id", deploymentID)
 	writer.Send(common.WSMessage{
 		Type:      common.WSMsgDeployDone,
 		Timestamp: time.Now(),
@@ -348,15 +356,15 @@ func newWSOutboundWriter(ws *websocket.Conn) *WSOutboundWriter {
 			case msg := <-w.ch:
 				data, err := json.Marshal(msg)
 				if err != nil {
-					log.Printf("warn: marshal WS message: %v", err)
+					slog.Warn("failed to marshal WS message", "error", err)
 					continue
 				}
 				if err := ws.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
-					log.Printf("warn: WS set write deadline: %v", err)
+					slog.Warn("failed to set WS write deadline", "error", err)
 					return
 				}
 				if err := ws.WriteMessage(websocket.TextMessage, data); err != nil {
-					log.Printf("warn: WS write: %v", err)
+					slog.Warn("WS write failed", "error", err)
 					return
 				}
 			}
@@ -370,7 +378,7 @@ func (w *WSOutboundWriter) Send(msg common.WSMessage) {
 	// Fast-path check: if the writer is already closed, don't block.
 	select {
 	case <-w.done:
-		log.Printf("warn: dropping WS message %q: writer closed", msg.Type)
+		slog.Warn("dropping WS message, writer closed", "type", msg.Type)
 		return
 	default:
 	}
@@ -378,7 +386,7 @@ func (w *WSOutboundWriter) Send(msg common.WSMessage) {
 	// Apply backpressure: block until the message is enqueued or the writer closes.
 	select {
 	case <-w.done:
-		log.Printf("warn: dropping WS message %q: writer closed", msg.Type)
+		slog.Warn("dropping WS message, writer closed", "type", msg.Type)
 	case w.ch <- msg:
 	}
 }

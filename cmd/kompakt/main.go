@@ -11,7 +11,6 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -26,31 +25,35 @@ import (
 	"github.com/marko-stanojevic/kompakt/internal/server/handlers"
 	"github.com/marko-stanojevic/kompakt/internal/server/service"
 	"github.com/marko-stanojevic/kompakt/internal/server/store"
+	"github.com/marko-stanojevic/kompakt/internal/terminal"
 )
 
 func main() {
 	configPath := flag.String("config", "config.yml", "path to server config file")
 	secretsPath := flag.String("secrets", "secrets.yml", "path to server secrets file")
+	debug := flag.Bool("debug", false, "log all HTTP requests (default: WebSocket and errors only)")
 	flag.Parse()
 
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	terminal.Setup(*debug)
 
 	cfg, err := common.LoadServerConfig(*configPath)
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		slog.Error("config load failed", "error", err)
+		os.Exit(1)
 	}
 	applyConfigDefaults(cfg)
 
 	sec, err := common.LoadServerSecrets(*secretsPath)
 	if err != nil {
 		// secrets.yml is optional on first run — we'll auto-generate what we need.
-		log.Printf("note: could not load %s (%v); using generated credentials", *secretsPath, err)
+		slog.Warn("could not load secrets file, using generated credentials", "path", *secretsPath, "error", err)
 		sec = &common.ServerSecrets{}
 	}
 
 	// ── Ensure data directory exists before loading persisted secrets ────────
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
-		log.Fatalf("mkdir %s: %v", cfg.DataDir, err)
+		slog.Error("mkdir failed", "path", cfg.DataDir, "error", err)
+		os.Exit(1)
 	}
 
 	// ── JWT secrets (agent + UI, persisted across restarts) ──────────────────
@@ -73,19 +76,22 @@ func main() {
 	// ── Ensure directories ────────────────────────────────────────────────────
 	for _, dir := range []string{cfg.ArtifactsDir, cfg.LogsDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
-			log.Fatalf("mkdir %s: %v", dir, err)
+			slog.Error("mkdir failed", "path", dir, "error", err)
+			os.Exit(1)
 		}
 	}
 
 	// ── Store ─────────────────────────────────────────────────────────────────
 	st, err := store.New(cfg.DataDir, cfg.LogsDir)
 	if err != nil {
-		log.Fatalf("store: %v", err)
+		slog.Error("store init failed", "error", err)
+		os.Exit(1)
 	}
 	// Seed secrets from secrets.yml.
 	if len(sec.ClientSecrets) > 0 {
 		if err := st.MergeSecrets(sec.ClientSecrets); err != nil {
-			log.Fatalf("seeding secrets: %v", err)
+			slog.Error("seeding secrets failed", "error", err)
+			os.Exit(1)
 		}
 	}
 
@@ -115,28 +121,31 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	log.Printf("kompakt listening on %s", cfg.ListenAddr)
-	log.Printf("status UI: http://localhost%s/status/ui", cfg.ListenAddr)
+	slog.Info("kompakt listening", "addr", cfg.ListenAddr)
+	if cfg.TLSCertFile != "" {
+		slog.Info("TLS enabled")
+	}
 
 	// Graceful shutdown on SIGINT/SIGTERM.
 	go func() {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 		<-ch
-		log.Println("shutting down...")
+		slog.Info("shutting down...")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(ctx)
 	}()
 
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
-		log.Printf("TLS enabled")
 		if err := srv.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server: %v", err)
+			slog.Error("server error", "error", err)
+			os.Exit(1)
 		}
 	} else {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server: %v", err)
+			slog.Error("server error", "error", err)
+			os.Exit(1)
 		}
 	}
 }
@@ -181,7 +190,7 @@ func loadOrCreateSecret(explicit, path string) string {
 	}
 	s := mustGenerateHex(32)
 	if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
-		log.Printf("warn: could not persist secret to %s: %v", path, err)
+		slog.Warn("could not persist secret", "path", path, "error", err)
 	}
 	return s
 }
@@ -189,7 +198,8 @@ func loadOrCreateSecret(explicit, path string) string {
 func mustGenerateHex(n int) string {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		log.Fatalf("rand: %v", err)
+		slog.Error("rand failed", "error", err)
+		os.Exit(1)
 	}
 	return hex.EncodeToString(b)
 }
