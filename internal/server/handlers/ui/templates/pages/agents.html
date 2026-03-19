@@ -10,7 +10,214 @@ async function removeAgent(id, hostname){
     } catch(e){}
   });
 }
+
+var _cmdAgentID='', _cmdPollTimer=null, _cmdLineCount=0, _cmdShell='', _shellInputs={};
+
+var _shellLabels = {
+  'cmd': 'cmd.exe',
+  'pwsh': 'PowerShell 7',
+  'powershell': 'PowerShell 5.1',
+  'bash': 'bash',
+  'sh': 'sh'
+};
+var _shellIcons = {
+  'bash': 'dollar-sign',
+  'sh': 'dollar-sign',
+  'cmd': 'chevron-right',
+  'pwsh': 'terminal',
+  'powershell': 'terminal'
+};
+
+function showCommand(agentID, hostname, shellsStr) {
+  _cmdAgentID = agentID;
+  _cmdLineCount = 0;
+  document.getElementById('command-title').textContent = hostname;
+  document.getElementById('command-cmd').value = '';
+  document.getElementById('command-output').innerHTML = '';
+  document.getElementById('command-status-bar').innerHTML = '';
+  document.getElementById('command-line-count').textContent = '';
+  document.getElementById('command-run').disabled = false;
+  document.getElementById('command-hint').textContent = 'Ctrl+Enter to run';
+
+  _shellInputs = {};
+  var shellList = shellsStr ? shellsStr.split(',').filter(function(s){ return s.trim() !== ''; }) : [];
+  var grp = document.getElementById('command-shell-group');
+  grp.innerHTML = '';
+  shellList.forEach(function(s, idx) {
+    s = s.trim();
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'command-shell-opt' + (idx === 0 ? ' active' : '');
+    btn.setAttribute('data-shell', s);
+    var icon = _shellIcons[s] || 'terminal';
+    btn.innerHTML = '<i data-lucide="'+icon+'" style="width:11px;height:11px"></i><span>' + (_shellLabels[s] || s) + '</span>';
+    btn.onclick = function() {
+      _shellInputs[_cmdShell] = document.getElementById('command-cmd').value;
+      grp.querySelectorAll('.command-shell-opt').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      _cmdShell = s;
+      document.getElementById('command-cmd').value = _shellInputs[s] || '';
+    };
+    grp.appendChild(btn);
+  });
+  _cmdShell = shellList[0] || '';
+
+  document.getElementById('command-modal').classList.add('show');
+  if(window.lucide) window.lucide.createIcons();
+  setTimeout(function(){ document.getElementById('command-cmd').focus(); }, 50);
+}
+
+function hideCommand() {
+  if (_cmdPollTimer) { clearInterval(_cmdPollTimer); _cmdPollTimer = null; }
+  document.getElementById('command-modal').classList.remove('show');
+}
+
+function appendCommandLine(text) {
+  _cmdLineCount++;
+  var outEl = document.getElementById('command-output');
+  var row = document.createElement('div');
+  row.className = 'command-line';
+  var ln = document.createElement('span'); ln.className='command-ln'; ln.textContent=_cmdLineCount;
+  var lt = document.createElement('span'); lt.className='command-lt'; lt.textContent=text;
+  row.appendChild(ln); row.appendChild(lt);
+  outEl.appendChild(row);
+  outEl.scrollTop = outEl.scrollHeight;
+  document.getElementById('command-line-count').textContent = _cmdLineCount + ' line' + (_cmdLineCount!==1?'s':'');
+}
+
+function setCommandStatus(done, exitCode, errMsg) {
+  var bar = document.getElementById('command-status-bar');
+  if (!done) {
+    bar.innerHTML = '<span class="command-badge command-badge-lg command-badge-running"><span class="command-spinner"></span> Running</span>';
+    return;
+  }
+  var ok = exitCode === 0;
+  var label = ok ? 'Exit Code: 0' : 'Exit Code: ' + exitCode;
+  var badge = '<span class="command-badge command-badge-lg '+(ok?'command-badge-ok':'command-badge-fail')+'">'+label+'</span>';
+  var extra = errMsg ? '<span style="color:#8b949e">'+esc(errMsg)+'</span>' : '';
+  bar.innerHTML = badge + extra;
+}
+
+function clearCommandInput() {
+  document.getElementById('command-cmd').value = '';
+  _shellInputs[_cmdShell] = '';
+  document.getElementById('command-output').innerHTML = '';
+  document.getElementById('command-line-count').textContent = '';
+  document.getElementById('command-status-bar').innerHTML = '';
+  _cmdLineCount = 0;
+}
+
+function copyCommandOutput() {
+  var lines = document.querySelectorAll('#command-output .command-lt');
+  var text = Array.from(lines).map(function(l){return l.textContent}).join('\n');
+  navigator.clipboard.writeText(text).catch(function(){});
+  var btn = document.querySelector('.command-copy-btn');
+  if (btn) { btn.textContent='Copied!'; setTimeout(function(){ btn.innerHTML='<i data-lucide="copy" style="width:12px;height:12px"></i> Copy'; if(window.lucide)window.lucide.createIcons(); },1500); }
+}
+
+async function runCommand() {
+  var cmd = document.getElementById('command-cmd').value.trim();
+  if (!cmd) return;
+  var runBtn = document.getElementById('command-run');
+  _cmdLineCount = 0;
+  document.getElementById('command-output').innerHTML = '';
+  document.getElementById('command-line-count').textContent = '';
+  setCommandStatus(false, 0, '');
+  runBtn.disabled = true;
+
+  var resp;
+  try {
+    resp = await fetch('/api/v1/agents/'+encodeURIComponent(_cmdAgentID)+'/command', {
+      method:'POST', headers:headersJSON(), body:JSON.stringify({command:cmd,shell:_cmdShell})
+    });
+  } catch(e) {
+    setCommandStatus(true, 1, 'Network error: '+e);
+    runBtn.disabled = false;
+    return;
+  }
+  if (resp.status===401) { hideCommand(); showLogin('Session expired — sign in again'); return; }
+  if (!resp.ok) {
+    var err = await resp.json().catch(function(){return {};});
+    setCommandStatus(true, 1, err.error || ('HTTP '+resp.status));
+    runBtn.disabled = false;
+    return;
+  }
+  var data = await resp.json();
+  var cmdID = data.cmd_id;
+
+  var seenLines = 0;
+  _cmdPollTimer = setInterval(async function() {
+    try {
+      var pr = await fetch('/api/v1/agents/'+encodeURIComponent(_cmdAgentID)+'/command/'+encodeURIComponent(cmdID),{headers:headersAuth()});
+      if (!pr.ok) return;
+      var pd = await pr.json();
+      var lines = pd.output || [];
+      for (var i = seenLines; i < lines.length; i++) appendCommandLine(lines[i]);
+      seenLines = lines.length;
+      if (pd.done) {
+        clearInterval(_cmdPollTimer); _cmdPollTimer = null;
+        setCommandStatus(true, pd.exit_code, pd.error||'');
+        runBtn.disabled = false;
+      }
+    } catch(e) {}
+  }, 800);
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key==='Escape' && document.getElementById('command-modal').classList.contains('show')) hideCommand();
+});
 </script>
+
+<!-- Remote command modal -->
+<div id="command-modal" class="modal-bg">
+  <div class="modal command-modal-wide">
+    <div class="modal-head">
+      <div style="display:flex;align-items:center;gap:8px">
+        <i data-lucide="terminal" style="width:16px;height:16px;color:#8b949e;flex-shrink:0"></i>
+        <h2 id="command-title">Run Command</h2>
+      </div>
+      <button class="btn-icon" onclick="hideCommand()" title="Close" style="font-size:1rem;padding:4px 6px">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="command-panel">
+        <div class="command-panel-head">
+          <span class="command-panel-head-left">
+            <i data-lucide="code-2" style="width:13px;height:13px"></i> Command
+          </span>
+          <span class="command-panel-head-right">
+            <span id="command-hint" style="font-size:.75rem">Ctrl+Enter to run</span>
+            <div id="command-shell-group" class="command-shell-group"></div>
+          </span>
+        </div>
+        <textarea id="command-cmd" class="command-cmd-textarea" placeholder="Enter command… (Ctrl+Enter to run)"
+                  onkeydown="if(event.ctrlKey&&event.key==='Enter'&&!document.getElementById('command-run').disabled){event.preventDefault();runCommand();}"></textarea>
+      </div>
+      <div class="command-panel">
+        <div class="command-panel-head">
+          <span class="command-panel-head-left">
+            <i data-lucide="align-left" style="width:13px;height:13px"></i> Output
+          </span>
+          <span class="command-panel-head-right">
+            <span id="command-line-count"></span>
+            <button class="btn-muted command-copy-btn" onclick="copyCommandOutput()">
+              <i data-lucide="copy" style="width:12px;height:12px"></i> Copy
+            </button>
+            <button class="btn-muted command-copy-btn" onclick="clearCommandInput()">
+              <i data-lucide="x" style="width:12px;height:12px"></i> Clear
+            </button>
+          </span>
+        </div>
+        <pre id="command-output" class="command-output-pre"></pre>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div id="command-status-bar" class="command-status-bar"></div>
+        <button id="command-run" class="btn-add command-run-btn" onclick="runCommand()">
+          <i data-lucide="play" style="width:13px;height:13px"></i> Run
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {{end}}
 {{define "content"}}
 <div class="container">

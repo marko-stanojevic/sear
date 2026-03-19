@@ -258,6 +258,27 @@ func (e *Handler) handleWSMessage(agentID string, data []byte) {
 			_ = e.Store.SaveAgent(a)
 		}
 
+	case common.WSMsgCommandStream:
+		var d common.WSCommandChunk
+		if err := json.Unmarshal(envelope.Data, &d); err != nil {
+			slog.Error("failed to parse command_stream", "agent_id", agentID, "err", err)
+			return
+		}
+		if e.Commands != nil {
+			e.Commands.AppendOutput(d.CmdID, d.Output)
+		}
+
+	case common.WSMsgCommandCompleted:
+		var d common.WSCommandStatus
+		if err := json.Unmarshal(envelope.Data, &d); err != nil {
+			slog.Error("failed to parse command_completed", "agent_id", agentID, "err", err)
+			return
+		}
+		slog.Info("remote command done", "agent_id", agentID, "cmd_id", d.CmdID, "exit_code", d.ExitCode)
+		if e.Commands != nil {
+			e.Commands.SetDone(d.CmdID, d.ExitCode, d.Error)
+		}
+
 	case common.WSMsgPong:
 		// keepalive — handled by SetPongHandler
 	}

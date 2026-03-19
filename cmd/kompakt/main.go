@@ -109,6 +109,7 @@ func main() {
 		RegistrationSecrets: sec.RegistrationSecrets,
 		Hub:                 hub,
 		Service:             svc,
+		Commands:            handlers.NewCommandStore(),
 	}
 
 	// ── HTTP server ───────────────────────────────────────────────────────────

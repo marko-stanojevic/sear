@@ -26,6 +26,7 @@ type Handler struct {
 	RegistrationSecrets map[string]string // name→value from secrets.yml
 	Hub                 *Hub
 	Service             *service.Manager
+	Commands            *CommandStore
 }
 
 // ── WebSocket Hub ─────────────────────────────────────────────────────────────
@@ -137,6 +138,85 @@ func (c *WSConn) writePump() {
 			return
 		}
 	}
+}
+
+// ── Command store ─────────────────────────────────────────────────────────────
+
+// CommandSession holds the in-memory state of one ad-hoc command execution.
+type CommandSession struct {
+	AgentID  string
+	Command  string
+	output   []string
+	exitCode int
+	errMsg   string
+	done     bool
+	mu       sync.RWMutex
+}
+
+// Snapshot returns a consistent copy of the session state.
+func (s *CommandSession) Snapshot() (output []string, done bool, exitCode int, errMsg string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]string, len(s.output))
+	copy(out, s.output)
+	return out, s.done, s.exitCode, s.errMsg
+}
+
+// CommandStore is an in-memory store for command sessions.
+// Sessions are never evicted — they are small and short-lived in practice.
+type CommandStore struct {
+	mu   sync.RWMutex
+	cmds map[string]*CommandSession
+}
+
+// NewCommandStore creates an empty CommandStore.
+func NewCommandStore() *CommandStore {
+	return &CommandStore{cmds: make(map[string]*CommandSession)}
+}
+
+// Create registers a new session and returns it.
+func (s *CommandStore) Create(cmdID, agentID, command string) *CommandSession {
+	sess := &CommandSession{AgentID: agentID, Command: command}
+	s.mu.Lock()
+	s.cmds[cmdID] = sess
+	s.mu.Unlock()
+	return sess
+}
+
+// Get retrieves a session by ID.
+func (s *CommandStore) Get(cmdID string) (*CommandSession, bool) {
+	s.mu.RLock()
+	sess, ok := s.cmds[cmdID]
+	s.mu.RUnlock()
+	return sess, ok
+}
+
+// AppendOutput appends a line of output to the session.
+func (s *CommandStore) AppendOutput(cmdID, line string) {
+	s.mu.RLock()
+	sess, ok := s.cmds[cmdID]
+	s.mu.RUnlock()
+	if !ok {
+		return
+	}
+	sess.mu.Lock()
+	sess.output = append(sess.output, line)
+	sess.mu.Unlock()
+}
+
+// SetDone marks the session as completed.
+func (s *CommandStore) SetDone(cmdID string, exitCode int, errMsg string) {
+	s.mu.RLock()
+	sess, ok := s.cmds[cmdID]
+	s.mu.RUnlock()
+	if !ok {
+		return
+	}
+	sess.mu.Lock()
+	sess.done = true
+	sess.exitCode = exitCode
+	sess.errMsg = errMsg
+	sess.mu.Unlock()
 }
 
 // ── JSON / HTTP helpers ───────────────────────────────────────────────────────

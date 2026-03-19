@@ -11,7 +11,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -20,6 +23,19 @@ import (
 	"github.com/marko-stanojevic/kompakt/internal/agent/identity"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
+
+// ansiEscape strips ANSI/VT100 escape sequences from command output.
+var ansiEscape = regexp.MustCompile(`\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])`)
+
+func sanitizeOutputLine(s string) string {
+	s = ansiEscape.ReplaceAllString(s, "")
+	return strings.Map(func(r rune) rune {
+		if (r < 0x20 && r != '\t') || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
+}
 
 // errTokenRejected is returned by connect when the server responds with 401,
 // signalling that the caller should re-register immediately without sleeping.
@@ -104,6 +120,7 @@ func (c *Agent) register(ctx context.Context) error {
 		Vendor:             pf.Vendor,
 		RegistrationSecret: c.cfg.RegistrationSecret,
 		Metadata:           pf.Metadata,
+		Shells:             detectShells(),
 	}
 	var resp common.RegistrationResponse
 	if err := c.post(ctx, "/api/v1/register", req, &resp, ""); err != nil {
@@ -174,7 +191,8 @@ func (c *Agent) connect(ctx context.Context) error {
 			continue
 		}
 
-		if msg.Type == common.WSMsgPlaybook {
+		switch msg.Type {
+		case common.WSMsgPlaybook:
 			raw, _ := json.Marshal(msg.Data)
 			var pd common.WSPlaybookData
 			if err := json.Unmarshal(raw, &pd); err != nil {
@@ -182,6 +200,15 @@ func (c *Agent) connect(ctx context.Context) error {
 				continue
 			}
 			c.runPlaybook(ctx, writer, &pd)
+
+		case common.WSMsgCommand:
+			raw, _ := json.Marshal(msg.Data)
+			var cd common.WSCommandData
+			if err := json.Unmarshal(raw, &cd); err != nil {
+				slog.Warn("invalid command message", "error", err)
+				continue
+			}
+			go c.runCommand(ctx, writer, &cd)
 		}
 	}
 }
@@ -332,6 +359,152 @@ func (c *Agent) runPlaybook(ctx context.Context, writer *WSOutboundWriter, pd *c
 		Timestamp: time.Now(),
 		Data:      common.WSStepData{DeploymentID: deploymentID},
 	})
+}
+
+// ── Shell capability detection ────────────────────────────────────────────────
+
+func detectShells() []string {
+	candidates := []struct{ name, exe string }{
+		{"bash", "bash"},
+		{"sh", "sh"},
+		{"pwsh", "pwsh"},
+		{"powershell", "powershell.exe"},
+		{"cmd", "cmd.exe"},
+	}
+	var found []string
+	for _, c := range candidates {
+		if _, err := exec.LookPath(c.exe); err == nil {
+			found = append(found, c.name)
+		}
+	}
+	return found
+}
+
+// ── Command execution ─────────────────────────────────────────────────────────
+
+func (c *Agent) runCommand(ctx context.Context, writer *WSOutboundWriter, cd *common.WSCommandData) {
+	shell := strings.ToLower(cd.Shell)
+	if shell == "" {
+		if runtime.GOOS == "windows" {
+			shell = "cmd"
+		} else {
+			shell = "bash"
+		}
+	}
+
+	if c.cfg.WorkDir != "" {
+		if err := os.MkdirAll(c.cfg.WorkDir, 0o750); err != nil {
+			slog.Warn("could not create work dir for remote command", "path", c.cfg.WorkDir, "error", err)
+		}
+	}
+
+	// Build the command. For cmd.exe, multi-line scripts require a temp batch
+	// file because cmd.exe /C only executes the first line of a multi-line string.
+	var cmd *exec.Cmd
+	var tmpFile string // path of temp file to clean up after execution
+	switch shell {
+	case "bash":
+		cmd = exec.CommandContext(ctx, "bash", "-c", cd.Command)
+	case "sh":
+		cmd = exec.CommandContext(ctx, "sh", "-c", cd.Command)
+	case "pwsh":
+		cmd = exec.CommandContext(ctx, "pwsh", "-NonInteractive", "-Command", cd.Command)
+	case "powershell":
+		cmd = exec.CommandContext(ctx, "powershell.exe", "-NonInteractive", "-Command", cd.Command)
+	case "cmd":
+		if strings.Contains(cd.Command, "\n") {
+			f, err := os.CreateTemp("", "kompakt-*.bat")
+			if err != nil {
+				writer.Send(common.WSMessage{
+					Type:      common.WSMsgCommandCompleted,
+					Timestamp: time.Now(),
+					Data:      common.WSCommandStatus{CmdID: cd.CmdID, ExitCode: 1, Error: "temp file: " + err.Error()},
+				})
+				return
+			}
+			tmpFile = f.Name()
+			_, _ = f.WriteString("@echo off\r\n" + strings.ReplaceAll(cd.Command, "\n", "\r\n"))
+			_ = f.Close()
+			cmd = exec.CommandContext(ctx, "cmd.exe", "/C", tmpFile)
+		} else {
+			cmd = exec.CommandContext(ctx, "cmd.exe", "/C", cd.Command)
+		}
+	default:
+		cmd = exec.CommandContext(ctx, "bash", "-c", cd.Command)
+	}
+	if tmpFile != "" {
+		defer os.Remove(tmpFile)
+	}
+
+	if c.cfg.WorkDir != "" {
+		cmd.Dir = c.cfg.WorkDir
+	}
+
+	sendDone := func(exitCode int, errMsg string) {
+		writer.Send(common.WSMessage{
+			Type:      common.WSMsgCommandCompleted,
+			Timestamp: time.Now(),
+			Data:      common.WSCommandStatus{CmdID: cd.CmdID, ExitCode: exitCode, Error: errMsg},
+		})
+	}
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		sendDone(1, "pipe: "+err.Error())
+		return
+	}
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+
+	if err := cmd.Start(); err != nil {
+		_ = pw.Close()
+		_ = pr.Close()
+		sendDone(1, "start: "+err.Error())
+		return
+	}
+	_ = pw.Close()
+
+	buf := make([]byte, 4096)
+	var leftover string
+	for {
+		n, readErr := pr.Read(buf)
+		if n > 0 {
+			chunk := leftover + string(buf[:n])
+			lines := strings.Split(chunk, "\n")
+			for _, line := range lines[:len(lines)-1] {
+				writer.Send(common.WSMessage{
+					Type:      common.WSMsgCommandStream,
+					Timestamp: time.Now(),
+					Data:      common.WSCommandChunk{CmdID: cd.CmdID, Output: sanitizeOutputLine(line)},
+				})
+			}
+			leftover = lines[len(lines)-1]
+		}
+		if readErr != nil {
+			if leftover != "" {
+				writer.Send(common.WSMessage{
+					Type:      common.WSMsgCommandStream,
+					Timestamp: time.Now(),
+					Data:      common.WSCommandChunk{CmdID: cd.CmdID, Output: sanitizeOutputLine(leftover)},
+				})
+			}
+			break
+		}
+	}
+	_ = pr.Close()
+
+	exitCode := 0
+	errMsg := ""
+	if err := cmd.Wait(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = 1
+			errMsg = err.Error()
+		}
+	}
+	sendDone(exitCode, errMsg)
 }
 
 type WSOutboundWriter struct {

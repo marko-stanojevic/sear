@@ -182,6 +182,9 @@ var tmplFuncs = template.FuncMap{
 		}
 		return b
 	},
+	"shellsList": func(shells []string) string {
+		return strings.Join(shells, ",")
+	},
 	"add": func(a, b int) int { return a + b },
 	"sub": func(a, b int) int { return a - b },
 	"seq": func(n int) []int {

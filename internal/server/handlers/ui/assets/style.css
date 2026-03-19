@@ -164,6 +164,34 @@ button:hover{background:#30363d}
 .form-group input,.form-group textarea,.form-group select{width:100%;background:#0d1117;border:1px solid #30363d;color:#e6edf3;padding:8px 10px;border-radius:6px;font-size:.875rem;outline:none}
 .form-group input:focus,.form-group textarea:focus,.form-group select:focus{border-color:#58a6ff}
 
+/* Remote command modal */
+.command-modal-wide{max-width:900px !important;width:92vw !important}
+.command-panel{border:1px solid #30363d;border-radius:6px;overflow:hidden;margin-bottom:10px}
+.command-panel-head{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#161b22;border-bottom:1px solid #30363d;font-size:.8rem;color:#8b949e}
+.command-panel-head-left{display:flex;align-items:center;gap:6px}
+.command-panel-head-right{display:flex;align-items:center;gap:8px}
+.command-shell-group{display:flex;gap:4px;flex-wrap:wrap}
+.command-shell-opt{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:4px;font-size:.75rem;cursor:pointer;transition:background .15s,color .15s,border-color .15s;white-space:nowrap}
+.command-shell-opt:hover{background:#30363d;color:#e6edf3;border-color:#8b949e}
+.command-shell-opt.active{background:#1f6feb20;color:#58a6ff;border-color:#1f6feb80}
+.command-cmd-textarea{width:100% !important;background:#0d1117;color:#e6edf3;padding:10px 12px;border:none;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.65;resize:vertical;min-height:80px;outline:none;margin:0 !important;border-radius:0;display:block}
+.command-cmd-textarea:focus{border-color:transparent}
+.command-run-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px}
+.command-output-pre{background:#0d1117;color:#e6edf3;padding:8px 0;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.65;min-height:180px;max-height:420px;overflow-y:auto;white-space:pre}
+.command-output-pre:empty::before{content:'No output yet…';color:#484f58;display:block;padding:0 12px}
+.command-line{display:flex;min-width:0}
+.command-line:hover{background:#161b22}
+.command-ln{display:inline-block;min-width:44px;padding:0 12px;color:#484f58;user-select:none;text-align:right;border-right:1px solid #21262d;margin-right:12px;flex-shrink:0}
+.command-lt{flex:1;white-space:pre-wrap;word-break:break-all;padding-right:12px}
+.command-copy-btn{padding:3px 8px;font-size:.75rem;display:inline-flex;align-items:center;gap:4px}
+.command-status-bar{min-height:24px;display:flex;align-items:center;gap:8px;font-size:.82rem;color:#8b949e}
+.command-badge{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:12px;font-size:.8rem;font-weight:500}
+.command-badge-lg{font-size:.95rem;padding:4px 14px}
+.command-badge-ok{background:#23863620;color:#3fb950;border:1px solid #23863640}
+.command-badge-fail{background:#da363320;color:#f85149;border:1px solid #da363340}
+.command-badge-running{background:#1f6feb20;color:#58a6ff;border:1px solid #1f6feb40}
+.command-spinner{display:inline-block;width:10px;height:10px;border:2px solid #30363d;border-top-color:#58a6ff;border-radius:50%;animation:kompakt-spin .7s linear infinite}
+
 /* Log panel - 4 columns after simplification */
 .log-head{display:grid;grid-template-columns:.9fr .5fr .7fr 2fr;gap:10px;padding:8px 12px;border-bottom:1px solid #30363d;background:#0d1117;color:#8b949e;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em}
 .log-row{display:grid;grid-template-columns:.9fr .5fr .7fr 2fr;gap:10px;padding:8px 12px;border-bottom:1px solid #21262d;font-size:.82rem}

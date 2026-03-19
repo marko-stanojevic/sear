@@ -253,6 +253,7 @@ func (e *Handler) HandleAgentRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	agent.IPAddress = requestIP(r)
 	agent.Metadata = req.Metadata
+	agent.Shells = req.Shells
 	agent.Status = common.AgentStatusRegistered
 	agent.LastActivityAt = time.Now()
 
