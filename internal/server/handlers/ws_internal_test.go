@@ -111,12 +111,12 @@ func TestHandleWSMessage_LogAndLifecycleUpdates(t *testing.T) {
 
 	sendWS(t, e, "c1", common.WSMsgDeployDone, common.WSStepData{DeploymentID: "dep-1"})
 	dep, _ = e.Store.GetDeployment("dep-1")
-	if dep.Status != common.DeploymentStatusDone || dep.FinishedAt == nil {
+	if dep.Status != common.DeploymentStatusCompleted || dep.FinishedAt == nil {
 		t.Fatalf("after deploy_done: status=%q finished_at_nil=%v", dep.Status, dep.FinishedAt == nil)
 	}
 	agent, _ := e.Store.GetAgent("c1")
-	if agent.Status != common.AgentStatusDone {
-		t.Fatalf("agent status = %q; want %q", agent.Status, common.AgentStatusDone)
+	if agent.Status != common.AgentStatusCompleted {
+		t.Fatalf("agent status = %q; want %q", agent.Status, common.AgentStatusCompleted)
 	}
 }
 

@@ -56,8 +56,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// ── JWT secrets (agent + UI, persisted across restarts) ──────────────────
-	cfg.AgentJWTSecret = loadOrCreateSecret(cfg.AgentJWTSecret, filepath.Join(cfg.DataDir, ".agent-jwt-secret"))
+	// ── UI JWT secret (persisted across restarts) ─────────────────────────────
 	cfg.UserJWTSecret = loadOrCreateSecret(cfg.UserJWTSecret, filepath.Join(cfg.DataDir, ".ui-jwt-secret"))
 
 	// ── Root password ────────────────────────────────────────────────────────
@@ -100,7 +99,6 @@ func main() {
 	svc := &service.Manager{Store: st, Hub: hub, ServerURL: serverURL(cfg)}
 	env := &handlers.Handler{
 		Store:               st,
-		AgentJWTSecret:      []byte(cfg.AgentJWTSecret),
 		UserJWTSecret:       []byte(cfg.UserJWTSecret),
 		RootPassword:        sec.RootPassword,
 		TokenExpiryHours:    cfg.TokenExpiryHours,

@@ -221,11 +221,11 @@ func (e *Handler) handleWSMessage(agentID string, data []byte) {
 		slog.Info("playbook completed", "agent_id", agentID, "deployment_id", d.DeploymentID, "playbook", playbookName)
 		now := time.Now()
 		e.updateDeploy(d.DeploymentID, func(dep *common.DeploymentState) {
-			dep.Status = common.DeploymentStatusDone
+			dep.Status = common.DeploymentStatusCompleted
 			dep.FinishedAt = &now
 		})
 		if a, ok := e.Store.GetAgent(agentID); ok {
-			a.Status = common.AgentStatusDone
+			a.Status = common.AgentStatusCompleted
 			_ = e.Store.SaveAgent(a)
 		}
 

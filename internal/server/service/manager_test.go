@@ -194,7 +194,7 @@ func TestPushPlaybookIfAssignedSkipsCompleted(t *testing.T) {
 		ID:         "dep-done",
 		AgentID:    "c1",
 		PlaybookID: "pb-1",
-		Status:     common.DeploymentStatusDone,
+		Status:     common.DeploymentStatusCompleted,
 		StartedAt:  now.Add(-time.Hour),
 		FinishedAt: &now,
 	})

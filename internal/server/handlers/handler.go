@@ -17,8 +17,7 @@ import (
 // Handler bundles the dependencies shared by all handlers.
 type Handler struct {
 	Store               ports.Store
-	AgentJWTSecret      []byte // signs agent tokens
-	UserJWTSecret       []byte // signs UI session tokens (separate to allow independent rotation)
+	UserJWTSecret       []byte // signs UI session tokens
 	RootPassword        string
 	TokenExpiryHours    int
 	ArtifactsDir        string

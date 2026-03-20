@@ -39,7 +39,6 @@ func newIntegrationEnv(t *testing.T) *integrationEnv {
 	hub := handlers.NewHub()
 	h := &handlers.Handler{
 		Store:               st,
-		AgentJWTSecret:      []byte("agent-secret-32-bytes-padding!!!"),
 		UserJWTSecret:       []byte("user-secret-32-bytes-padding!!!!"),
 		RootPassword:        intTestRootPassword,
 		TokenExpiryHours:    24,
@@ -101,7 +100,7 @@ func basicAuthHeader(password string) string {
 	return req.Header.Get("Authorization")
 }
 
-// registerAgent registers a test agent and returns its JWT.
+// registerAgent registers a test agent and returns its opaque token.
 func (e *integrationEnv) registerAgent(t *testing.T, hostname string) string {
 	t.Helper()
 	body, _ := json.Marshal(common.RegistrationRequest{

@@ -22,7 +22,7 @@
       <div>{{or .PlaybookName "-"}}</div>
       <div class="sub mono">{{.PlaybookID}}</div>
     </div>
-    <div><span class="badge badge-{{statusClass (print .Status)}}">{{.Status}}</span></div>
+    <div><span class="badge badge-{{statusClass (print .Status)}}">{{statusLabel (print .Status)}}</span></div>
     <div>{{formatTime .UpdatedAt}}</div>
     <div>{{formatTimePtr .FinishedAt}}</div>
     <div class="card-top-right"><div class="card-menu">

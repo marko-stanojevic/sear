@@ -31,12 +31,7 @@ type ServerConfig struct {
 	TLSCertFile string `yaml:"tls_cert_file"`
 	TLSKeyFile  string `yaml:"tls_key_file"`
 
-	// AgentJWTSecret is used to sign agent tokens.
-	// If empty, a secret is auto-generated and persisted in DataDir.
-	AgentJWTSecret string `yaml:"agent_jwt_secret"`
-
-	// UserJWTSecret is used to sign UI session tokens, kept separate from
-	// agent tokens so rotating one does not invalidate the other.
+	// UserJWTSecret is used to sign UI session tokens.
 	// If empty, a secret is auto-generated and persisted in DataDir.
 	UserJWTSecret string `yaml:"user_jwt_secret"`
 
