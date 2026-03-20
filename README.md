@@ -45,7 +45,7 @@ Store credentials and tokens centrally. Inject them into any playbook step with 
 - **Structured playbooks** — ordered jobs and steps with shell execution, artifact operations, and reboot actions in a single YAML definition.
 - **Audit trail** — all deployment logs persisted per deployment; queryable via API and viewable in the UI.
 - **Zero external dependencies** — single static Go binary per component, no container runtime, no orchestrator, no database.
-- **TLS and JWT out of the box** — agent communication is JWT-authenticated; UI sessions use short-lived tokens; TLS termination is built-in.
+- **Opaque agent tokens** — agents authenticate with `kpkt_`-prefixed opaque bearer tokens; only a SHA-256 hash is stored, enabling instant per-agent revocation and zero-downtime rotation. UI sessions use separate short-lived JWTs. TLS termination is built-in.
 
 ## Quick start
 
@@ -104,6 +104,7 @@ See [`examples/playbook.yml`](examples/playbook.yml) for a full multi-phase exam
 
 - [API endpoints](docs/api-endpoints.md) — full HTTP and WebSocket API reference
 - [Playbook model](docs/playbook-model.md) — step types, secret injection, reboot handling, and best practices
+- [Agent authentication](docs/agent-authentication.md) — opaque token design, lifecycle, rotation, and security rationale
 - [Project docs](docs/documentation.md) — FAQ and architecture overview
 
 ## Troubleshooting
@@ -111,7 +112,7 @@ See [`examples/playbook.yml`](examples/playbook.yml) for a full multi-phase exam
 | Symptom | Check |
 | --- | --- |
 | Agent fails to register | `registration_secret` in agent config must match a value in the daemon secrets file |
-| JWT token expired errors | Increase `token_expiry_hours` in daemon config |
+| Agent token rejected | Token may be revoked or expired; re-register the agent to obtain a fresh token |
 | Artifact download fails | Verify the artifact access policy; confirm the client ID is in the allowed list for restricted artifacts |
 | Deployment stuck after reboot | Agent resumes automatically on reconnect — check agent logs for connection errors |
 

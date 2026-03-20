@@ -152,7 +152,7 @@ const (
 	AgentStatusRegistered AgentStatus = "registered"
 	AgentStatusConnected  AgentStatus = "connected"
 	AgentStatusDeploying  AgentStatus = "deploying"
-	AgentStatusDone       AgentStatus = "done"
+	AgentStatusCompleted  AgentStatus = "completed"
 	AgentStatusFailed     AgentStatus = "failed"
 	AgentStatusOffline    AgentStatus = "offline"
 )
@@ -183,7 +183,7 @@ const (
 	DeploymentStatusPending   DeploymentStatus = "pending"
 	DeploymentStatusRunning   DeploymentStatus = "running"
 	DeploymentStatusRebooting DeploymentStatus = "rebooting"
-	DeploymentStatusDone      DeploymentStatus = "done"
+	DeploymentStatusCompleted DeploymentStatus = "completed"
 	DeploymentStatusFailed    DeploymentStatus = "failed"
 )
 
@@ -338,4 +338,18 @@ type WSCommandStatus struct {
 	CmdID    string `json:"cmd_id"`
 	ExitCode int    `json:"exit_code"`
 	Error    string `json:"error,omitempty"`
+}
+
+// ── Agent token ───────────────────────────────────────────────────────────────
+
+// AgentToken is a persisted opaque token used for agent authentication.
+// The raw token is only returned once at issuance; TokenHash (SHA-256 hex) is
+// what gets stored in the database.
+type AgentToken struct {
+	ID        string     `json:"id"`
+	AgentID   string     `json:"agent_id"`
+	TokenHash string     `json:"-"` // never returned to clients
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	RevokedAt *time.Time `json:"revoked_at,omitempty"`
 }

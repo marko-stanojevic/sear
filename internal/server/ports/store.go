@@ -39,6 +39,11 @@ type Store interface {
 	AppendLogs(entries []*common.LogEntry) error
 	GetLogsForDeployment(deploymentID string) []*common.LogEntry
 	GetLogsForAgent(agentID string) []*common.LogEntry
+
+	CreateAgentToken(t *common.AgentToken) error
+	GetAgentTokenByHash(hash string) (*common.AgentToken, error)
+	RevokeAgentToken(id string) error
+	RevokeAllAgentTokens(agentID string) error
 }
 
 // Hub defines websocket coordination capabilities used by services.

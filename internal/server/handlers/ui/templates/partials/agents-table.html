@@ -25,7 +25,7 @@
       <div style="color:#8b949e">{{or .Vendor "-"}}</div>
     </div>
     <div class="mono">{{or .IPAddress "-"}}</div>
-    <div><span class="pill {{statusClass .StatusStr}}"><span class="dot"></span>{{or .StatusStr "-"}}</span></div>
+    <div><span class="pill {{.StatusStr}}">{{or (statusLabel .StatusStr) "-"}}</span></div>
     <div>
       <div>{{formatTime .LastActivityAt}}</div>
       <div class="sub">Step: {{.DeployStep}}</div>

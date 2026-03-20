@@ -2,13 +2,14 @@ package server
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/marko-stanojevic/kompakt/internal/common"
 	"github.com/marko-stanojevic/kompakt/internal/server/handlers"
 	"github.com/marko-stanojevic/kompakt/internal/server/service"
 	"github.com/marko-stanojevic/kompakt/internal/server/store"
@@ -61,7 +62,6 @@ func newServerTestEnv(t *testing.T) *handlers.Handler {
 	hub := handlers.NewHub()
 	return &handlers.Handler{
 		Store:               st,
-		AgentJWTSecret:           []byte("test-jwt-secret-32-bytes-padding!"),
 		RootPassword:        "admin123",
 		TokenExpiryHours:    24,
 		ArtifactsDir:        t.TempDir(),
@@ -103,19 +103,25 @@ func TestDualAuth_BasicAndBearer(t *testing.T) {
 		t.Fatalf("basic auth status = %d; want 204", basicRR.Code)
 	}
 
-	// Bearer auth path.
-	claims := jwt.RegisteredClaims{
-		Subject:   "client-1",
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+	// Bearer auth path — register an agent to obtain a valid opaque token.
+	regBody, _ := json.Marshal(common.RegistrationRequest{
+		Platform:           common.PlatformLinux,
+		Hostname:           "test-host",
+		RegistrationSecret: "reg-secret",
+	})
+	regReq := httptest.NewRequest(http.MethodPost, "/api/v1/register", bytes.NewReader(regBody))
+	regReq.Header.Set("Content-Type", "application/json")
+	regRR := httptest.NewRecorder()
+	env.HandleAgentRegister(regRR, regReq)
+	if regRR.Code != http.StatusOK {
+		t.Fatalf("register status = %d; want 200", regRR.Code)
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	raw, err := tok.SignedString(env.AgentJWTSecret)
-	if err != nil {
-		t.Fatalf("signed token: %v", err)
+	var regResp common.RegistrationResponse
+	if err := json.NewDecoder(regRR.Body).Decode(&regResp); err != nil {
+		t.Fatalf("decode register response: %v", err)
 	}
 	bearerReq := httptest.NewRequest(http.MethodGet, "/artifacts", nil)
-	bearerReq.Header.Set("Authorization", "Bearer "+raw)
+	bearerReq.Header.Set("Authorization", "Bearer "+regResp.Token)
 	bearerRR := httptest.NewRecorder()
 	h.ServeHTTP(bearerRR, bearerReq)
 	if bearerRR.Code != http.StatusNoContent {

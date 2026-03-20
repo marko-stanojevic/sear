@@ -9,10 +9,12 @@ nav{display:flex;gap:0;align-items:stretch;margin-left:8px}
 nav a{color:#8b949e;text-decoration:none;padding:0 14px;display:flex;align-items:center;font-size:.875rem;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;white-space:nowrap}
 nav a:hover{color:#e6edf3}
 nav a.active{color:#e6edf3;border-bottom-color:#f78166}
-.badge{display:inline-block;font-size:0.75rem;padding:1px 8px;border-radius:12px;border:1px solid transparent;font-weight:500;line-height:1.4}
+.badge{display:inline-block;font-size:0.82rem;padding:3px 10px;border-radius:12px;border:1px solid transparent;font-weight:500;line-height:1.4}
 .badge-muted{background:#21262d;color:#8b949e;border-color:#30363d}
+.badge-info{background:rgba(31,111,235,0.15);color:#58a6ff;border-color:rgba(31,111,235,0.4)}
 .badge-success{background:rgba(35,134,54,0.15);color:#3fb950;border-color:rgba(35,134,54,0.4)}
 .badge-warning{background:rgba(158,106,3,0.15);color:#e3b341;border-color:rgba(158,106,3,0.4)}
+.badge-danger{background:rgba(218,54,51,0.15);color:#f85149;border-color:rgba(218,54,51,0.4)}
 .badge-outline{background:transparent !important;border-color:#30363d !important;color:#8b949e !important}
 .header-right{margin-left:auto;display:flex;align-items:center}
 .btn-signout{background:transparent;border:1px solid #30363d;color:#8b949e;padding:4px 12px;border-radius:6px;font-size:.8125rem;cursor:pointer;transition:color .15s,border-color .15s}
@@ -94,14 +96,13 @@ nav a.active{color:#e6edf3;border-bottom-color:#f78166}
 .empty{text-align:center;color:#8b949e;padding:60px 20px}
 
 /* Pills (Statuses) */
-.pill{display:inline-flex;align-items:center;gap:6px;font-size:.82rem;padding:3px 10px;border-radius:12px;font-weight:500}
+.pill{display:inline-block;font-size:.85rem;padding:4px 11px;border-radius:12px;font-weight:500}
 .pill.running{background:#1f6feb33;color:#58a6ff}
-.pill.done{background:#23863633;color:#3fb950}
+.pill.completed{background:#23863633;color:#3fb950}
 .pill.failed{background:#da363333;color:#f85149}
 .pill.rebooting{background:#9e6a0333;color:#e3b341}
 .pill.pending,.pill.registered,.pill.offline{background:#21262d;color:#8b949e}
 .pill.connected,.pill.deploying{background:#1f6feb22;color:#79c0ff}
-.dot{width:7px;height:7px;border-radius:50%;background:currentColor}
 
 /* Buttons */
 button{background:#21262d;border:1px solid #30363d;color:#e6edf3;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem}

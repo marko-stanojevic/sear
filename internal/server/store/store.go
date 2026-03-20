@@ -96,6 +96,17 @@ CREATE TABLE IF NOT EXISTS logs (
     timestamp     TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_logs_deployment_id ON logs (deployment_id);
+
+CREATE TABLE IF NOT EXISTS agent_tokens (
+    id         TEXT PRIMARY KEY,
+    agent_id   TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT,
+    revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_tokens_hash     ON agent_tokens (token_hash);
+CREATE INDEX IF NOT EXISTS idx_agent_tokens_agent_id ON agent_tokens (agent_id);
 `
 
 // New opens (or creates) the SQLite store at dir/kompakt.db.
@@ -111,6 +122,13 @@ func New(dir string, _ string) (*Store, error) {
 		return nil, fmt.Errorf("opening sqlite: %w", err)
 	}
 	db.SetMaxOpenConns(1)
+	// Enforce foreign key constraints and cascades. This must be executed after
+	// every new connection is opened; the DSN parameter alone is not reliable
+	// across all SQLite driver versions.
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("enabling foreign keys: %w", err)
+	}
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("applying schema: %w", err)
@@ -121,6 +139,9 @@ func New(dir string, _ string) (*Store, error) {
 	} {
 		_, _ = db.Exec(m)
 	}
+	// Data migrations: rename status values for consistency.
+	_, _ = db.Exec(`UPDATE agents      SET status = 'completed' WHERE status = 'done'`)
+	_, _ = db.Exec(`UPDATE deployments SET status = 'completed' WHERE status = 'done'`)
 	return &Store{db: db}, nil
 }
 
@@ -691,3 +712,46 @@ func scanLogs(rows *sql.Rows) []*common.LogEntry {
 	return out
 }
 
+// ── Agent tokens ──────────────────────────────────────────────────────────────
+
+func (s *Store) CreateAgentToken(t *common.AgentToken) error {
+	_, err := s.db.Exec(
+		`INSERT INTO agent_tokens (id, agent_id, token_hash, created_at, expires_at, revoked_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		t.ID, t.AgentID, t.TokenHash,
+		encodeTime(t.CreatedAt),
+		encodeTimePtr(t.ExpiresAt),
+		encodeTimePtr(t.RevokedAt),
+	)
+	return err
+}
+
+func (s *Store) GetAgentTokenByHash(hash string) (*common.AgentToken, error) {
+	row := s.db.QueryRow(
+		`SELECT id, agent_id, token_hash, created_at, expires_at, revoked_at
+		 FROM agent_tokens WHERE token_hash = ?`, hash)
+	var t common.AgentToken
+	var createdAt string
+	var expiresAt, revokedAt sql.NullString
+	if err := row.Scan(&t.ID, &t.AgentID, &t.TokenHash, &createdAt, &expiresAt, &revokedAt); err != nil {
+		return nil, err
+	}
+	t.CreatedAt = decodeTime(createdAt)
+	t.ExpiresAt = decodeTimePtr(expiresAt)
+	t.RevokedAt = decodeTimePtr(revokedAt)
+	return &t, nil
+}
+
+func (s *Store) RevokeAgentToken(id string) error {
+	_, err := s.db.Exec(
+		`UPDATE agent_tokens SET revoked_at = ? WHERE id = ?`,
+		encodeTime(time.Now()), id)
+	return err
+}
+
+func (s *Store) RevokeAllAgentTokens(agentID string) error {
+	_, err := s.db.Exec(
+		`UPDATE agent_tokens SET revoked_at = ? WHERE agent_id = ? AND revoked_at IS NULL`,
+		encodeTime(time.Now()), agentID)
+	return err
+}

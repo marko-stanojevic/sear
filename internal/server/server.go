@@ -28,8 +28,11 @@ func NewServer(env *handlers.Handler) http.Handler {
 	// POST /api/v1/ui/login — no auth; validates root password, returns short-lived UI JWT
 	mux.HandleFunc("/api/v1/ui/login", env.HandleUILogin)
 
-	// GET  /api/v1/ws        — WebSocket; JWT via ?token= query param
+	// GET  /api/v1/ws             — WebSocket; token via ?token= query param
 	mux.Handle("/api/v1/ws", http.HandlerFunc(env.HandleAgentWS))
+
+	// POST /api/v1/token/refresh — agent token rotation (requires agent auth)
+	mux.Handle("/api/v1/token/refresh", env.RequireAgentAuth(http.HandlerFunc(env.HandleTokenRefresh)))
 
 	// ── Root API (HTTP Basic auth) ───────────────────────────────────────────
 	root := env.RequireRootAuth

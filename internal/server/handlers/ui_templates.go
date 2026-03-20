@@ -140,18 +140,26 @@ var tmplFuncs = template.FuncMap{
 			return strconv.FormatInt(n, 10) + " B"
 		}
 	},
+	"statusLabel": func(s string) string {
+		switch strings.ToLower(s) {
+		case "completed":
+			return "completed"
+		case "failed":
+			return "failed"
+		default:
+			return s
+		}
+	},
 	"statusClass": func(s string) string {
 		switch strings.ToLower(s) {
-		case "done":
+		case "completed":
 			return "success"
 		case "failed":
-			return "warning"
-		case "running":
-			return "success"
+			return "danger"
+		case "running", "connected", "deploying":
+			return "info"
 		case "rebooting":
 			return "warning"
-		case "connected", "deploying":
-			return "success"
 		default:
 			return "muted"
 		}
@@ -348,7 +356,6 @@ func (e *Handler) HandlePartialAgents(w http.ResponseWriter, r *http.Request) {
 		status := string(a.Status)
 		if dep, ok := depByAgent[a.ID]; ok {
 			step = "#" + strconv.Itoa(dep.ResumeStepIndex)
-			status = string(dep.Status)
 		}
 		rows[i] = agentRow{Agent: a, DeployStep: step, StatusStr: status}
 	}

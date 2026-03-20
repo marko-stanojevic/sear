@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 	"github.com/marko-stanojevic/kompakt/internal/server/handlers"
 	"github.com/marko-stanojevic/kompakt/internal/server/service"
@@ -28,7 +27,6 @@ func newTestEnv(t *testing.T) *handlers.Handler {
 	hub := handlers.NewHub()
 	return &handlers.Handler{
 		Store:            st,
-		AgentJWTSecret:        []byte("test-secret-key-32-bytes-padding!"),
 		RootPassword:     "admin123",
 		TokenExpiryHours: 24,
 		ArtifactsDir:     t.TempDir(),
@@ -1360,26 +1358,16 @@ func TestHandleRegister_InvalidPlatform(t *testing.T) {
 	}
 }
 
-// ── HandleAgentWS: agent not found ───────────────────────────────────────────
+// ── HandleAgentWS: unknown token ─────────────────────────────────────────────
 
-func TestHandleWS_AgentNotFound(t *testing.T) {
+func TestHandleWS_UnknownToken(t *testing.T) {
 	env := newTestEnv(t)
 
-	// Sign a JWT for an agent ID that does not exist in the store.
-	claims := jwt.RegisteredClaims{
-		Subject:   "ghost-agent-id",
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
-	}
-	tok, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(env.AgentJWTSecret)
-	if err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/ws?token="+tok, nil)
+	// A token that was never issued through registration is not in the DB.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/ws?token=kpkt_notavalidtoken", nil)
 	rr := httptest.NewRecorder()
 	env.HandleAgentWS(rr, req)
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("status = %d; want 404", rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d; want 401", rr.Code)
 	}
 }
