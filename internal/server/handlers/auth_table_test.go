@@ -136,10 +136,13 @@ func TestRequireRootAuth_Variants(t *testing.T) {
 	// Obtain a valid agent token by registering a client.
 	_, agentToken := registerAgent(t, env, "SN-ROOT-VARIANTS", "root-variants-client")
 
+	const wantWWWAuth = `Basic realm="kompakt-root"`
+
 	tests := []struct {
-		name     string
-		buildReq func() *http.Request
-		wantCode int
+		name        string
+		buildReq    func() *http.Request
+		wantCode    int
+		wantWWWAuth bool // whether WWW-Authenticate should be present
 	}{
 		{
 			name: "correct basic auth",
@@ -157,7 +160,8 @@ func TestRequireRootAuth_Variants(t *testing.T) {
 				r.SetBasicAuth("root", "wrongpassword")
 				return r
 			},
-			wantCode: http.StatusUnauthorized,
+			wantCode:    http.StatusUnauthorized,
+			wantWWWAuth: true,
 		},
 		{
 			name: "wrong username",
@@ -166,14 +170,16 @@ func TestRequireRootAuth_Variants(t *testing.T) {
 				r.SetBasicAuth("admin", "admin123")
 				return r
 			},
-			wantCode: http.StatusUnauthorized,
+			wantCode:    http.StatusUnauthorized,
+			wantWWWAuth: true,
 		},
 		{
 			name: "no auth",
 			buildReq: func() *http.Request {
 				return httptest.NewRequest(http.MethodGet, "/status", nil)
 			},
-			wantCode: http.StatusUnauthorized,
+			wantCode:    http.StatusUnauthorized,
+			wantWWWAuth: true,
 		},
 		{
 			name: "valid UI JWT accepted",
@@ -192,21 +198,56 @@ func TestRequireRootAuth_Variants(t *testing.T) {
 				return r
 			},
 			wantCode: http.StatusUnauthorized,
+			// Bearer was presented — no WWW-Authenticate
 		},
 		{
-			name: "expired token rejected",
+			name: "expired token rejected — no WWW-Authenticate",
 			buildReq: func() *http.Request {
 				r := httptest.NewRequest(http.MethodGet, "/status", nil)
 				r.Header.Set("Authorization", "Bearer "+expiredToken(t, secret, "root"))
 				return r
 			},
 			wantCode: http.StatusUnauthorized,
+			// Bearer was presented — no WWW-Authenticate
 		},
 		{
 			name: "wrong signature rejected",
 			buildReq: func() *http.Request {
 				r := httptest.NewRequest(http.MethodGet, "/status", nil)
 				r.Header.Set("Authorization", "Bearer "+wrongSigToken(t, "root"))
+				return r
+			},
+			wantCode: http.StatusUnauthorized,
+			// Bearer was presented — no WWW-Authenticate
+		},
+		// ── HTMX requests: never send WWW-Authenticate ────────────────────────
+		{
+			name: "HTMX request — no auth — no WWW-Authenticate",
+			buildReq: func() *http.Request {
+				r := httptest.NewRequest(http.MethodGet, "/status", nil)
+				r.Header.Set("HX-Request", "true")
+				return r
+			},
+			wantCode: http.StatusUnauthorized,
+			// HTMX — no WWW-Authenticate even though no token
+		},
+		{
+			name: "HTMX request — wrong basic auth — no WWW-Authenticate",
+			buildReq: func() *http.Request {
+				r := httptest.NewRequest(http.MethodGet, "/status", nil)
+				r.Header.Set("HX-Request", "true")
+				r.SetBasicAuth("root", "wrongpassword")
+				return r
+			},
+			wantCode: http.StatusUnauthorized,
+			// HTMX — no WWW-Authenticate even with failed Basic auth
+		},
+		{
+			name: "HTMX request — expired Bearer — no WWW-Authenticate",
+			buildReq: func() *http.Request {
+				r := httptest.NewRequest(http.MethodGet, "/status", nil)
+				r.Header.Set("HX-Request", "true")
+				r.Header.Set("Authorization", "Bearer "+expiredToken(t, secret, "root"))
 				return r
 			},
 			wantCode: http.StatusUnauthorized,
@@ -219,6 +260,13 @@ func TestRequireRootAuth_Variants(t *testing.T) {
 			env.RequireRootAuth(okHandler).ServeHTTP(rr, tt.buildReq())
 			if rr.Code != tt.wantCode {
 				t.Errorf("status = %d; want %d", rr.Code, tt.wantCode)
+			}
+			got := rr.Header().Get("WWW-Authenticate")
+			if tt.wantWWWAuth && got != wantWWWAuth {
+				t.Errorf("WWW-Authenticate = %q; want %q", got, wantWWWAuth)
+			}
+			if !tt.wantWWWAuth && got != "" {
+				t.Errorf("WWW-Authenticate = %q; want empty (should not trigger browser dialog)", got)
 			}
 		})
 	}

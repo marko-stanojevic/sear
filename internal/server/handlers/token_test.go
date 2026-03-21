@@ -239,6 +239,37 @@ func TestRequireRootAuth_WWWAuthenticateOnlyWhenNoAuthHeader(t *testing.T) {
 			t.Error("expected WWW-Authenticate header on failed Basic auth")
 		}
 	})
+
+	// ── HTMX requests must never receive WWW-Authenticate ────────────────────
+	// The browser would show a native Basic auth dialog if this header is present,
+	// blocking the JS login modal from handling re-auth gracefully.
+
+	t.Run("HTMX request — no auth — no WWW-Authenticate", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
+		req.Header.Set("HX-Request", "true")
+		rr := httptest.NewRecorder()
+		env.RequireRootAuth(okHandler).ServeHTTP(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d; want 401", rr.Code)
+		}
+		if got := rr.Header().Get("WWW-Authenticate"); got != "" {
+			t.Errorf("WWW-Authenticate = %q; want empty for HTMX request", got)
+		}
+	})
+
+	t.Run("HTMX request — wrong Basic auth — no WWW-Authenticate", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
+		req.Header.Set("HX-Request", "true")
+		req.SetBasicAuth("root", "wrong-password")
+		rr := httptest.NewRecorder()
+		env.RequireRootAuth(okHandler).ServeHTTP(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d; want 401", rr.Code)
+		}
+		if got := rr.Header().Get("WWW-Authenticate"); got != "" {
+			t.Errorf("WWW-Authenticate = %q; want empty for HTMX request", got)
+		}
+	})
 }
 
 // ── Re-registration revokes old tokens ───────────────────────────────────────

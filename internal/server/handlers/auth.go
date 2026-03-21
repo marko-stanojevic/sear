@@ -169,12 +169,12 @@ func (e *Handler) RequireRootAuth(next http.Handler) http.Handler {
 		if !ok ||
 			subtle.ConstantTimeCompare([]byte(user), []byte("root")) != 1 ||
 			subtle.ConstantTimeCompare([]byte(pass), []byte(e.RootPassword)) != 1 {
-			// Only suppress WWW-Authenticate when the client already presented a
-			// Bearer token (e.g. an expired UI JWT). In that case the browser
-			// would pop a native Basic auth dialog before the JS handler can
-			// show the login modal. For requests with no auth or with failed
-			// Basic auth we still advertise the scheme.
-			if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+			// Suppress WWW-Authenticate for browser/HTMX requests — the JS login
+			// modal handles re-auth and a native Basic auth dialog would appear
+			// otherwise. HTMX always sends HX-Request: true; we also suppress it
+			// when the client already presented a Bearer token (e.g. expired UI JWT).
+			isHXRequest := r.Header.Get("HX-Request") == "true"
+			if !isHXRequest && !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
 				w.Header().Set("WWW-Authenticate", `Basic realm="kompakt-root"`)
 			}
 			writeError(w, http.StatusUnauthorized, "invalid root credentials")
