@@ -167,11 +167,11 @@ var tmplFuncs = template.FuncMap{
 	"policyClass": func(p string) string {
 		switch p {
 		case "public":
-			return "badge-outline"
-		case "restricted":
 			return "badge-warning"
-		default:
-			return "badge-muted"
+		case "restricted":
+			return "badge-success"
+		default: // authenticated
+			return "badge-success"
 		}
 	},
 	"policyLabel": func(p string) string {
