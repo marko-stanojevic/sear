@@ -101,6 +101,38 @@ func TestHub_Unregister_Unknown(t *testing.T) {
 	}
 }
 
+// ── htmlTemplateFunctions ─────────────────────────────────────────────────────────────────
+
+func TestTmplFuncs_PolicyClass(t *testing.T) {
+	fn := htmlTemplateFunctions["policyClass"].(func(string) string)
+	tests := []struct{ in, want string }{
+		{"authenticated", "badge-success"},
+		{"public", "badge-warning"},
+		{"restricted", "badge-success"},
+		{"", "badge-success"}, // unknown falls through to authenticated default
+	}
+	for _, tt := range tests {
+		if got := fn(tt.in); got != tt.want {
+			t.Errorf("policyClass(%q) = %q; want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestTmplFuncs_PolicyLabel(t *testing.T) {
+	fn := htmlTemplateFunctions["policyLabel"].(func(string) string)
+	tests := []struct{ in, want string }{
+		{"authenticated", "Authenticated"},
+		{"public", "Public"},
+		{"restricted", "Restricted"},
+		{"", "Authenticated"}, // unknown falls through to authenticated default
+	}
+	for _, tt := range tests {
+		if got := fn(tt.in); got != tt.want {
+			t.Errorf("policyLabel(%q) = %q; want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 // ── writeJSON / writeError ────────────────────────────────────────────────────
 
 func TestWriteJSON_SetsHeaderAndBody(t *testing.T) {

@@ -117,7 +117,7 @@ type logsData struct {
 
 // ── Template functions ────────────────────────────────────────────────────────
 
-var tmplFuncs = template.FuncMap{
+var htmlTemplateFunctions = template.FuncMap{
 	"formatTime": func(t time.Time) string {
 		if t.IsZero() {
 			return "-"
@@ -207,7 +207,7 @@ var tmplFuncs = template.FuncMap{
 // ── Rendering helpers ─────────────────────────────────────────────────────────
 
 func renderPage(w http.ResponseWriter, page string, data any) {
-	t, err := template.New("").Funcs(tmplFuncs).ParseFS(uiFS,
+	t, err := template.New("").Funcs(htmlTemplateFunctions).ParseFS(uiFS,
 		"ui/templates/layout.html",
 		"ui/templates/pages/"+page+".html",
 	)
@@ -226,7 +226,7 @@ func renderPage(w http.ResponseWriter, page string, data any) {
 
 func renderPartialTemplate(w http.ResponseWriter, name string, data any) {
 	filename := name + ".html"
-	t, err := template.New(filename).Funcs(tmplFuncs).ParseFS(uiFS, "ui/templates/partials/"+filename)
+	t, err := template.New(filename).Funcs(htmlTemplateFunctions).ParseFS(uiFS, "ui/templates/partials/"+filename)
 	if err != nil {
 		http.Error(w, "template parse error: "+err.Error(), http.StatusInternalServerError)
 		return
