@@ -199,7 +199,7 @@ func (c *Agent) connect(ctx context.Context) error {
 				slog.Warn("invalid playbook message", "error", err)
 				continue
 			}
-			c.runPlaybook(ctx, writer, &pd)
+			go c.runPlaybook(ctx, writer, &pd)
 
 		case common.WSMsgCommand:
 			raw, _ := json.Marshal(msg.Data)
