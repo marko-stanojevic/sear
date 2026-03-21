@@ -1,8 +1,13 @@
 // ── HTMX auth hook ────────────────────────────────────────────────────────────
 // Inject the JWT on every HTMX request so partials (protected by RequireRootAuth) work.
+// If there is no token the request is cancelled — the login modal is already showing.
 document.addEventListener('htmx:configRequest', function(e) {
   var token = localStorage.getItem('kompakt_token');
-  if (token) e.detail.headers['Authorization'] = 'Bearer ' + token;
+  if (token) {
+    e.detail.headers['Authorization'] = 'Bearer ' + token;
+  } else {
+    e.preventDefault();
+  }
 });
 
 // Intercept 401 responses from HTMX: cancel the swap and show the login modal.
