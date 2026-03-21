@@ -98,6 +98,61 @@ func TestIntegration_RootAPI_AgentTokenRejected(t *testing.T) {
 	}
 }
 
+// HTMX requests must never receive a WWW-Authenticate header, regardless of
+// auth state, so the browser does not show its native Basic auth dialog.
+func TestIntegration_RootAPI_HTMXRequest_NoWWWAuthenticate(t *testing.T) {
+	env := newIntegrationEnv(t)
+
+	doHTMX := func(t *testing.T, setupReq func(*http.Request)) *http.Response {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, env.srv.URL+"/api/v1/status", nil)
+		req.Header.Set("HX-Request", "true")
+		if setupReq != nil {
+			setupReq(req)
+		}
+		resp, err := env.client.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		return resp
+	}
+
+	t.Run("no auth", func(t *testing.T) {
+		resp := doHTMX(t, nil)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("status = %d; want 401", resp.StatusCode)
+		}
+		if got := resp.Header.Get("WWW-Authenticate"); got != "" {
+			t.Errorf("WWW-Authenticate = %q; want empty for HTMX request", got)
+		}
+	})
+
+	t.Run("wrong Basic auth", func(t *testing.T) {
+		resp := doHTMX(t, func(r *http.Request) { r.SetBasicAuth("root", "wrong") })
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("status = %d; want 401", resp.StatusCode)
+		}
+		if got := resp.Header.Get("WWW-Authenticate"); got != "" {
+			t.Errorf("WWW-Authenticate = %q; want empty for HTMX request", got)
+		}
+	})
+
+	t.Run("expired Bearer token", func(t *testing.T) {
+		resp := doHTMX(t, func(r *http.Request) {
+			r.Header.Set("Authorization", "Bearer kpkt_expiredtoken000000000000000000000000000000000000000000000000")
+		})
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("status = %d; want 401", resp.StatusCode)
+		}
+		if got := resp.Header.Get("WWW-Authenticate"); got != "" {
+			t.Errorf("WWW-Authenticate = %q; want empty for HTMX request", got)
+		}
+	})
+}
+
 // A UI JWT must not be accepted by agent-only endpoints.
 func TestIntegration_AgentWS_UITokenRejected(t *testing.T) {
 	env := newIntegrationEnv(t)
