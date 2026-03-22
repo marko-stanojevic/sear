@@ -136,14 +136,20 @@ func (c *Agent) register(ctx context.Context) error {
 		Shells:             identity.DetectShells(),
 	}
 
-	// Send registration request to server
+	// Send registration request to server with context
 	regURL := strings.TrimRight(c.cfg.ServerURL, "/") + "/api/v1/register"
 	body, err := json.Marshal(req)
 	if err != nil {
 		slog.Error("failed to marshal registration request", "error", err)
 		return err
 	}
-	resp, err := c.httpClient.Post(regURL, "application/json", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, regURL, bytes.NewReader(body))
+	if err != nil {
+		slog.Error("failed to create registration request", "error", err)
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		slog.Error("registration request failed", "error", err)
 		return err
@@ -394,7 +400,6 @@ func (c *Agent) runPlaybook(ctx context.Context, writer *WSOutboundWriter, pd *c
 }
 
 // ── Shell capability detection ────────────────────────────────────────────────
-
 
 // ── Command execution ─────────────────────────────────────────────────────────
 
