@@ -33,6 +33,7 @@ func newTestEnv(t *testing.T) *handlers.Handler {
 		ServerURL:        "http://localhost:8080",
 		Hub:              hub,
 		Service:          &service.Manager{Store: st, Hub: hub, ServerURL: "http://localhost:8080"},
+		Commands:         handlers.NewCommandStore(),
 		RegistrationSecrets: map[string]string{
 			"prod": "reg-secret-1",
 		},

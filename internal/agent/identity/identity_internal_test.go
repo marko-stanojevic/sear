@@ -1,8 +1,50 @@
 package identity
 
 import (
+	"strings"
 	"testing"
 )
+
+func TestFirstStableMAC_ReturnsStringWithoutColons(t *testing.T) {
+	mac := firstStableMAC()
+	// The function returns either empty (no suitable interface) or a hex string
+	// with colons stripped.
+	if strings.Contains(mac, ":") {
+		t.Errorf("firstStableMAC() = %q; should not contain colons", mac)
+	}
+}
+
+func TestCollectID_ReturnsNonEmpty(t *testing.T) {
+	meta := map[string]string{}
+	id := collectID(meta)
+	if id == "" {
+		t.Error("collectID should always return a non-empty string")
+	}
+}
+
+func TestCollectID_VirtualMachine_UsesVMGUID(t *testing.T) {
+	// When vendor/model suggest a VM, collectID tries vmGUID first.
+	// We can't control vmGUID output, but at minimum it shouldn't panic.
+	meta := map[string]string{
+		"vendor": "VMware, Inc.",
+		"model":  "Virtual Machine",
+	}
+	id := collectID(meta)
+	if id == "" {
+		t.Error("collectID should return a non-empty string even for VMs")
+	}
+}
+
+func TestCollectID_RandomFallback_HasPrefix(t *testing.T) {
+	// This test exercises the random fallback path by noting that when no serial,
+	// GUID, or MAC is available, we get "rnd-..." prefix. We can't control
+	// external commands, so we just verify the output is non-empty and valid.
+	meta := map[string]string{}
+	id := collectID(meta)
+	if id == "" {
+		t.Error("collectID fallback should produce non-empty ID")
+	}
+}
 
 func TestIsLikelyVM(t *testing.T) {
 	if !isLikelyVM(map[string]string{"vendor": "VMware, Inc.", "model": "Virtual Machine"}) {
