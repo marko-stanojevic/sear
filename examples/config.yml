@@ -1,22 +1,42 @@
-# kompakt configuration
-# Copy to config.yml and adjust for your environment.
 
-listen_address: "http://localhost:8080"
-data_dir: "/var/lib/kompakt"
-artifacts_dir: "/var/lib/kompakt/artifacts"
-logs_dir: "/var/lib/kompakt/logs"
+# kompakt server configuration
+# By default, kompakt looks for config.yml in the same folder as the kompakt binary (unless overridden with -config).
+# Copy to /etc/kompakt/config.yml (Linux) or C:\ProgramData\kompakt\config.yml (Windows), or keep next to the kompakt binary.
+#
+# To use a custom location, start the server with:
+#   kompakt -config /path/to/config.yml -secrets /path/to/secrets.yml
+
+
+
+# Required: Address to bind the kompakt server (HTTP or HTTPS)
+listen_address: "localhost:8080"
+
+# Optional: Directory where the server stores its state and database.
+# Default: kompakt-data (relative to working directory)
+# data_dir: "/var/lib/kompakt"
+
+# Optional: Directory where uploaded artifacts are stored.
+# Default: <data_dir>/artifacts
+# artifacts_dir: "/var/lib/kompakt/artifacts"
+
+# Optional: Directory where per-deployment log files are stored.
+# Default: <data_dir>/logs
+# logs_dir: "/var/lib/kompakt/logs"
 
 # TLS — leave blank to use plain HTTP (fine for private networks).
 # tls_cert_file: "/etc/kompakt/tls.crt"
 # tls_key_file:  "/etc/kompakt/tls.key"
 
 
-# UI session JWT signing secret — used to sign web UI/admin session tokens (not agent tokens).
-# Set a stable, strong value for production. If empty, a new random secret is generated on each startup (invalidates all UI sessions).
+
+# Optional: UI session JWT signing secret — used to sign web UI/admin session tokens (not agent tokens).
+# If empty or omitted, a new random secret is generated on each startup (invalidates all UI sessions).
+# Default: (randomly generated on each start)
 jwt_secret: "dev-local-jwt-secret-change-in-production"
 
-# JWT lifetime in hours (default 8 = 8 hours).
-token_expiry_hours: 8
+# Optional: JWT lifetime in hours for UI/admin sessions.
+# Default: 720 (30 days)
+# token_expiry_hours: 8
 
 # All deployment logs are persisted in logs_dir.
 # Artifacts are distributed automatically during workflow execution.

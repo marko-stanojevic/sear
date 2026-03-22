@@ -13,7 +13,7 @@ import (
 
 // ServerConfig is the main server configuration file.
 type ServerConfig struct {
-	// ListenAddress is the address to bind the HTTP server (default "http://localhost:8080").
+	// ListenAddress is the address to bind the HTTP server (default "localhost:8080").
 	ListenAddress string `yaml:"listen_address"`
 
 	// DataDir is the directory where the server stores its state.
@@ -35,7 +35,7 @@ type ServerConfig struct {
 	// If empty, a secret is auto-generated and persisted in DataDir.
 	UserJWTSecret string `yaml:"user_jwt_secret"`
 
-	// TokenExpiryHours is the agent JWT token lifetime in hours (default 720 = 30 days).
+	// TokenExpiryHours is the UI/admin JWT token lifetime in hours (default 8 = 8 hours).
 	TokenExpiryHours int `yaml:"token_expiry_hours"`
 }
 

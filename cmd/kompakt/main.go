@@ -28,18 +28,25 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "config.yml", "path to server config file")
-	secretsPath := flag.String("secrets", "secrets.yml", "path to server secrets file")
-	debug := flag.Bool("debug", false, "log all HTTP requests (default: WebSocket and errors only)")
-	flag.Parse()
 
-	terminal.Setup(*debug)
+configPath := flag.String("config", "config.yml", "path to server config file")
+secretsPath := flag.String("secrets", "secrets.yml", "path to server secrets file")
+debug := flag.Bool("debug", false, "log all HTTP requests (default: WebSocket and errors only)")
+flag.Parse()
 
-	cfg, err := common.LoadServerConfig(*configPath)
-	if err != nil {
-		slog.Error("config load failed", "error", err)
-		os.Exit(1)
-	}
+terminal.Setup(*debug)
+
+cfg, err := common.LoadServerConfig(*configPath)
+if err != nil {
+	slog.Error("config load failed", "error", err)
+	os.Exit(1)
+}
+
+// ...existing code up to after secrets are loaded...
+
+
+
+// ...all initialization is now handled after config and secrets are loaded...
 
 	// ── TLS self-signed cert auto-generation ─────────────────────────────
 	if (cfg.TLSCertFile != "" || cfg.TLSKeyFile != "") && (cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || !server.FileExists(cfg.TLSCertFile) || !server.FileExists(cfg.TLSKeyFile)) {
@@ -196,7 +203,7 @@ func applyConfigDefaults(cfg *common.ServerConfig) {
 		cfg.LogsDir = filepath.Join(cfg.DataDir, "logs")
 	}
 	if cfg.TokenExpiryHours == 0 {
-		cfg.TokenExpiryHours = 720 // 30 days
+		cfg.TokenExpiryHours = 8 // 8 hours
 	}
 }
 

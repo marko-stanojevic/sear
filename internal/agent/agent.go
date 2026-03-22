@@ -41,7 +41,6 @@ func sanitizeOutputLine(s string) string {
 // signalling that the caller should re-register immediately without sleeping.
 var errTokenRejected = errors.New("token rejected by server")
 
-
 // localState is persisted to disk so the agent can resume after a reboot.
 type localState struct {
 	AgentID string `json:"agent_id"`
@@ -78,9 +77,15 @@ func New(cfg *common.AgentConfig) *Agent {
 // Run starts the agent: registers if needed, then connects and reconnects
 // via WebSocket until ctx is cancelled.
 func (c *Agent) Run(ctx context.Context) error {
+
 	if err := c.loadState(); err != nil {
 		slog.Warn("could not load local state", "error", err)
 	}
+
+	// Print platform info on startup (split for readability)
+	pf := identity.Collect()
+	slog.Info("Agent", "hostname", pf.Hostname, "model", pf.Model, "vendor", pf.Vendor)
+	slog.Info("Agent (metadata)", "metadata", pf.Metadata)
 
 	interval := time.Duration(c.cfg.ReconnectIntervalSeconds) * time.Second
 	for {
