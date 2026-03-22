@@ -2,13 +2,14 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 	"github.com/marko-stanojevic/kompakt/internal/server/ports"
 	"github.com/marko-stanojevic/kompakt/internal/server/service"
@@ -33,29 +34,29 @@ type Handler struct {
 // Hub manages all active WebSocket connections.
 type Hub struct {
 	mu    sync.RWMutex
-	conns map[string]*WSConn // agentID → connection
+	conns map[string]*AgentConn // agentID → connection
 }
 
-// WSConn wraps a single agent WebSocket connection with an outbound queue.
-type WSConn struct {
+// AgentConn wraps a single agent WebSocket connection with an outbound queue.
+type AgentConn struct {
 	agentID string
-	ws       *websocket.Conn
-	send     chan []byte
-	done     chan struct{}
+	conn    *websocket.Conn
+	outbox  chan []byte
+	stop    chan struct{} // closed to stop the write pump
 }
 
 // NewHub creates an empty Hub.
 func NewHub() *Hub {
-	return &Hub{conns: make(map[string]*WSConn)}
+	return &Hub{conns: make(map[string]*AgentConn)}
 }
 
 // register adds (or replaces) the connection for an agent.
-func (h *Hub) register(conn *WSConn) {
+func (h *Hub) register(conn *AgentConn) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if old, ok := h.conns[conn.agentID]; ok {
-		close(old.done)
-		_ = old.ws.Close()
+		close(old.stop)
+		_ = old.conn.Close(websocket.StatusGoingAway, "replaced by new connection")
 	}
 	h.conns[conn.agentID] = conn
 }
@@ -89,51 +90,50 @@ func (h *Hub) Send(agentID string, msg common.WSMessage) bool {
 		return false
 	}
 	select {
-	case conn.send <- data:
+	case conn.outbox <- data:
 		return true
 	default:
 		return false
 	}
 }
 
-// newWSConn creates a WSConn and starts its write pump goroutine.
-func newWSConn(agentID string, ws *websocket.Conn) *WSConn {
-	c := &WSConn{
+// newAgentConn creates an AgentConn and starts its write pump goroutine.
+func newAgentConn(agentID string, ws *websocket.Conn) *AgentConn {
+	c := &AgentConn{
 		agentID: agentID,
-		ws:       ws,
-		send:     make(chan []byte, 64),
-		done:     make(chan struct{}),
+		conn:    ws,
+		outbox:  make(chan []byte, 64),
+		stop:    make(chan struct{}),
 	}
 	go c.writePump()
 	return c
 }
 
-func (c *WSConn) writePump() {
+func (c *AgentConn) writePump() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
-		case data, ok := <-c.send:
-			if err := c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
-				return
-			}
+		case data, ok := <-c.outbox:
 			if !ok {
-				if err := c.ws.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
-					return
-				}
+				_ = c.conn.Close(websocket.StatusNormalClosure, "")
 				return
 			}
-			if err := c.ws.WriteMessage(websocket.TextMessage, data); err != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err := c.conn.Write(ctx, websocket.MessageText, data)
+			cancel()
+			if err != nil {
 				return
 			}
 		case <-ticker.C:
-			if err := c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err := c.conn.Ping(ctx)
+			cancel()
+			if err != nil {
 				return
 			}
-			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
-			}
-		case <-c.done:
+		case <-c.stop:
+			_ = c.conn.Close(websocket.StatusGoingAway, "shutting down")
 			return
 		}
 	}

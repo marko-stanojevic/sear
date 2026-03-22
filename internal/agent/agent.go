@@ -4,6 +4,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,29 +14,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"runtime"
 	"strings"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 	"github.com/marko-stanojevic/kompakt/internal/agent/executor"
 	"github.com/marko-stanojevic/kompakt/internal/agent/identity"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
-
-// ansiEscape strips ANSI/VT100 escape sequences from command output.
-var ansiEscape = regexp.MustCompile(`\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])`)
-
-func sanitizeOutputLine(s string) string {
-	s = ansiEscape.ReplaceAllString(s, "")
-	return strings.Map(func(r rune) rune {
-		if (r < 0x20 && r != '\t') || r == 0x7f {
-			return -1
-		}
-		return r
-	}, s)
-}
 
 // errTokenRejected is returned by connect when the server responds with 401,
 // signalling that the caller should re-register immediately without sleeping.
@@ -52,11 +38,13 @@ type Agent struct {
 	platformInfo *identity.PlatformInfo
 	cfg          *common.AgentConfig
 	state        localState
+	tlsCfg       *tls.Config
 	httpClient   *http.Client
 }
 
 // New creates a new Agent with sensible defaults applied.
-func New(cfg *common.AgentConfig) *Agent {
+// Returns an error if the TLS configuration is invalid (e.g. CA file not found).
+func New(cfg *common.AgentConfig) (*Agent, error) {
 	if cfg.ReconnectIntervalSeconds == 0 {
 		cfg.ReconnectIntervalSeconds = 10
 	}
@@ -69,10 +57,26 @@ func New(cfg *common.AgentConfig) *Agent {
 	if cfg.WorkDir == "" {
 		cfg.WorkDir = defaultWorkDir()
 	}
-	return &Agent{
-		cfg:        cfg,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+
+	tlsCfg, err := buildTLSConfig(cfg)
+	if err != nil {
+		return nil, err
 	}
+
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	if tlsCfg != nil {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = tlsCfg
+		httpClient.Transport = transport
+	}
+
+	pf := identity.Collect()
+	return &Agent{
+		cfg:          cfg,
+		platformInfo: &pf,
+		tlsCfg:       tlsCfg,
+		httpClient:   httpClient,
+	}, nil
 }
 
 // Run starts the agent: registers if needed, then connects and reconnects
@@ -84,10 +88,8 @@ func (c *Agent) Run(ctx context.Context) error {
 	}
 
 	// Print platform info on startup (split for readability)
-	pf := identity.Collect()
-	slog.Info("Agent", "hostname", pf.Hostname, "model", pf.Model, "vendor", pf.Vendor)
-	slog.Info("Agent (metadata)", "metadata", pf.Metadata)
-	c.platformInfo = &pf
+	slog.Info("Agent", "hostname", c.platformInfo.Hostname, "model", c.platformInfo.Model, "vendor", c.platformInfo.Vendor)
+	slog.Info("Agent (metadata)", "metadata", c.platformInfo.Metadata)
 
 	interval := time.Duration(c.cfg.ReconnectIntervalSeconds) * time.Second
 	for {
@@ -119,13 +121,7 @@ func (c *Agent) Run(ctx context.Context) error {
 // ── Registration ─────────────────────────────────────────────────────────────
 
 func (c *Agent) register(ctx context.Context) error {
-	var pf identity.PlatformInfo
-	if c.platformInfo != nil {
-		pf = *c.platformInfo
-	} else {
-		pf = identity.Collect()
-		c.platformInfo = &pf
-	}
+	pf := *c.platformInfo
 	req := common.RegistrationRequest{
 		Platform:           common.PlatformType(pf.Platform),
 		Hostname:           pf.Hostname,
@@ -176,8 +172,11 @@ func (c *Agent) register(ctx context.Context) error {
 
 func (c *Agent) connect(ctx context.Context) error {
 	wsURL := wsEndpoint(c.cfg.ServerURL, c.state.Token)
-	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
-	ws, resp, err := dialer.DialContext(ctx, wsURL, nil)
+	dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
+	ws, resp, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
+		HTTPClient: c.httpClient,
+	})
+	dialCancel()
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
 			slog.Warn("token rejected by server, will re-register")
@@ -188,36 +187,16 @@ func (c *Agent) connect(ctx context.Context) error {
 		}
 		return fmt.Errorf("dial: %w", err)
 	}
-	defer func() { _ = ws.Close() }()
-	writer := newWSOutboundWriter(ws)
+	defer ws.CloseNow()
+	writer := newMessageWriter(ws)
 	defer writer.Stop()
 
 	slog.Info("WebSocket connected")
 
-	ws.SetPingHandler(func(appData string) error {
-		// Reset the read deadline so the server's periodic pings keep the
-		// connection alive on our side too.
-		_ = ws.SetReadDeadline(time.Now().Add(90 * time.Second))
-		return ws.WriteControl(websocket.PongMessage, nil, time.Now().Add(5*time.Second))
-	})
-
-	// Unblock ReadMessage when the context is cancelled.
-	go func() {
-		<-ctx.Done()
-		// Force any blocking read/write operations to return immediately.
-		_ = ws.SetReadDeadline(time.Now())
-		_ = ws.SetWriteDeadline(time.Now())
-		_ = ws.Close()
-	}()
-
+	// coder/websocket automatically responds to pings with pongs.
+	// The read loop unblocks naturally when ctx is cancelled.
 	for {
-		if err := ws.SetReadDeadline(time.Now().Add(90 * time.Second)); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			return fmt.Errorf("set read deadline: %w", err)
-		}
-		_, data, err := ws.ReadMessage()
+		_, data, err := ws.Read(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -275,7 +254,7 @@ func wsEndpoint(serverURL, token string) string {
 
 // ── Playbook execution ────────────────────────────────────────────────────────
 
-func (c *Agent) runPlaybook(ctx context.Context, writer *WSOutboundWriter, pd *common.WSPlaybookData) {
+func (c *Agent) runPlaybook(ctx context.Context, writer *MessageWriter, pd *common.WSPlaybookData) {
 	pb := pd.Playbook
 	deploymentID := pd.DeploymentID
 	slog.Info("starting playbook", "name", pb.Name, "deployment_id", deploymentID, "resume_step", pd.ResumeStepIndex)
@@ -401,18 +380,12 @@ func (c *Agent) runPlaybook(ctx context.Context, writer *WSOutboundWriter, pd *c
 	})
 }
 
-// ── Shell capability detection ────────────────────────────────────────────────
-
 // ── Command execution ─────────────────────────────────────────────────────────
 
-func (c *Agent) runCommand(ctx context.Context, writer *WSOutboundWriter, cd *common.WSCommandData) {
+func (c *Agent) runCommand(ctx context.Context, writer *MessageWriter, cd *common.WSCommandData) {
 	shell := strings.ToLower(cd.Shell)
 	if shell == "" {
-		if runtime.GOOS == "windows" {
-			shell = "cmd"
-		} else {
-			shell = "bash"
-		}
+		shell = defaultShell()
 	}
 
 	if c.cfg.WorkDir != "" {
@@ -487,33 +460,13 @@ func (c *Agent) runCommand(ctx context.Context, writer *WSOutboundWriter, cd *co
 	}
 	_ = pw.Close()
 
-	buf := make([]byte, 4096)
-	var leftover string
-	for {
-		n, readErr := pr.Read(buf)
-		if n > 0 {
-			chunk := leftover + string(buf[:n])
-			lines := strings.Split(chunk, "\n")
-			for _, line := range lines[:len(lines)-1] {
-				writer.Send(common.WSMessage{
-					Type:      common.WSMsgCommandStream,
-					Timestamp: time.Now(),
-					Data:      common.WSCommandChunk{CmdID: cd.CmdID, Output: sanitizeOutputLine(line)},
-				})
-			}
-			leftover = lines[len(lines)-1]
-		}
-		if readErr != nil {
-			if leftover != "" {
-				writer.Send(common.WSMessage{
-					Type:      common.WSMsgCommandStream,
-					Timestamp: time.Now(),
-					Data:      common.WSCommandChunk{CmdID: cd.CmdID, Output: sanitizeOutputLine(leftover)},
-				})
-			}
-			break
-		}
-	}
+	executor.DrainPipeLines(pr, func(line string) {
+		writer.Send(common.WSMessage{
+			Type:      common.WSMsgCommandStream,
+			Timestamp: time.Now(),
+			Data:      common.WSCommandChunk{CmdID: cd.CmdID, Output: executor.SanitizeLine(line)},
+		})
+	})
 	_ = pr.Close()
 
 	exitCode := 0
@@ -530,15 +483,15 @@ func (c *Agent) runCommand(ctx context.Context, writer *WSOutboundWriter, cd *co
 	sendDone(exitCode, errMsg)
 }
 
-type WSOutboundWriter struct {
-	ch   chan common.WSMessage
-	stop chan struct{}
-	done chan struct{}
+type MessageWriter struct {
+	outbox chan common.WSMessage
+	stop   chan struct{}
+	done   chan struct{}
 }
 
-func newWSOutboundWriter(ws *websocket.Conn) *WSOutboundWriter {
-	w := &WSOutboundWriter{
-		ch:   make(chan common.WSMessage, 256),
+func newMessageWriter(ws *websocket.Conn) *MessageWriter {
+	w := &MessageWriter{
+		outbox: make(chan common.WSMessage, 256),
 		stop: make(chan struct{}),
 		done: make(chan struct{}),
 	}
@@ -549,17 +502,16 @@ func newWSOutboundWriter(ws *websocket.Conn) *WSOutboundWriter {
 			select {
 			case <-w.stop:
 				return
-			case msg := <-w.ch:
+			case msg := <-w.outbox:
 				data, err := json.Marshal(msg)
 				if err != nil {
 					slog.Warn("failed to marshal WS message", "error", err)
 					continue
 				}
-				if err := ws.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
-					slog.Warn("failed to set WS write deadline", "error", err)
-					return
-				}
-				if err := ws.WriteMessage(websocket.TextMessage, data); err != nil {
+				writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				err = ws.Write(writeCtx, websocket.MessageText, data)
+				cancel()
+				if err != nil {
 					slog.Warn("WS write failed", "error", err)
 					return
 				}
@@ -570,7 +522,7 @@ func newWSOutboundWriter(ws *websocket.Conn) *WSOutboundWriter {
 	return w
 }
 
-func (w *WSOutboundWriter) Send(msg common.WSMessage) {
+func (w *MessageWriter) Send(msg common.WSMessage) {
 	// Fast-path check: if the writer is already closed, don't block.
 	select {
 	case <-w.done:
@@ -583,11 +535,11 @@ func (w *WSOutboundWriter) Send(msg common.WSMessage) {
 	select {
 	case <-w.done:
 		slog.Warn("dropping WS message, writer closed", "type", msg.Type)
-	case w.ch <- msg:
+	case w.outbox <- msg:
 	}
 }
 
-func (w *WSOutboundWriter) Stop() {
+func (w *MessageWriter) Stop() {
 	close(w.stop)
 	<-w.done
 }
@@ -612,35 +564,6 @@ func (c *Agent) saveState() error {
 		return err
 	}
 	return os.WriteFile(c.cfg.StateFile, data, 0o600)
-}
-
-// ── HTTP helpers (registration only) ─────────────────────────────────────────
-
-func (c *Agent) post(ctx context.Context, path string, body, out any, token string) error {
-	b, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.ServerURL+path, bytes.NewReader(b))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("HTTP %d from %s", resp.StatusCode, path)
-	}
-	if out != nil {
-		return json.NewDecoder(resp.Body).Decode(out)
-	}
-	return nil
 }
 
 // ── Portable default paths ────────────────────────────────────────────────────

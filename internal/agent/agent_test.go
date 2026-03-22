@@ -7,17 +7,21 @@ import (
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
-func newTestAgent(serverURL string) *agent.Agent {
+func newTestAgent(t *testing.T, serverURL string) *agent.Agent {
+	t.Helper()
 	cfg := &common.AgentConfig{
 		ServerURL:          serverURL,
 		RegistrationSecret: "test-secret",
-
 	}
-	return agent.New(cfg)
+	c, err := agent.New(cfg)
+	if err != nil {
+		t.Fatalf("agent.New: %v", err)
+	}
+	return c
 }
 
 func TestNew_Defaults(t *testing.T) {
-	c := newTestAgent("http://localhost:8080")
+	c := newTestAgent(t, "http://localhost:8080")
 	_ = c // Ensure construction does not panic.
 }
 
@@ -25,7 +29,9 @@ func TestAgentDefaults(t *testing.T) {
 	cfg := &common.AgentConfig{
 		ServerURL: "http://kompakt:8080",
 	}
-	_ = agent.New(cfg)
+	if _, err := agent.New(cfg); err != nil {
+		t.Fatalf("agent.New: %v", err)
+	}
 	if cfg.ReconnectIntervalSeconds == 0 {
 		t.Error("ReconnectIntervalSeconds should be defaulted")
 	}

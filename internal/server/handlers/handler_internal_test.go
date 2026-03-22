@@ -9,13 +9,13 @@ import (
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
 
-// makeTestConn builds a WSConn suitable for unit tests: the ws field is nil
+// makeTestConn builds an AgentConn suitable for unit tests: the conn field is nil
 // because Hub.Send and Hub.IsConnected never touch it.
-func makeTestConn(agentID string, bufSize int) *WSConn {
-	return &WSConn{
+func makeTestConn(agentID string, bufSize int) *AgentConn {
+	return &AgentConn{
 		agentID: agentID,
-		send:    make(chan []byte, bufSize),
-		done:    make(chan struct{}),
+		outbox:  make(chan []byte, bufSize),
+		stop:    make(chan struct{}),
 	}
 }
 
@@ -42,7 +42,7 @@ func TestHub_IsConnectedAndSend(t *testing.T) {
 	}
 
 	select {
-	case raw := <-conn.send:
+	case raw := <-conn.outbox:
 		var msg common.WSMessage
 		if err := json.Unmarshal(raw, &msg); err != nil {
 			t.Fatalf("unmarshal sent message: %v", err)

@@ -1,16 +1,15 @@
+//go:build windows
+
 // DetectShells returns a list of available shell interpreters on the system.
 package identity
 
-import (
-	"os/exec"
-)
+import "os/exec"
 
 func DetectShells() []string {
 	candidates := []struct{ name, exe string }{
-		{"bash", "bash"},
-		{"sh", "sh"},
-		{"pwsh", "pwsh"},
-		{"powershell", "powershell.exe"},
+		{"bash", "bash"},           // Git Bash / WSL bash
+		{"pwsh", "pwsh"},           // PowerShell Core
+		{"powershell", "powershell.exe"}, // Windows PowerShell
 		{"cmd", "cmd.exe"},
 	}
 	var found []string

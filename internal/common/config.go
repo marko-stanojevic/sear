@@ -83,6 +83,15 @@ type AgentConfig struct {
 	// LogBatchSize is the maximum number of log lines buffered before a
 	// forced flush (default 100).
 	LogBatchSize int `yaml:"log_batch_size"`
+
+	// TLSCAFile is the path to a PEM-encoded CA certificate used to verify
+	// the server's TLS certificate. Use this when the server presents a
+	// self-signed or privately-signed certificate.
+	TLSCAFile string `yaml:"tls_ca_file"`
+
+	// TLSSkipVerify disables TLS certificate verification entirely.
+	// Only use this in development or isolated test environments.
+	TLSSkipVerify bool `yaml:"tls_skip_verify"`
 }
 
 // ── Generic YAML loader ───────────────────────────────────────────────────────

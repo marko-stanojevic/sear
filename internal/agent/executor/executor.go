@@ -20,9 +20,13 @@ import (
 // ansiEscape matches ANSI/VT100 escape sequences (colours, cursor movement, etc.).
 var ansiEscape = regexp.MustCompile(`\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])`)
 
-// sanitizeLine strips ANSI escape sequences and ASCII control characters from
+// artifactClient is reused across all artifact upload/download calls. The long
+// timeout accommodates large binaries; the client itself is goroutine-safe.
+var artifactClient = &http.Client{Timeout: 10 * time.Minute}
+
+// SanitizeLine strips ANSI escape sequences and ASCII control characters from
 // shell output so they cannot corrupt the terminal cursor position in the log.
-func sanitizeLine(s string) string {
+func SanitizeLine(s string) string {
 	s = ansiEscape.ReplaceAllString(s, "")
 	return strings.Map(func(r rune) rune {
 		if (r < 0x20 && r != '\t') || r == 0x7f {
@@ -30,6 +34,31 @@ func sanitizeLine(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// DrainPipeLines reads from pr line-by-line and calls each for every complete
+// line. The final partial line (no trailing newline) is also delivered. The
+// caller is responsible for closing pr after DrainPipeLines returns.
+func DrainPipeLines(pr *os.File, each func(string)) {
+	buf := make([]byte, 4096)
+	var leftover string
+	for {
+		n, err := pr.Read(buf)
+		if n > 0 {
+			chunk := leftover + string(buf[:n])
+			lines := strings.Split(chunk, "\n")
+			for _, line := range lines[:len(lines)-1] {
+				each(line)
+			}
+			leftover = lines[len(lines)-1]
+		}
+		if err != nil {
+			if leftover != "" {
+				each(leftover)
+			}
+			break
+		}
+	}
 }
 
 // Logger is a function the executor calls to emit log lines.
@@ -143,29 +172,10 @@ func runShell(ctx context.Context, step common.Step, secrets, stepEnv map[string
 	drainDone := make(chan struct{})
 	go func() {
 		defer close(drainDone)
-		defer func() {
-			_ = pr.Close()
-		}()
-
-		buf := make([]byte, 4096)
-		var leftover string
-		for {
-			n, err := pr.Read(buf)
-			if n > 0 {
-				chunk := leftover + string(buf[:n])
-				lines := strings.Split(chunk, "\n")
-				for _, line := range lines[:len(lines)-1] {
-					log(common.LogLevelInfo, sanitizeLine(line))
-				}
-				leftover = lines[len(lines)-1]
-			}
-			if err != nil {
-				if leftover != "" {
-					log(common.LogLevelInfo, sanitizeLine(leftover))
-				}
-				break
-			}
-		}
+		defer func() { _ = pr.Close() }()
+		DrainPipeLines(pr, func(line string) {
+			log(common.LogLevelInfo, SanitizeLine(line))
+		})
 	}()
 
 	if err := cmd.Wait(); err != nil {
@@ -200,8 +210,7 @@ func runDownloadArtifact(ctx context.Context, step common.Step, artifactsBaseURL
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	client := &http.Client{Timeout: 10 * time.Minute}
-	resp, err := client.Do(req)
+	resp, err := artifactClient.Do(req)
 	if err != nil {
 		return Result{Err: fmt.Errorf("download-artifact: %w", err)}
 	}
@@ -253,8 +262,7 @@ func runUploadArtifact(ctx context.Context, step common.Step, artifactsBaseURL, 
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	httpClient := &http.Client{Timeout: 10 * time.Minute}
-	resp, err := httpClient.Do(req)
+	resp, err := artifactClient.Do(req)
 	if err != nil {
 		return Result{Err: fmt.Errorf("upload-artifact: %w", err)}
 	}

@@ -8,6 +8,8 @@ import (
 	"os/exec"
 )
 
+func defaultShell() string { return "bash" }
+
 func rebootOS() error {
 	if path, err := exec.LookPath("shutdown"); err == nil {
 		cmd := exec.Command(path, "-r", "now")

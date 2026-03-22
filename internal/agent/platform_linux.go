@@ -8,6 +8,8 @@ import (
 	"os/exec"
 )
 
+func defaultShell() string { return "bash" }
+
 func rebootOS() error {
 	// Prefer systemctl so systemd has a chance to stop services cleanly.
 	if path, err := exec.LookPath("systemctl"); err == nil {

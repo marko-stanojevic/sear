@@ -19,7 +19,10 @@ import (
 )
 
 var runAgent = func(ctx context.Context, cfg *common.AgentConfig) error {
-	c := agent.New(cfg)
+	c, err := agent.New(cfg)
+	if err != nil {
+		return err
+	}
 	return c.Run(ctx)
 }
 

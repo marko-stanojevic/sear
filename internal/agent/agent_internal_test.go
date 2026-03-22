@@ -12,9 +12,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
+
+func mustNew(t *testing.T, cfg *common.AgentConfig) *Agent {
+	t.Helper()
+	c, err := New(cfg)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return c
+}
 
 func TestWSEndpoint(t *testing.T) {
 	got := wsEndpoint("http://example.com/base", "tok-123")
@@ -33,54 +42,19 @@ func TestWSEndpoint(t *testing.T) {
 
 func TestSaveLoadStateRoundTrip(t *testing.T) {
 	stateFile := filepath.Join(t.TempDir(), "state.json")
-	cfg := &common.AgentConfig{StateFile: stateFile}
-	c := New(cfg)
+	c := mustNew(t, &common.AgentConfig{StateFile: stateFile})
 	c.state = localState{AgentID: "c1", Token: "t1"}
 
 	if err := c.saveState(); err != nil {
 		t.Fatalf("saveState: %v", err)
 	}
 
-	c2 := New(&common.AgentConfig{StateFile: stateFile})
+	c2 := mustNew(t, &common.AgentConfig{StateFile: stateFile})
 	if err := c2.loadState(); err != nil {
 		t.Fatalf("loadState: %v", err)
 	}
 	if c2.state.AgentID != "c1" || c2.state.Token != "t1" {
 		t.Fatalf("loaded state mismatch: %+v", c2.state)
-	}
-}
-
-func TestPost(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/ok":
-			if got := r.Header.Get("Authorization"); got != "Bearer tok" {
-				t.Fatalf("Authorization = %q; want Bearer tok", got)
-			}
-			_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-		case "/err":
-			http.Error(w, "nope", http.StatusUnauthorized)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer ts.Close()
-
-	cfg := &common.AgentConfig{ServerURL: ts.URL}
-	c := New(cfg)
-	c.httpClient.Timeout = 5 * time.Second
-
-	ctx := context.Background()
-	var out map[string]string
-	if err := c.post(ctx, "/ok", map[string]string{"x": "y"}, &out, "tok"); err != nil {
-		t.Fatalf("post /ok: %v", err)
-	}
-	if out["status"] != "ok" {
-		t.Fatalf("response decode failed: %+v", out)
-	}
-
-	if err := c.post(ctx, "/err", map[string]string{}, nil, ""); err == nil {
-		t.Fatal("expected error for /err, got nil")
 	}
 }
 
@@ -99,7 +73,7 @@ func TestRegisterSuccess(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := New(&common.AgentConfig{
+	c := mustNew(t, &common.AgentConfig{
 		ServerURL:          ts.URL,
 		RegistrationSecret: "secret",
 		StateFile:          stateFile,
@@ -127,7 +101,7 @@ func TestConnectUnauthorizedClearsState(t *testing.T) {
 	defer ts.Close()
 
 	stateFile := filepath.Join(t.TempDir(), "state.json")
-	c := New(&common.AgentConfig{ServerURL: ts.URL, StateFile: stateFile})
+	c := mustNew(t, &common.AgentConfig{ServerURL: ts.URL, StateFile: stateFile})
 	c.state.AgentID = "c1"
 	c.state.Token = "t1"
 
@@ -141,17 +115,17 @@ func TestConnectUnauthorizedClearsState(t *testing.T) {
 }
 
 func TestRunPlaybookMessageFlows(t *testing.T) {
-	newWriter := func() *WSOutboundWriter {
-		return &WSOutboundWriter{
-			ch:   make(chan common.WSMessage, 64),
+	newWriter := func() *MessageWriter {
+		return &MessageWriter{
+			outbox: make(chan common.WSMessage, 64),
 			stop: make(chan struct{}),
 			done: make(chan struct{}),
 		}
 	}
-	drain := func(w *WSOutboundWriter) []common.WSMessage {
-		msgs := make([]common.WSMessage, 0, len(w.ch))
-		for len(w.ch) > 0 {
-			msgs = append(msgs, <-w.ch)
+	drain := func(w *MessageWriter) []common.WSMessage {
+		msgs := make([]common.WSMessage, 0, len(w.outbox))
+		for len(w.outbox) > 0 {
+			msgs = append(msgs, <-w.outbox)
 		}
 		return msgs
 	}
@@ -164,7 +138,7 @@ func TestRunPlaybookMessageFlows(t *testing.T) {
 		return false
 	}
 
-	c := New(&common.AgentConfig{ServerURL: "http://example.com"})
+	c := mustNew(t, &common.AgentConfig{ServerURL: "http://example.com"})
 
 	t.Run("fatal failure sends deploy_failed", func(t *testing.T) {
 		w := newWriter()
@@ -205,21 +179,20 @@ func TestRunPlaybookMessageFlows(t *testing.T) {
 	})
 }
 
-func TestWSOutboundWriterLifecycle(t *testing.T) {
+func TestMessageWriterLifecycle(t *testing.T) {
 	received := make(chan common.WSMessage, 1)
 
-	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 		if err != nil {
-			t.Errorf("upgrade: %v", err)
+			t.Errorf("accept: %v", err)
 			return
 		}
-		defer func() { _ = conn.Close() }()
+		defer conn.CloseNow()
 
-		_, data, err := conn.ReadMessage()
+		_, data, err := conn.Read(r.Context())
 		if err != nil {
-			t.Errorf("ReadMessage: %v", err)
+			t.Errorf("Read: %v", err)
 			return
 		}
 		var msg common.WSMessage
@@ -232,13 +205,13 @@ func TestWSOutboundWriterLifecycle(t *testing.T) {
 	defer ts.Close()
 
 	wsURL := strings.Replace(ts.URL, "http://", "ws://", 1)
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, _, err := websocket.Dial(context.Background(), wsURL, nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	defer func() { _ = conn.Close() }()
+	defer conn.CloseNow()
 
-	w := newWSOutboundWriter(conn)
+	w := newMessageWriter(conn)
 	w.Send(common.WSMessage{Type: common.WSMsgPing, Timestamp: time.Now()})
 
 	select {
