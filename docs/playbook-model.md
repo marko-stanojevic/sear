@@ -1,3 +1,28 @@
+## kompakt-agent Configuration (client.config.yml)
+
+The kompakt-agent is configured via a YAML file. Below are the supported options:
+
+| Key                      | Required | Type    | Description                                                                                 |
+|--------------------------|----------|---------|---------------------------------------------------------------------------------------------|
+| server_url               | Yes      | string  | Base URL of the kompakt server (e.g. "https://localhost:8443"). Use https:// if TLS is on. |
+| disable_tls_verification | No       | bool    | Set to true to skip TLS certificate verification (for self-signed/dev only).                |
+| registration_secret      | Yes      | string  | Must match one of the daemon's registration_secrets values.                                 |
+| state_file               | No       | string  | Path to persist agent token and resume position.                                            |
+| work_dir                 | No       | string  | Directory for shell steps and temp files.                                                   |
+| reconnect_interval_seconds| No      | int     | Seconds to wait before retrying a failed WebSocket connection (default: 10).                |
+| log_batch_size           | No       | int     | Max log lines buffered before forced flush (default: 100).                                  |
+
+Example:
+
+```yaml
+server_url: "https://localhost:8443"
+disable_tls_verification: true
+registration_secret: "replace-with-a-strong-random-value"
+# state_file: "/var/lib/kompakt/state.json"
+# work_dir: "/tmp/kompakt-agent-work"
+# reconnect_interval_seconds: 10
+# log_batch_size: 100
+```
 # Playbook Model
 
 This document describes the structure and features of Kompakt playbooks for deployment automation.

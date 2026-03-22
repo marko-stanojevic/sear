@@ -150,6 +150,7 @@ func main() {
 
 	// ── HTTP server ───────────────────────────────────────────────────────────
 	handler := server.NewServer(env)
+	slog.Debug("kompakt main starting", "configPath", *configPath, "secretsPath", *secretsPath)
 	srv := &http.Server{
 		Addr:         cfg.ListenAddress,
 		Handler:      handler,
@@ -157,10 +158,14 @@ func main() {
 		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
-
+	slog.Debug("kompakt config loaded", "cfg", cfg)
 	slog.Info("kompakt listening", "addr", cfg.ListenAddress)
 	if cfg.TLSCertFile != "" {
 		slog.Info("TLS enabled")
+	}
+	slog.Debug("checking TLS cert/key auto-generation", "cert", cfg.TLSCertFile, "key", cfg.TLSKeyFile)
+	if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" {
+		slog.Info("TLS is disabled: tls_cert_file and/or tls_key_file not set. Server will use plain HTTP.")
 	}
 
 	// Graceful shutdown on SIGINT/SIGTERM.
@@ -191,9 +196,11 @@ func applyConfigDefaults(cfg *common.ServerConfig) {
 	if cfg.ListenAddress == "" {
 		cfg.ListenAddress = "localhost:8080"
 	}
+	//
 	if cfg.DataDir == "" {
 		cfg.DataDir = "kompakt-data"
 	}
+	slog.Debug("kompakt config defaults applied", "cfg", cfg)
 	if cfg.ArtifactsDir == "" {
 		cfg.ArtifactsDir = filepath.Join(cfg.DataDir, "artifacts")
 	}
