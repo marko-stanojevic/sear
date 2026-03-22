@@ -113,14 +113,14 @@ func main() {
 	// ── HTTP server ───────────────────────────────────────────────────────────
 	handler := server.NewServer(env)
 	srv := &http.Server{
-		Addr:         cfg.ListenAddr,
+		Addr:         cfg.ListenAddress,
 		Handler:      handler,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
 
-	slog.Info("kompakt listening", "addr", cfg.ListenAddr)
+	slog.Info("kompakt listening", "addr", cfg.ListenAddress)
 	if cfg.TLSCertFile != "" {
 		slog.Info("TLS enabled")
 	}
@@ -150,8 +150,8 @@ func main() {
 }
 
 func applyConfigDefaults(cfg *common.ServerConfig) {
-	if cfg.ListenAddr == "" {
-		cfg.ListenAddr = ":8080"
+	if cfg.ListenAddress == "" {
+		cfg.ListenAddress = "http://localhost:8080"
 	}
 	if cfg.DataDir == "" {
 		cfg.DataDir = "kompakt-data"
@@ -168,10 +168,7 @@ func applyConfigDefaults(cfg *common.ServerConfig) {
 }
 
 func serverURL(cfg *common.ServerConfig) string {
-	if cfg.TLSCertFile != "" {
-		return "https://localhost" + cfg.ListenAddr
-	}
-	return "http://localhost" + cfg.ListenAddr
+	return cfg.ListenAddress
 }
 
 // loadOrCreateSecret returns the explicit value if non-empty. Otherwise it
