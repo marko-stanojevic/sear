@@ -3,14 +3,11 @@
 package identity
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"net"
-	"os/exec"
 	"runtime"
 	"strings"
-	"time"
 )
 
 // PlatformInfo contains the discovered platform identifiers.
