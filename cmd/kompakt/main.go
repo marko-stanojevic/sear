@@ -29,24 +29,22 @@ import (
 
 func main() {
 
-configPath := flag.String("config", "config.yml", "path to server config file")
-secretsPath := flag.String("secrets", "secrets.yml", "path to server secrets file")
-debug := flag.Bool("debug", false, "log all HTTP requests (default: WebSocket and errors only)")
-flag.Parse()
+	configPath := flag.String("config", "config.yml", "path to server config file")
+	secretsPath := flag.String("secrets", "secrets.yml", "path to server secrets file")
+	debug := flag.Bool("debug", false, "log all HTTP requests (default: WebSocket and errors only)")
+	flag.Parse()
 
-terminal.Setup(*debug)
+	terminal.Setup(*debug)
 
-cfg, err := common.LoadServerConfig(*configPath)
-if err != nil {
-	slog.Error("config load failed", "error", err)
-	os.Exit(1)
-}
+	cfg, err := common.LoadServerConfig(*configPath)
+	if err != nil {
+		slog.Error("config load failed", "error", err)
+		os.Exit(1)
+	}
 
-// ...existing code up to after secrets are loaded...
+	// ...existing code up to after secrets are loaded...
 
-
-
-// ...all initialization is now handled after config and secrets are loaded...
+	// ...all initialization is now handled after config and secrets are loaded...
 
 	// ── TLS self-signed cert auto-generation ─────────────────────────────
 	if (cfg.TLSCertFile != "" || cfg.TLSKeyFile != "") && (cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || !server.FileExists(cfg.TLSCertFile) || !server.FileExists(cfg.TLSKeyFile)) {
@@ -191,7 +189,7 @@ if err != nil {
 
 func applyConfigDefaults(cfg *common.ServerConfig) {
 	if cfg.ListenAddress == "" {
-		cfg.ListenAddress = "http://localhost:8080"
+		cfg.ListenAddress = "localhost:8080"
 	}
 	if cfg.DataDir == "" {
 		cfg.DataDir = "kompakt-data"
