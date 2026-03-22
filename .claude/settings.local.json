@@ -27,7 +27,8 @@
       "Bash(curl -sL https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js -o /mnt/c/git/kompakt/internal/server/handlers/ui/assets/htmx.min.js)",
       "Bash(wc -c /mnt/c/git/kompakt/internal/server/handlers/ui/assets/htmx.min.js)",
       "WebSearch",
-      "Bash(go mod:*)"
+      "Bash(go mod:*)",
+      "Bash(gh pr:*)"
     ]
   }
 }
