@@ -4,6 +4,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,9 +70,23 @@ func New(cfg *common.AgentConfig) *Agent {
 	if cfg.WorkDir == "" {
 		cfg.WorkDir = defaultWorkDir()
 	}
+	// Set up HTTP client with optional TLS verification skip
+	var httpClient *http.Client
+	if cfg.DisableTLSVerification {
+		// #nosec G402 -- This is only enabled for trusted/dev environments
+		httpClient = &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				//nolint:gosec // This is only enabled for trusted/dev environments
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+		}
+	} else {
+		httpClient = &http.Client{Timeout: 30 * time.Second}
+	}
 	return &Agent{
 		cfg:        cfg,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: httpClient,
 	}
 }
 
@@ -177,6 +192,10 @@ func (c *Agent) register(ctx context.Context) error {
 func (c *Agent) connect(ctx context.Context) error {
 	wsURL := wsEndpoint(c.cfg.ServerURL, c.state.Token)
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
+	// If TLS verification is disabled, set InsecureSkipVerify for the WebSocket dialer
+	if c.cfg.DisableTLSVerification {
+		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
 	ws, resp, err := dialer.DialContext(ctx, wsURL, nil)
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
