@@ -1,56 +1,101 @@
-name: Cleanup Old Releases
+name: Cleanup Releases
+run-name: "${{ github.event.repository.name }} | Cleanup Releases | ${{ github.run_id }} | ${{ github.event_name }}"
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Every 24 hours at midnight
-  workflow_dispatch:   # Allow manual trigger
+    - cron: '0 0 * * *' # Every day at 00:00 UTC
+  workflow_dispatch:
+    inputs:
+      keep_count:
+        description: 'Number of recent releases to keep (0 = use age filter only)'
+        required: false
+        default: '5'
+        type: string
+      keep_hours:
+        description: 'Delete releases older than this many hours (0 = use count filter only)'
+        required: false
+        default: '72'
+        type: string
 
 jobs:
   cleanup:
     name: Prune Old Releases
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Needed to delete releases and tags
+      contents: write # Needed to delete release assets
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Delete old releases
+      - name: Delete old release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          # On schedule: keep last 5 releases OR releases newer than 72 h, whichever is more generous.
+          # On workflow_dispatch: use the caller-supplied values.
+          KEEP_COUNT: ${{ inputs.keep_count || '5' }}
+          KEEP_HOURS: ${{ inputs.keep_hours || '72' }}
         run: |
           set -euo pipefail
 
-          echo "Fetching releases..."
-          # Get all non-draft release tags, sorted by date (newest first)
-          # We keep the list to 100 to avoid excessive processing, 
-          # but normally we only care about the top ones.
-          RELEASES=$(gh release list --limit 100 --json tagName,isDraft --jq '.[] | select(.isDraft == false) | .tagName')
-          
-          # Count them
-          COUNT=$(echo "$RELEASES" | grep -c . || echo 0)
-          echo "Found $COUNT non-draft releases."
-          
-          if [ "$COUNT" -gt 5 ]; then
-            # Get tags to process (everything starting from the 6th newest)
-            TO_CLEAN=$(echo "$RELEASES" | tail -n +6)
-            
-            echo "Pruning assets from older releases, keeping the 5 most recent..."
-            for TAG in $TO_CLEAN; do
-              echo "Processing release: $TAG"
-              # Get all asset IDs for this release
-              ASSETS=$(gh release view "$TAG" --json assets --jq '.assets[].name')
-              
+          NOW=$(date -u +%s)
+          CUTOFF_EPOCH=$(( NOW - KEEP_HOURS * 3600 ))
+
+          echo "Settings: keep_count=${KEEP_COUNT}, keep_hours=${KEEP_HOURS}"
+          echo "Cutoff timestamp: $(date -u -d @${CUTOFF_EPOCH} '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -r ${CUTOFF_EPOCH} '+%Y-%m-%dT%H:%M:%SZ')"
+
+          # Fetch all non-draft releases as JSON (tag + publishedAt), newest first.
+          RELEASES_JSON=$(gh api "repos/${REPO}/releases" --paginate \
+            --jq '[.[] | select(.draft == false) | {tag: .tag_name, published_at: .published_at}]' \
+            | jq -s 'add // []' \
+            | jq 'sort_by(.published_at) | reverse')
+
+          TOTAL=$(echo "$RELEASES_JSON" | jq 'length')
+          echo "Found ${TOTAL} non-draft release(s)."
+
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "No releases found. Nothing to do."
+            exit 0
+          fi
+
+          DELETED=0
+          INDEX=0
+
+          while IFS= read -r line; do
+            TAG=$(echo "$line" | jq -r '.tag')
+            PUBLISHED_AT=$(echo "$line" | jq -r '.published_at')
+
+            # Convert ISO 8601 to epoch (compatible with both GNU and BSD date).
+            PUBLISHED_EPOCH=$(date -u -d "${PUBLISHED_AT}" +%s 2>/dev/null \
+              || date -u -jf '%Y-%m-%dT%H:%M:%SZ' "${PUBLISHED_AT}" +%s)
+
+            # Keep the release if it satisfies EITHER retention rule.
+            KEEP_BY_COUNT=false
+            KEEP_BY_AGE=false
+
+            if [ "$KEEP_COUNT" -gt 0 ] && [ "$INDEX" -lt "$KEEP_COUNT" ]; then
+              KEEP_BY_COUNT=true
+            fi
+            if [ "$KEEP_HOURS" -gt 0 ] && [ "$PUBLISHED_EPOCH" -ge "$CUTOFF_EPOCH" ]; then
+              KEEP_BY_AGE=true
+            fi
+
+            if $KEEP_BY_COUNT || $KEEP_BY_AGE; then
+              echo "Keeping release ${TAG} (published ${PUBLISHED_AT})"
+            else
+              echo "Pruning assets from release ${TAG} (published ${PUBLISHED_AT})"
+              ASSETS=$(gh release view "${TAG}" --json assets --jq '.assets[].name')
               if [ -n "$ASSETS" ]; then
                 for ASSET in $ASSETS; do
-                  echo "  Deleting asset: $ASSET"
-                  gh release delete-asset "$TAG" "$ASSET" --yes
+                  echo "  Deleting asset: ${ASSET}"
+                  gh release delete-asset "${TAG}" "${ASSET}" --yes || \
+                    echo "  WARNING: failed to delete asset ${ASSET}, skipping."
                 done
+                DELETED=$(( DELETED + 1 ))
               else
-                echo "  No assets found for $TAG."
+                echo "  No assets found for ${TAG}."
               fi
-            done
-            echo "Cleanup complete."
-          else
-            echo "Only $COUNT releases found. No cleanup needed (keeping up to 5)."
-          fi
+            fi
+
+            INDEX=$(( INDEX + 1 ))
+          done < <(echo "$RELEASES_JSON" | jq -c '.[]')
+
+          echo ""
+          echo "Pruned assets from ${DELETED} release(s). Cleanup complete."
