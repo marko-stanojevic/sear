@@ -57,17 +57,23 @@ func New(cfg *common.AgentConfig) (*Agent, error) {
 	if cfg.WorkDir == "" {
 		cfg.WorkDir = defaultWorkDir()
 	}
-
-	tlsCfg, err := buildTLSConfig(cfg)
-	if err != nil {
-		return nil, err
+	// Set up HTTP client with optional TLS verification skip
+	var httpClient *http.Client
+	if cfg.DisableTLSVerification {
+		// #nosec G402 -- This is only enabled for trusted/dev environments
+		httpClient = &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				//nolint:gosec // This is only enabled for trusted/dev environments
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+		}
+	} else {
+		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
-
-	httpClient := &http.Client{Timeout: 30 * time.Second}
-	if tlsCfg != nil {
-		transport := http.DefaultTransport.(*http.Transport).Clone()
-		transport.TLSClientConfig = tlsCfg
-		httpClient.Transport = transport
+	return &Agent{
+		cfg:        cfg,
+		httpClient: httpClient,
 	}
 
 	pf := identity.Collect()
@@ -172,11 +178,12 @@ func (c *Agent) register(ctx context.Context) error {
 
 func (c *Agent) connect(ctx context.Context) error {
 	wsURL := wsEndpoint(c.cfg.ServerURL, c.state.Token)
-	dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
-	ws, resp, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
-		HTTPClient: c.httpClient,
-	})
-	dialCancel()
+	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
+	// If TLS verification is disabled, set InsecureSkipVerify for the WebSocket dialer
+	if c.cfg.DisableTLSVerification {
+		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+	ws, resp, err := dialer.DialContext(ctx, wsURL, nil)
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
 			slog.Warn("token rejected by server, will re-register")

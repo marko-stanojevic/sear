@@ -23,9 +23,19 @@ listen_address: "localhost:8080"
 # Default: <data_dir>/logs
 # logs_dir: "/var/lib/kompakt/logs"
 
-# TLS — leave blank to use plain HTTP (fine for private networks).
-# tls_cert_file: "/etc/kompakt/tls.crt"
-# tls_key_file:  "/etc/kompakt/tls.key"
+
+# TLS (HTTPS)
+# To enable HTTPS, set both tls_cert_file and tls_key_file to file paths. If the files do not exist, kompakt will auto-generate a self-signed certificate at those paths.
+# To use plain HTTP, comment out or leave both fields empty.
+#
+# Examples:
+#   # Auto-generate self-signed certs:
+#   tls_cert_file: "kompakt-data/kompakt-selfsigned.crt"
+#   tls_key_file:  "kompakt-data/kompakt-selfsigned.key"
+#
+#   # Use your own certs:
+#   tls_cert_file: "/etc/kompakt/tls.crt"
+#   tls_key_file:  "/etc/kompakt/tls.key"
 
 
 
