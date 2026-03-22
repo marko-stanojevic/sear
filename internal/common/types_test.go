@@ -28,12 +28,12 @@ func TestFlattenPlaybook(t *testing.T) {
 	if len(flat) != 3 {
 		t.Fatalf("expected 3 steps, got %d", len(flat))
 	}
-	if flat[0].JobName != "job1" || flat[0].Step.Name != "step1" || flat[0].GlobalIndex != 0 {
-		t.Errorf("unexpected first step: %+v", flat[0])
-	}
-	if flat[2].JobName != "job2" || flat[2].Step.Name != "step3" || flat[2].GlobalIndex != 2 {
-		t.Errorf("unexpected last step: %+v", flat[2])
-	}
+	       if flat[0].JobName != "job1" || flat[0].Name != "step1" || flat[0].GlobalIndex != 0 {
+		       t.Errorf("unexpected first step: %+v", flat[0])
+	       }
+	       if flat[2].JobName != "job2" || flat[2].Name != "step3" || flat[2].GlobalIndex != 2 {
+		       t.Errorf("unexpected last step: %+v", flat[2])
+	       }
 }
 
 func TestResolveSecrets(t *testing.T) {

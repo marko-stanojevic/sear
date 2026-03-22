@@ -154,7 +154,9 @@ func (c *Agent) register(ctx context.Context) error {
 		slog.Error("registration request failed", "error", err)
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		slog.Error("registration failed", "status", resp.Status)
 		return fmt.Errorf("registration failed: %s", resp.Status)

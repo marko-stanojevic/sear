@@ -16,7 +16,9 @@ func TestPrintBannerMessage(t *testing.T) {
 	content := "This is a test message."
 	PrintBannerMessage(title, content)
 
-	w.Close()
+	       if err := w.Close(); err != nil {
+		       t.Fatalf("failed to close pipe: %v", err)
+	       }
 	os.Stderr = oldStderr
 
 	var buf bytes.Buffer
