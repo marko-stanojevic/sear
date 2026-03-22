@@ -418,7 +418,7 @@ func TestMessageWriterLifecycle(t *testing.T) {
 			t.Errorf("accept: %v", err)
 			return
 		}
-		defer conn.CloseNow()
+		defer func() { _ = conn.CloseNow() }()
 
 		_, data, err := conn.Read(r.Context())
 		if err != nil {
@@ -439,7 +439,7 @@ func TestMessageWriterLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	defer conn.CloseNow()
+	defer func() { _ = conn.CloseNow() }()
 
 	w := newMessageWriter(conn)
 	w.Send(common.WSMessage{Type: common.WSMsgPing, Timestamp: time.Now()})

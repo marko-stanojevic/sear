@@ -51,7 +51,7 @@ func (e *Handler) HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 			}
 			_ = e.Store.SaveAgent(a)
 		}
-		ws.CloseNow()
+		_ = ws.CloseNow()
 		slog.Info("agent disconnected", "agent_id", agentID)
 	}()
 

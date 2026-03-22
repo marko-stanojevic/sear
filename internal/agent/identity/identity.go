@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net"
-	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -128,14 +127,6 @@ func firstStableMAC() string {
 		return strings.ReplaceAll(mac, ":", "")
 	}
 	return ""
-}
-
-func readFile(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
 }
 
 func runAndTrim(cmd string, args ...string) string {

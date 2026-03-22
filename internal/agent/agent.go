@@ -38,7 +38,6 @@ type Agent struct {
 	platformInfo *identity.PlatformInfo
 	cfg          *common.AgentConfig
 	state        localState
-	tlsCfg       *tls.Config
 	httpClient   *http.Client
 }
 
@@ -71,16 +70,10 @@ func New(cfg *common.AgentConfig) (*Agent, error) {
 	} else {
 		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
-	return &Agent{
-		cfg:        cfg,
-		httpClient: httpClient,
-	}
-
 	pf := identity.Collect()
 	return &Agent{
 		cfg:          cfg,
 		platformInfo: &pf,
-		tlsCfg:       tlsCfg,
 		httpClient:   httpClient,
 	}, nil
 }
@@ -178,12 +171,11 @@ func (c *Agent) register(ctx context.Context) error {
 
 func (c *Agent) connect(ctx context.Context) error {
 	wsURL := wsEndpoint(c.cfg.ServerURL, c.state.Token)
-	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
-	// If TLS verification is disabled, set InsecureSkipVerify for the WebSocket dialer
-	if c.cfg.DisableTLSVerification {
-		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	}
-	ws, resp, err := dialer.DialContext(ctx, wsURL, nil)
+	dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
+	ws, resp, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
+		HTTPClient: c.httpClient,
+	})
+	dialCancel()
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
 			slog.Warn("token rejected by server, will re-register")
@@ -194,7 +186,7 @@ func (c *Agent) connect(ctx context.Context) error {
 		}
 		return fmt.Errorf("dial: %w", err)
 	}
-	defer ws.CloseNow()
+	defer func() { _ = ws.CloseNow() }()
 	writer := newMessageWriter(ws)
 	defer writer.Stop()
 
