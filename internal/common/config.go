@@ -13,8 +13,8 @@ import (
 
 // ServerConfig is the main server configuration file.
 type ServerConfig struct {
-	// ListenAddr is the address to bind the HTTP server (default ":8080").
-	ListenAddr string `yaml:"listen_addr"`
+	// ListenAddress is the address to bind the HTTP server (default "http://localhost:8080").
+	ListenAddress string `yaml:"listen_address"`
 
 	// DataDir is the directory where the server stores its state.
 	DataDir string `yaml:"data_dir"`

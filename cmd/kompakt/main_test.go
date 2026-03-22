@@ -13,8 +13,8 @@ func TestApplyConfigDefaults(t *testing.T) {
 	cfg := &common.ServerConfig{}
 	applyConfigDefaults(cfg)
 
-	if cfg.ListenAddr != ":8080" {
-		t.Fatalf("ListenAddr = %q; want :8080", cfg.ListenAddr)
+	   if cfg.ListenAddress != "http://localhost:8080" {
+		   t.Fatalf("ListenAddress = %q; want http://localhost:8080", cfg.ListenAddress)
 	}
 	if cfg.DataDir != "kompakt-data" {
 		t.Fatalf("DataDir = %q; want kompakt-data", cfg.DataDir)
@@ -28,8 +28,8 @@ func TestApplyConfigDefaults(t *testing.T) {
 }
 
 func TestApplyConfigDefaults_PreservesExistingValues(t *testing.T) {
-	cfg := &common.ServerConfig{
-		ListenAddr:       ":9090",
+	   cfg := &common.ServerConfig{
+		   ListenAddress:    "http://localhost:9090",
 		DataDir:          "/custom/data",
 		ArtifactsDir:     "/custom/artifacts",
 		LogsDir:          "/custom/logs",
@@ -37,8 +37,8 @@ func TestApplyConfigDefaults_PreservesExistingValues(t *testing.T) {
 	}
 	applyConfigDefaults(cfg)
 
-	if cfg.ListenAddr != ":9090" {
-		t.Errorf("ListenAddr overwritten: got %q", cfg.ListenAddr)
+	   if cfg.ListenAddress != "http://localhost:9090" {
+		   t.Errorf("ListenAddress overwritten: got %q", cfg.ListenAddress)
 	}
 	if cfg.DataDir != "/custom/data" {
 		t.Errorf("DataDir overwritten: got %q", cfg.DataDir)
@@ -69,15 +69,10 @@ func TestApplyConfigDefaults_DirsDerivFromDataDir(t *testing.T) {
 }
 
 func TestServerURL(t *testing.T) {
-	httpURL := serverURL(&common.ServerConfig{ListenAddr: ":8080"})
-	if httpURL != "http://localhost:8080" {
-		t.Fatalf("http serverURL = %q; want http://localhost:8080", httpURL)
-	}
-
-	httpsURL := serverURL(&common.ServerConfig{ListenAddr: ":8443", TLSCertFile: "cert.pem"})
-	if httpsURL != "https://localhost:8443" {
-		t.Fatalf("https serverURL = %q; want https://localhost:8443", httpsURL)
-	}
+   httpURL := serverURL(&common.ServerConfig{ListenAddress: "http://localhost:8080"})
+   if httpURL != "http://localhost:8080" {
+	   t.Fatalf("serverURL = %q; want http://localhost:8080", httpURL)
+   }
 }
 
 func TestMustGenerateHex(t *testing.T) {

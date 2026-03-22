@@ -1,20 +1,27 @@
+
+
 # kompakt-agent configuration
+# By default, kompakt-agent looks for client.config.yml in the same folder as the agent binary (unless overridden with -config).
 # Copy to /etc/kompakt/client.config.yml (Linux) or C:\ProgramData\kompakt\client.config.yml (Windows).
 
-# URL of the kompakt daemon. Use wss:// if TLS is enabled.
-server_url: "http://kompakt:8080"
+# Required: Base URL of the kompakt server (e.g. "http://kompakt:8080"). Use wss:// if TLS is enabled.
+server_url: "http://localhost:8080"
 
-# Must match one of the daemon's registration_secrets values.
+# Required: Must match one of the daemon's registration_secrets values.
 registration_secret: "replace-with-a-strong-random-value"
 
-# Where the agent persists its token and resume position across reboots.
-# Defaults: /var/lib/kompakt/state.json (Linux/macOS), C:\ProgramData\kompakt\state.json (Windows)
+# Optional: Where the agent persists its token and resume position across reboots.
+# Default: /var/lib/kompakt/state.json (Linux/macOS), C:\ProgramData\kompakt\state.json (Windows)
 # state_file: "/var/lib/kompakt/state.json"
 
-# How long to wait before retrying a failed WebSocket connection (seconds).
-reconnect_interval_seconds: 10
+# Optional: Directory where shell steps are executed and temporary files are stored.
+# By default, this is a subdirectory named "work" next to the kompakt-agent binary (e.g., ./work).
+# work_dir: "/tmp/kompakt-agent-work"
 
-# Maximum number of log lines buffered before a forced flush.
-log_batch_size: 100
+# Optional: How long to wait before retrying a failed WebSocket connection (seconds). 
+# Default: 10
+# reconnect_interval_seconds: 10
 
-# The agent resumes deployments after reboot or crash.
+# Optional: Maximum number of log lines buffered before a forced flush. 
+# Default: 100
+# log_batch_size: 100

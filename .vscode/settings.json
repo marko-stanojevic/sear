@@ -37,6 +37,9 @@
         "type": "gutter"
     },
     "json.schemaDownload.enable": false,
+    "yaml.schemas": {
+        "./docs/schema/kompakt-playbook.schema.json": "examples/playbook.yml"
+    },
     "files.exclude": {
         "**/.DS_Store": true,
         "**/dist": true

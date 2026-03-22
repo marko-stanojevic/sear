@@ -10,7 +10,7 @@ import (
 
 func TestLoadServerConfig(t *testing.T) {
 	content := `
-listen_addr: ":9090"
+listen_address: "http://localhost:9090"
 data_dir: "/tmp/test-data"
 token_expiry_hours: 48
 `
@@ -19,8 +19,8 @@ token_expiry_hours: 48
 	if err != nil {
 		t.Fatalf("LoadServerConfig: %v", err)
 	}
-	if cfg.ListenAddr != ":9090" {
-		t.Errorf("ListenAddr = %q; want :9090", cfg.ListenAddr)
+	if cfg.ListenAddress != "http://localhost:9090" {
+		t.Errorf("ListenAddress = %q; want http://localhost:9090", cfg.ListenAddress)
 	}
 	if cfg.DataDir != "/tmp/test-data" {
 		t.Errorf("DataDir = %q; want /tmp/test-data", cfg.DataDir)
@@ -210,7 +210,7 @@ func TestLoadConfigMissing(t *testing.T) {
 // ── Negative path: corrupted / missing YAML ───────────────────────────────────
 
 func TestLoadServerConfig_CorruptedYAML(t *testing.T) {
-	path := writeTempFile(t, "config.yml", "listen_addr: [unclosed")
+	path := writeTempFile(t, "config.yml", "listen_address: [unclosed")
 	_, err := common.LoadServerConfig(path)
 	if err == nil {
 		t.Error("expected error for corrupted YAML, got nil")
@@ -260,7 +260,6 @@ func TestLoadAgentConfig_MissingRequiredFields(t *testing.T) {
 			name:    "missing registration_secret",
 			content: "server_url: http://kompakt:8080\n",
 		},
-
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
