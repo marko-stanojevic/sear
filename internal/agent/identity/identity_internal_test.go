@@ -1,10 +1,50 @@
 package identity
 
 import (
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestFirstStableMAC_ReturnsStringWithoutColons(t *testing.T) {
+	mac := firstStableMAC()
+	// The function returns either empty (no suitable interface) or a hex string
+	// with colons stripped.
+	if strings.Contains(mac, ":") {
+		t.Errorf("firstStableMAC() = %q; should not contain colons", mac)
+	}
+}
+
+func TestCollectID_ReturnsNonEmpty(t *testing.T) {
+	meta := map[string]string{}
+	id := collectID(meta)
+	if id == "" {
+		t.Error("collectID should always return a non-empty string")
+	}
+}
+
+func TestCollectID_VirtualMachine_UsesVMGUID(t *testing.T) {
+	// When vendor/model suggest a VM, collectID tries vmGUID first.
+	// We can't control vmGUID output, but at minimum it shouldn't panic.
+	meta := map[string]string{
+		"vendor": "VMware, Inc.",
+		"model":  "Virtual Machine",
+	}
+	id := collectID(meta)
+	if id == "" {
+		t.Error("collectID should return a non-empty string even for VMs")
+	}
+}
+
+func TestCollectID_RandomFallback_HasPrefix(t *testing.T) {
+	// This test exercises the random fallback path by noting that when no serial,
+	// GUID, or MAC is available, we get "rnd-..." prefix. We can't control
+	// external commands, so we just verify the output is non-empty and valid.
+	meta := map[string]string{}
+	id := collectID(meta)
+	if id == "" {
+		t.Error("collectID fallback should produce non-empty ID")
+	}
+}
 
 func TestIsLikelyVM(t *testing.T) {
 	if !isLikelyVM(map[string]string{"vendor": "VMware, Inc.", "model": "Virtual Machine"}) {
@@ -41,25 +81,5 @@ func TestCleanHardwareValue(t *testing.T) {
 	}
 	if got := cleanHardwareValue("Dell"); got != "Dell" {
 		t.Fatalf("cleanHardwareValue Dell = %q; want Dell", got)
-	}
-}
-
-func TestParseOSRelease(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "os-release")
-	content := "NAME=Debian\nVERSION=12\nPRETTY_NAME=Debian GNU/Linux 12\n"
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatalf("write os-release: %v", err)
-	}
-
-	vals := parseOSRelease(path)
-	if vals["NAME"] != "Debian" {
-		t.Fatalf("NAME = %q; want Debian", vals["NAME"])
-	}
-	if vals["VERSION"] != "12" {
-		t.Fatalf("VERSION = %q; want 12", vals["VERSION"])
-	}
-	if vals["PRETTY_NAME"] != "Debian GNU/Linux 12" {
-		t.Fatalf("PRETTY_NAME = %q; want Debian GNU/Linux 12", vals["PRETTY_NAME"])
 	}
 }

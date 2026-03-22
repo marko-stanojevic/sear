@@ -7,6 +7,8 @@ import (
 	"os/exec"
 )
 
+func defaultShell() string { return "cmd" }
+
 func rebootOS() error {
 	cmd := exec.Command("shutdown", "/r", "/t", "5", "/c", "kompakt deployment reboot")
 	cmd.Stdout = os.Stdout

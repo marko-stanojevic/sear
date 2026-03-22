@@ -7,15 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 	"github.com/marko-stanojevic/kompakt/internal/common"
 )
-
-var wsUpgrader = websocket.Upgrader{
-	CheckOrigin:     func(r *http.Request) bool { return true },
-	ReadBufferSize:  4096,
-	WriteBufferSize: 4096,
-}
 
 // HandleAgentWS upgrades GET /api/v1/ws to a WebSocket connection.
 // Authentication uses the JWT bearer token passed as ?token=<jwt> query param
@@ -33,12 +27,14 @@ func (e *Handler) HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ws, err := wsUpgrader.Upgrade(w, r, nil)
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true, // origin is verified via JWT token, not HTTP origin header
+	})
 	if err != nil {
 		return
 	}
 
-	conn := newWSConn(agentID, ws)
+	conn := newAgentConn(agentID, ws)
 	e.Hub.register(conn)
 
 	agent.Status = common.AgentStatusConnected
@@ -55,7 +51,7 @@ func (e *Handler) HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 			}
 			_ = e.Store.SaveAgent(a)
 		}
-		_ = ws.Close()
+		_ = ws.CloseNow()
 		slog.Info("agent disconnected", "agent_id", agentID)
 	}()
 
@@ -64,39 +60,11 @@ func (e *Handler) HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 		e.Service.PushPlaybookIfAssigned(agentID, false)
 	}
 
-	// Read loop.
-	if err := ws.SetReadDeadline(time.Now().Add(90 * time.Second)); err != nil {
-		return
-	}
-	ws.SetPongHandler(func(string) error {
-		return ws.SetReadDeadline(time.Now().Add(90 * time.Second))
-	})
-
-	// Send pings every 30 s so the agent resets its read deadline and replies
-	// with a pong that resets ours.  WriteControl is safe to call concurrently.
-	pingDone := make(chan struct{})
-	defer close(pingDone)
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
-					return
-				}
-			case <-pingDone:
-				return
-			}
-		}
-	}()
-
+	// Read loop. coder/websocket responds to pings automatically; keepalive
+	// pings are sent from the write pump every 30 s.
 	for {
-		_, data, err := ws.ReadMessage()
+		_, data, err := ws.Read(r.Context())
 		if err != nil {
-			return
-		}
-		if err := ws.SetReadDeadline(time.Now().Add(90 * time.Second)); err != nil {
 			return
 		}
 		e.handleWSMessage(agentID, data)

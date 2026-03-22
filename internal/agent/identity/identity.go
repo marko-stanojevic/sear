@@ -6,8 +6,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net"
-	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 )
@@ -107,44 +105,6 @@ func isLikelyVM(meta map[string]string) bool {
 	return false
 }
 
-func hardwareSerial() string {
-	switch runtime.GOOS {
-	case "linux":
-		if serial := cleanHardwareValue(readFile("/sys/class/dmi/id/product_serial")); serial != "" {
-			return serial
-		}
-		if serial := cleanHardwareValue(readFile("/sys/class/dmi/id/chassis_serial")); serial != "" {
-			return serial
-		}
-	case "darwin":
-		return cleanHardwareValue(ioregValue("IOPlatformSerialNumber"))
-	case "windows":
-		return cleanHardwareValue(firstNonEmpty(
-			runAndTrim("wmic", "bios", "get", "serialnumber", "/value"),
-			runAndTrim("powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_BIOS).SerialNumber"),
-		))
-	}
-	return ""
-}
-
-func vmGUID() string {
-	switch runtime.GOOS {
-	case "linux":
-		return cleanHardwareValue(firstNonEmpty(
-			readFile("/sys/class/dmi/id/product_uuid"),
-			readFile("/sys/hypervisor/uuid"),
-		))
-	case "darwin":
-		return cleanHardwareValue(ioregValue("IOPlatformUUID"))
-	case "windows":
-		return cleanHardwareValue(firstNonEmpty(
-			runAndTrim("wmic", "csproduct", "get", "uuid", "/value"),
-			runAndTrim("powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_ComputerSystemProduct).UUID"),
-		))
-	}
-	return ""
-}
-
 func firstStableMAC() string {
 	ifaces, _ := net.Interfaces()
 	for _, i := range ifaces {
@@ -164,63 +124,6 @@ func firstStableMAC() string {
 		return strings.ReplaceAll(mac, ":", "")
 	}
 	return ""
-}
-
-func readFile(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
-}
-
-func osDescription() string {
-	switch runtime.GOOS {
-	case "windows":
-		caption := firstNonEmpty(
-			runAndTrim("wmic", "os", "get", "caption", "/value"),
-			runAndTrim("powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_OperatingSystem).Caption"),
-		)
-		caption = strings.TrimPrefix(caption, "Microsoft ")
-		if caption != "" {
-			return caption
-		}
-		return "windows"
-	case "darwin":
-		name := runAndTrim("sw_vers", "-productName")
-		version := runAndTrim("sw_vers", "-productVersion")
-		if name != "" && version != "" {
-			return name + " " + version
-		}
-		if name != "" {
-			return name
-		}
-		return "macOS"
-	case "linux":
-		vals := parseOSRelease("/etc/os-release")
-		if pretty := vals["PRETTY_NAME"]; pretty != "" {
-			return pretty
-		}
-		name := vals["NAME"]
-		version := vals["VERSION"]
-		if name != "" && version != "" {
-			return strings.TrimSpace(name + " " + version)
-		}
-		if name != "" {
-			return name
-		}
-		return "linux"
-	default:
-		return runtime.GOOS
-	}
-}
-
-func runAndTrim(cmd string, args ...string) string {
-	out, err := exec.Command(cmd, args...).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
 
 func firstNonEmpty(values ...string) string {
@@ -253,29 +156,6 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func ioregValue(key string) string {
-	out := runAndTrim("ioreg", "-rd1", "-c", "IOPlatformExpertDevice")
-	if out == "" {
-		return ""
-	}
-	needle := strings.ToLower(key)
-	for _, line := range strings.Split(out, "\n") {
-		l := strings.TrimSpace(line)
-		if l == "" {
-			continue
-		}
-		if !strings.Contains(strings.ToLower(l), needle) {
-			continue
-		}
-		_, rhs, ok := strings.Cut(l, "=")
-		if !ok {
-			continue
-		}
-		return strings.Trim(strings.TrimSpace(rhs), "\";")
-	}
-	return ""
-}
-
 func cleanHardwareValue(v string) string {
 	v = strings.TrimSpace(v)
 	v = strings.Trim(v, "\x00")
@@ -285,22 +165,3 @@ func cleanHardwareValue(v string) string {
 	return v
 }
 
-func parseOSRelease(path string) map[string]string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return map[string]string{}
-	}
-	vals := map[string]string{}
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		vals[k] = strings.Trim(v, "\"'")
-	}
-	return vals
-}

@@ -28,6 +28,16 @@ registration_secret: "replace-with-a-strong-random-value"
 # Default: 10
 # reconnect_interval_seconds: 10
 
-# Optional: Maximum number of log lines buffered before a forced flush. 
+# Optional: Maximum number of log lines buffered before a forced flush.
 # Default: 100
 # log_batch_size: 100
+
+# TLS — only needed when the server uses a self-signed or privately-signed certificate.
+#
+# Path to a PEM-encoded CA certificate that signed the server's TLS certificate.
+# Use this to trust a private CA without disabling verification entirely.
+# tls_ca_file: "/etc/kompakt/ca.crt"
+#
+# Disable TLS certificate verification. Use ONLY in development or isolated test environments.
+# Default: false
+# tls_skip_verify: false
