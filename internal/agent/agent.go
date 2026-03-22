@@ -41,7 +41,6 @@ func sanitizeOutputLine(s string) string {
 // signalling that the caller should re-register immediately without sleeping.
 var errTokenRejected = errors.New("token rejected by server")
 
-
 // localState is persisted to disk so the agent can resume after a reboot.
 type localState struct {
 	AgentID string `json:"agent_id"`
@@ -50,9 +49,10 @@ type localState struct {
 
 // Agent is the kompakt deployment agent.
 type Agent struct {
-	cfg        *common.AgentConfig
-	state      localState
-	httpClient *http.Client
+	platformInfo *identity.PlatformInfo
+	cfg          *common.AgentConfig
+	state        localState
+	httpClient   *http.Client
 }
 
 // New creates a new Agent with sensible defaults applied.
@@ -78,9 +78,16 @@ func New(cfg *common.AgentConfig) *Agent {
 // Run starts the agent: registers if needed, then connects and reconnects
 // via WebSocket until ctx is cancelled.
 func (c *Agent) Run(ctx context.Context) error {
+
 	if err := c.loadState(); err != nil {
 		slog.Warn("could not load local state", "error", err)
 	}
+
+	// Print platform info on startup (split for readability)
+	pf := identity.Collect()
+	slog.Info("Agent", "hostname", pf.Hostname, "model", pf.Model, "vendor", pf.Vendor)
+	slog.Info("Agent (metadata)", "metadata", pf.Metadata)
+	c.platformInfo = &pf
 
 	interval := time.Duration(c.cfg.ReconnectIntervalSeconds) * time.Second
 	for {
@@ -112,7 +119,13 @@ func (c *Agent) Run(ctx context.Context) error {
 // ── Registration ─────────────────────────────────────────────────────────────
 
 func (c *Agent) register(ctx context.Context) error {
-	pf := identity.Collect()
+	var pf identity.PlatformInfo
+	if c.platformInfo != nil {
+		pf = *c.platformInfo
+	} else {
+		pf = identity.Collect()
+		c.platformInfo = &pf
+	}
 	req := common.RegistrationRequest{
 		Platform:           common.PlatformType(pf.Platform),
 		Hostname:           pf.Hostname,
@@ -120,14 +133,41 @@ func (c *Agent) register(ctx context.Context) error {
 		Vendor:             pf.Vendor,
 		RegistrationSecret: c.cfg.RegistrationSecret,
 		Metadata:           pf.Metadata,
-		Shells:             detectShells(),
+		Shells:             identity.DetectShells(),
 	}
-	var resp common.RegistrationResponse
-	if err := c.post(ctx, "/api/v1/register", req, &resp, ""); err != nil {
+
+	// Send registration request to server with context
+	regURL := strings.TrimRight(c.cfg.ServerURL, "/") + "/api/v1/register"
+	body, err := json.Marshal(req)
+	if err != nil {
+		slog.Error("failed to marshal registration request", "error", err)
 		return err
 	}
-	c.state.AgentID = resp.AgentID
-	c.state.Token = resp.Token
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, regURL, bytes.NewReader(body))
+	if err != nil {
+		slog.Error("failed to create registration request", "error", err)
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		slog.Error("registration request failed", "error", err)
+		return err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("registration failed", "status", resp.Status)
+		return fmt.Errorf("registration failed: %s", resp.Status)
+	}
+	var regResp common.RegistrationResponse
+	if err := json.NewDecoder(resp.Body).Decode(&regResp); err != nil {
+		slog.Error("failed to decode registration response", "error", err)
+		return err
+	}
+	c.state.AgentID = regResp.AgentID
+	c.state.Token = regResp.Token
 	slog.Info("registered", "agent_id", c.state.AgentID)
 	return c.saveState()
 }
@@ -362,23 +402,6 @@ func (c *Agent) runPlaybook(ctx context.Context, writer *WSOutboundWriter, pd *c
 }
 
 // ── Shell capability detection ────────────────────────────────────────────────
-
-func detectShells() []string {
-	candidates := []struct{ name, exe string }{
-		{"bash", "bash"},
-		{"sh", "sh"},
-		{"pwsh", "pwsh"},
-		{"powershell", "powershell.exe"},
-		{"cmd", "cmd.exe"},
-	}
-	var found []string
-	for _, c := range candidates {
-		if _, err := exec.LookPath(c.exe); err == nil {
-			found = append(found, c.name)
-		}
-	}
-	return found
-}
 
 // ── Command execution ─────────────────────────────────────────────────────────
 

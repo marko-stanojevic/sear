@@ -13,8 +13,8 @@ func TestApplyConfigDefaults(t *testing.T) {
 	cfg := &common.ServerConfig{}
 	applyConfigDefaults(cfg)
 
-	   if cfg.ListenAddress != "http://localhost:8080" {
-		   t.Fatalf("ListenAddress = %q; want http://localhost:8080", cfg.ListenAddress)
+	if cfg.ListenAddress != "localhost:8080" {
+		t.Fatalf("ListenAddress = %q; want localhost:8080", cfg.ListenAddress)
 	}
 	if cfg.DataDir != "kompakt-data" {
 		t.Fatalf("DataDir = %q; want kompakt-data", cfg.DataDir)
@@ -22,14 +22,14 @@ func TestApplyConfigDefaults(t *testing.T) {
 	if cfg.ArtifactsDir == "" || cfg.LogsDir == "" {
 		t.Fatalf("expected non-empty artifacts/logs dirs: artifacts=%q logs=%q", cfg.ArtifactsDir, cfg.LogsDir)
 	}
-	if cfg.TokenExpiryHours != 720 {
-		t.Fatalf("TokenExpiryHours = %d; want 720", cfg.TokenExpiryHours)
+	if cfg.TokenExpiryHours != 8 {
+		t.Fatalf("TokenExpiryHours = %d; want 8", cfg.TokenExpiryHours)
 	}
 }
 
 func TestApplyConfigDefaults_PreservesExistingValues(t *testing.T) {
-	   cfg := &common.ServerConfig{
-		   ListenAddress:    "http://localhost:9090",
+	cfg := &common.ServerConfig{
+		ListenAddress:    "localhost:9090",
 		DataDir:          "/custom/data",
 		ArtifactsDir:     "/custom/artifacts",
 		LogsDir:          "/custom/logs",
@@ -37,8 +37,8 @@ func TestApplyConfigDefaults_PreservesExistingValues(t *testing.T) {
 	}
 	applyConfigDefaults(cfg)
 
-	   if cfg.ListenAddress != "http://localhost:9090" {
-		   t.Errorf("ListenAddress overwritten: got %q", cfg.ListenAddress)
+	if cfg.ListenAddress != "localhost:9090" {
+		t.Errorf("ListenAddress overwritten: got %q", cfg.ListenAddress)
 	}
 	if cfg.DataDir != "/custom/data" {
 		t.Errorf("DataDir overwritten: got %q", cfg.DataDir)
@@ -69,10 +69,10 @@ func TestApplyConfigDefaults_DirsDerivFromDataDir(t *testing.T) {
 }
 
 func TestServerURL(t *testing.T) {
-   httpURL := serverURL(&common.ServerConfig{ListenAddress: "http://localhost:8080"})
-   if httpURL != "http://localhost:8080" {
-	   t.Fatalf("serverURL = %q; want http://localhost:8080", httpURL)
-   }
+	httpURL := serverURL(&common.ServerConfig{ListenAddress: "localhost:8080"})
+	if httpURL != "localhost:8080" {
+		t.Fatalf("serverURL = %q; want localhost:8080", httpURL)
+	}
 }
 
 func TestMustGenerateHex(t *testing.T) {
@@ -169,7 +169,7 @@ func TestPrintBox(t *testing.T) {
 		_ = r.Close()
 	}()
 
-	printBox("TITLE", "secret-value")
+	common.PrintBannerMessage("TITLE", "secret-value")
 	_ = w.Close()
 
 	buf := make([]byte, 4096)

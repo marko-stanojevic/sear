@@ -10,7 +10,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"flag"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -21,7 +20,7 @@ import (
 	"time"
 
 	"github.com/marko-stanojevic/kompakt/internal/common"
-	server "github.com/marko-stanojevic/kompakt/internal/server"
+	"github.com/marko-stanojevic/kompakt/internal/server"
 	"github.com/marko-stanojevic/kompakt/internal/server/handlers"
 	"github.com/marko-stanojevic/kompakt/internal/server/service"
 	"github.com/marko-stanojevic/kompakt/internal/server/store"
@@ -29,6 +28,7 @@ import (
 )
 
 func main() {
+
 	configPath := flag.String("config", "config.yml", "path to server config file")
 	secretsPath := flag.String("secrets", "secrets.yml", "path to server secrets file")
 	debug := flag.Bool("debug", false, "log all HTTP requests (default: WebSocket and errors only)")
@@ -41,6 +41,44 @@ func main() {
 		slog.Error("config load failed", "error", err)
 		os.Exit(1)
 	}
+
+	// ...existing code up to after secrets are loaded...
+
+	// ...all initialization is now handled after config and secrets are loaded...
+
+	// ── TLS self-signed cert auto-generation ─────────────────────────────
+	if (cfg.TLSCertFile != "" || cfg.TLSKeyFile != "") && (cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || !server.FileExists(cfg.TLSCertFile) || !server.FileExists(cfg.TLSKeyFile)) {
+		// If either file is missing, generate both
+		certPath := cfg.TLSCertFile
+		keyPath := cfg.TLSKeyFile
+		if certPath == "" {
+			certPath = filepath.Join(cfg.DataDir, "kompakt-selfsigned.crt")
+		}
+		if keyPath == "" {
+			keyPath = filepath.Join(cfg.DataDir, "kompakt-selfsigned.key")
+		}
+		slog.Info("Generating self-signed TLS certificate", "cert", certPath, "key", keyPath)
+		if err := os.MkdirAll(filepath.Dir(certPath), 0o700); err != nil {
+			slog.Error("failed to create cert dir", "error", err)
+			os.Exit(1)
+		}
+		certPEM, keyPEM, err := server.GenerateSelfSignedCert()
+		if err != nil {
+			slog.Error("failed to generate self-signed cert", "error", err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+			slog.Error("failed to write cert file", "error", err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+			slog.Error("failed to write key file", "error", err)
+			os.Exit(1)
+		}
+		cfg.TLSCertFile = certPath
+		cfg.TLSKeyFile = keyPath
+	}
+
 	applyConfigDefaults(cfg)
 
 	sec, err := common.LoadServerSecrets(*secretsPath)
@@ -62,14 +100,14 @@ func main() {
 	// ── Root password ────────────────────────────────────────────────────────
 	if sec.RootPassword == "" {
 		sec.RootPassword = mustGenerateHex(16)
-		printBox("GENERATED ROOT PASSWORD", sec.RootPassword)
+		common.PrintBannerMessage("GENERATED ROOT PASSWORD", sec.RootPassword)
 	}
 
 	// ── Registration secrets ──────────────────────────────────────────────────
 	if len(sec.RegistrationSecrets) == 0 {
 		secret := mustGenerateHex(16)
 		sec.RegistrationSecrets = map[string]string{"default": secret}
-		printBox("GENERATED REGISTRATION SECRET", secret)
+		common.PrintBannerMessage("GENERATED REGISTRATION SECRET", secret)
 	}
 
 	// ── Ensure directories ────────────────────────────────────────────────────
@@ -151,7 +189,7 @@ func main() {
 
 func applyConfigDefaults(cfg *common.ServerConfig) {
 	if cfg.ListenAddress == "" {
-		cfg.ListenAddress = "http://localhost:8080"
+		cfg.ListenAddress = "localhost:8080"
 	}
 	if cfg.DataDir == "" {
 		cfg.DataDir = "kompakt-data"
@@ -163,7 +201,7 @@ func applyConfigDefaults(cfg *common.ServerConfig) {
 		cfg.LogsDir = filepath.Join(cfg.DataDir, "logs")
 	}
 	if cfg.TokenExpiryHours == 0 {
-		cfg.TokenExpiryHours = 720 // 30 days
+		cfg.TokenExpiryHours = 8 // 8 hours
 	}
 }
 
@@ -198,25 +236,4 @@ func mustGenerateHex(n int) string {
 		os.Exit(1)
 	}
 	return hex.EncodeToString(b)
-}
-
-func printBox(title, content string) {
-	maxLen := len(content)
-	if len(title) > maxLen {
-		maxLen = len(title)
-	}
-	width := maxLen + 4
-	bar := strings.Repeat("─", width)
-
-	titlePadTotal := width - len(title)
-	if titlePadTotal < 0 {
-		titlePadTotal = 0
-	}
-	leftPad := titlePadTotal / 2
-	rightPad := titlePadTotal - leftPad
-	leftPadStr := strings.Repeat(" ", leftPad)
-	rightPadStr := strings.Repeat(" ", rightPad)
-
-	fmt.Fprintf(os.Stderr, "\n┌%s┐\n│%s%s%s│\n│  %s  │\n└%s┘\n\n",
-		bar, leftPadStr, title, rightPadStr, content, bar)
 }

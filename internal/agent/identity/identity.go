@@ -5,7 +5,6 @@ package identity
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -24,16 +23,14 @@ type PlatformInfo struct {
 
 // Collect gathers platform info using runtime detection.
 func Collect() PlatformInfo {
-	hostname, _ := os.Hostname()
-	if hostname == "" {
-		hostname = "unknown"
-	}
+	hostname := getHostname()
 	meta := map[string]string{
 		"os":   osDescription(),
 		"type": runtime.GOOS,
 		"arch": runtime.GOARCH,
 	}
-	vendor, model := hardwareInfo()
+	vendor := getVendor()
+	model := getModel()
 	if vendor != "" {
 		meta["vendor"] = vendor
 	}
@@ -216,69 +213,6 @@ func osDescription() string {
 	default:
 		return runtime.GOOS
 	}
-}
-
-func hardwareInfo() (vendor string, model string) {
-	switch runtime.GOOS {
-	case "linux":
-		vendor = firstNonEmpty(
-			readFile("/sys/class/dmi/id/sys_vendor"),
-			readFile("/sys/devices/virtual/dmi/id/sys_vendor"),
-		)
-		model = firstNonEmpty(
-			readFile("/sys/class/dmi/id/product_name"),
-			readFile("/sys/devices/virtual/dmi/id/product_name"),
-			readFile("/proc/device-tree/model"),
-		)
-	case "darwin":
-		vendor = "Apple"
-		model = firstNonEmpty(runAndTrim("sysctl", "-n", "hw.model"))
-	case "windows":
-		vendor = firstNonEmpty(
-			runAndTrim("wmic", "computersystem", "get", "manufacturer", "/value"),
-			runAndTrim("powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_ComputerSystem).Manufacturer"),
-		)
-		model = firstNonEmpty(
-			runAndTrim("wmic", "computersystem", "get", "model", "/value"),
-			runAndTrim("powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_ComputerSystem).Model"),
-		)
-	}
-
-	vendor = cleanHardwareValue(vendor)
-	model = cleanHardwareValue(model)
-
-	if runtime.GOOS == "linux" && vendor == "" && model == "" {
-		if cv, cm := detectContainer(); cv != "" {
-			vendor, model = cv, cm
-			slog.Warn("DMI unavailable, detected container runtime", "runtime", cv)
-		}
-	}
-
-	return vendor, model
-}
-
-// detectContainer returns the container runtime name and a generic model label
-// when the process is running inside a container (Docker, Podman, LXC, etc.).
-func detectContainer() (vendor, model string) {
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		return "Docker", "container"
-	}
-	if _, err := os.Stat("/run/.containerenv"); err == nil {
-		return "Podman", "container"
-	}
-	cgroup := readFile("/proc/1/cgroup")
-	lower := strings.ToLower(cgroup)
-	switch {
-	case strings.Contains(lower, "docker"):
-		return "Docker", "container"
-	case strings.Contains(lower, "podman"):
-		return "Podman", "container"
-	case strings.Contains(lower, "lxc"):
-		return "LXC", "container"
-	case strings.Contains(lower, "containerd"):
-		return "containerd", "container"
-	}
-	return "", ""
 }
 
 func runAndTrim(cmd string, args ...string) string {
