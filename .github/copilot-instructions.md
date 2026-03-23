@@ -1,153 +1,141 @@
-# Copilot Instructions for the Kompakt Project
+# kompakt-agent AI Guidance
 
-## Project Overview
+This file provides guidance for AI assistants (like GitHub Copilot, Claude, or internal agents) when working with code in this repository. It defines **rules, architecture, behavior, coding conventions, and core skills**.
 
-**Kompakt** is a portable client-server framework written in Go, designed for bootstrapping edge datacenters and on-prem hardware. It executes GitHub Actions-style YAML workflows that persist across system reboots, with extensible client registration and a central dashboard for real-time deployment monitoring.
+---
 
-- **Module path**: `github.com/marko-stanojevic/kompakt`
-- **Language**: Go (no CGo dependencies)
-- **Key dependencies**: `gopkg.in/yaml.v3`, `github.com/golang-jwt/jwt/v5`, `github.com/google/uuid`, `github.com/gorilla/websocket`
+## 1. Purpose
 
-## Repository Layout
+The kompakt-agent repository consists of:
 
-```
-kompakt/
-├── cmd/
-│   ├── kompakt/              # Server/daemon entry point (main.go)
-│   └── kompakt-agent/        # Client CLI entry point (main.go)
-├── internal/
-│   ├── common/               # Shared types used by both daemon and client
-│   ├── daemon/
-│   │   ├── handlers/         # HTTP and WebSocket handlers; auth middleware
-│   │   ├── service/          # Business logic (deployment dispatch, hub management)
-│   │   └── store/            # JSON-file persistence layer
-│   └── client/               # Agent run loop: registration, WebSocket, playbook execution
-│       ├── executor/         # Step execution engine (shell, reboot, artifact ops)
-│       └── identity/         # Hardware/platform identifier collection
-├── examples/
-│   ├── config.yml            # Example daemon config
-│   ├── secrets.yml           # Example daemon secrets
-│   ├── client.config.yml     # Example client config
-│   └── playbook.yml          # Example playbook
-├── docs/                     # API reference and playbook model docs
-├── .goreleaser.yml           # Release packaging config
-├── go.mod
-├── go.sum
-└── .github/
-    ├── workflows/            # CI and release workflows
-    └── copilot-instructions.md
-```
+- **cmd/kompakt** — central server/daemon (HTTP API, Web UI, manages agents, playbooks, artifacts, secrets via SQLite).
+- **cmd/kompakt-agent** — edge execution agent (registers with server, receives playbooks via WebSocket, executes them step-by-step, streams logs back).
 
-## Build Instructions
+Agents must be **reliable, deterministic, and minimal-environment compatible**.
 
-Always ensure dependencies are downloaded before building:
+---
 
-```bash
-go mod download
-```
+## 2. Skills & Capabilities
 
-Build both binaries:
+When generating code or reasoning about this repository, prefer solutions that demonstrate:
 
-```bash
-go build -o bin/kompakt ./cmd/kompakt
-go build -o bin/kompakt-agent ./cmd/kompakt-agent
-```
+- **Distributed systems thinking** – agent ↔ server model, event-driven systems
+- **Network resilience** – retries, exponential backoff, reconnection
+- **Go concurrency** – goroutines, channels, context propagation
+- **Systems programming** – process execution, OS interaction, resource management
+- **Secure coding** – input validation, secret handling, TLS
+- **API and protocol design** – WebSocket, message-driven architecture
+- **Reliability engineering** – structured logging, error handling, fault tolerance
+- **Deterministic testing** – table-driven tests, subtests, mocking
+- **Minimal environment awareness** – Alpine Linux, BusyBox, static binaries
 
-Or build everything at once:
+### Bias
 
-```bash
-go build ./...
-```
+- Prefer: simple, explicit, resilient, restart-safe logic  
+- Avoid: complex abstractions, heavy dependencies, assumptions about full Linux environments
 
-Run local examples:
+---
 
-```bash
-go run ./cmd/kompakt -config examples/config.yml -secrets examples/secrets.yml
-go run ./cmd/kompakt-agent -config examples/client.config.yml
-```
+## 3. DO / DO NOT
 
-## Testing
+### DO
+- Use `context.Context` for all request-scoped operations
+- Keep functions small, composable, readable
+- Return early on errors
+- Use structured logging with `log/slog`
+- Use retry utility with exponential backoff
 
-Run all tests:
+### DO NOT
+- Introduce global mutable state
+- Call external services directly from handlers
+- Ignore errors
+- Use CGO-based dependencies
+- Assume full Linux environment
 
-```bash
-go test ./... -v -count=1
-```
+---
 
-Run tests with verbose output and race detector:
+## 4. Architecture & Layering
 
-```bash
-go test ./... -race -count=1
-```
+- **Entrypoints:** `cmd/`
+- **Business Logic:** `internal/server/service` (server), `internal/agent` (agent)
+- **Data Access:** `internal/server/store`
+- **Transport:** `internal/server/handlers` (HTTP/WebSocket), `internal/agent` (WS client)
+- **Separation of Concerns:** Keep transport, business, and storage layers separate
 
-Run tests for a specific package:
+### Key Packages
 
-```bash
-go test ./internal/daemon/handlers/...
-```
+| Package | Role |
+| --- | --- |
+| `internal/common` | Shared types, config, playbook model, secret resolution |
+| `internal/server` | HTTP server wiring, routes |
+| `internal/server/handlers` | HTTP/WebSocket handlers, auth middleware |
+| `internal/server/service` | Business logic |
+| `internal/server/store` | SQLite persistence (`kompakt.db`) |
+| `internal/server/handlers/ui` | Web dashboard assets/templates |
+| `internal/agent` | Agent run loop: registration, WS connect/reconnect, playbook execution |
+| `internal/agent/executor` | Step execution engine (shell, reboot, artifact actions) |
+| `internal/agent/identity` | Hardware/platform identifier collection |
 
-## Linting
+---
 
-Use `go vet` for static analysis (always available with Go toolchain):
+## 5. Agent Behavior
 
-```bash
-go vet ./...
-```
+- **Automatic Reconnection:** maintain connectivity with exponential backoff
+- **Resilience:** network failures or server downtime must not crash the agent
+- **Streaming Telemetry:** log step start/complete events in real-time
+- **State Management:** mostly stateless; persists identity (`AgentID`, `Token`) in `state.json` (atomic writes)
 
-If `golangci-lint` is installed, run:
+---
 
-```bash
-golangci-lint run ./...
-```
+## 6. Boot Environment
 
-Tidy modules:
+- Minimal OS: Alpine Linux, BusyBox, minimal ISOs
+- No systemd or heavy OS features
+- All dependencies must work in static-binary or lightweight environments
 
-```bash
-go mod tidy
-```
+---
 
-## Release
+## 7. Security
 
-Local snapshot check:
+- Never log secrets (`${{ secrets.NAME }}`)
+- Assume untrusted network; all communication is TLS-secured
+- Validate all instructions received over WebSocket
 
-```bash
-go run github.com/goreleaser/goreleaser/v2@v2.14.3 release --snapshot --clean --skip=validate --skip=publish
-```
+---
 
-Release artifacts and matrix are configured in `.goreleaser.yml`.
+## 8. Coding Conventions
 
-## Code Conventions
+- **Logging:** `log/slog`, include context (`agentID`, `deploymentID`, request metadata)
+- **SQL:** use pure Go SQLite (`modernc.org/sqlite`), avoid CGO
+- **WebSocket:** `github.com/coder/websocket` for agent communication
+- **Testing:** table-driven tests, subtests, mock dependencies, deterministic
+- **Integration tests:** `//go:build integration`, run with `-tags=integration`
+- **Concurrency:** goroutines/channels, avoid shared state, terminate properly with `context.Context`
+- **Error Handling:** explicit errors, wrap with `fmt.Errorf("context: %w", err)`, only panic for unrecoverable startup
+- **Context Usage:** always pass, never store in structs
+- **General:** idiomatic Go, simple, explicit, maintainable, avoid unnecessary abstractions
 
-- Follow standard Go idioms and conventions (effective Go, standard library style).
-- Keep `internal/common` free of external dependencies — it holds only shared types.
-- The daemon (`cmd/kompakt`) is the long-running server process; the agent (`cmd/kompakt-agent`) is the short-lived CLI tool.
-- Workflow definitions use YAML (via `gopkg.in/yaml.v3`); model them after GitHub Actions syntax.
-- Authentication uses JWT (`github.com/golang-jwt/jwt/v5`).
-- Use `github.com/google/uuid` for generating unique IDs.
-- No CGo: keep the codebase portable and cross-compilable.
+---
 
-## Key Architectural Notes
+## 9. Dependencies & Style
 
-- **Workflows persist across reboots**: the storage layer (`internal/daemon/store`) is responsible for durable state.
-- **Client registration**: clients register with the daemon; the daemon assigns them identities (UUIDs) and tracks their state.
-- **Dashboard**: served at `/ui`; individual pages at `/ui/clients`, `/ui/secrets`, `/ui/playbooks`, `/ui/deployments`, `/ui/artifacts`. Keep handler logic in `internal/daemon/handlers`.
-- **Auth split**: root API endpoints use HTTP Basic auth or a short-lived UI JWT (issued by `POST /api/v1/ui/login`); client endpoints use JWT Bearer tokens.
-- **Logs storage**: deployment logs are persisted per deployment in `logsDir`, not inside `state.json`.
+- Prefer standard library, minimal external dependencies
+- `gofmt` + `go vet`
+- Keep functions small and focused
+- Prefer explicit over clever code
 
-## Available Skills
+---
 
-The repository provides reusable Copilot skills in `.github/skills`:
+## 10. Module Path
 
-- `code-interpretation`: Read AI-generated code and understand unfamiliar codebase structure/flow.
-- `code-review`: Find bugs, regressions, and missing tests with severity-ranked findings.
-- `refactor`: Perform behavior-preserving restructuring and cleanup.
-- `security-audit`: Audit for security risks, insecure defaults, and hardening gaps.
-- `developer-experience`: Improve local workflow, CI, tasks, and onboarding setup.
-- `documentation`: Update documentation from code additions, changes, and deletions.
-- `design-compliance`: Verify design patterns, enforce SOLID/clean architecture, detect bad practices, and guide developers.
-- `test-driven-development`: Write unit tests, practice TDD red/green/refactor cycles, and close coverage gaps.
-- `architecture-awareness`: Understand project architecture, runtime usage, and how to add or modify features safely.
+`github.com/marko-stanojevic/kompakt`
 
-## Trust These Instructions
+---
 
-Trust the information in this file. Only search the codebase if the information here is incomplete or appears incorrect.
+## 11. Custom Assistant Workflows
+
+Structured workflows to guide AI or humans:
+
+- [.agents/workflows/add-api-endpoint.md](../.agents/workflows/add-api-endpoint.md) – add REST/WebSocket endpoint
+- [.agents/workflows/add-step-type.md](../.agents/workflows/add-step-type.md) – add new playbook step
+- [.agents/workflows/add-ui-page.md](../.agents/workflows/add-ui-page.md) – add new dashboard page
