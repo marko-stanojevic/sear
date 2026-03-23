@@ -1,0 +1,106 @@
+name: Cleanup Pipeline Runs
+run-name: "${{ github.event.repository.name }} | Cleanup Pipeline | ${{ github.run_id }} | ${{ github.event_name }}"
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # Every day at 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      keep_count:
+        description: 'Number of recent runs to keep per workflow (0 = use age filter only)'
+        required: false
+        default: '5'
+        type: string
+      keep_hours:
+        description: 'Delete runs older than this many hours (0 = use count filter only)'
+        required: false
+        default: '72'
+        type: string
+
+jobs:
+  cleanup:
+    name: Prune Old Workflow Runs
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete old workflow runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          # On schedule: keep last 5 runs OR runs newer than 72 h, whichever is more generous.
+          # On workflow_dispatch: use the caller-supplied values.
+          KEEP_COUNT: ${{ inputs.keep_count || '5' }}
+          KEEP_HOURS: ${{ inputs.keep_hours || '72' }}
+        run: |
+          set -euo pipefail
+
+          NOW=$(date -u +%s)
+          CUTOFF_EPOCH=$(( NOW - KEEP_HOURS * 3600 ))
+
+          echo "Settings: keep_count=${KEEP_COUNT}, keep_hours=${KEEP_HOURS}"
+          echo "Cutoff timestamp: $(date -u -d @${CUTOFF_EPOCH} '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -r ${CUTOFF_EPOCH} '+%Y-%m-%dT%H:%M:%SZ')"
+
+          # Fetch all workflow definitions in this repo.
+          WORKFLOWS=$(gh api "repos/${REPO}/actions/workflows" --paginate \
+            --jq '.workflows[].id')
+
+          for WF_ID in $WORKFLOWS; do
+            WF_NAME=$(gh api "repos/${REPO}/actions/workflows/${WF_ID}" --jq '.name')
+            echo ""
+            echo "==> Workflow: ${WF_NAME} (id=${WF_ID})"
+
+            # Collect all run IDs with their creation timestamps, newest first.
+            RUNS_JSON=$(gh api "repos/${REPO}/actions/workflows/${WF_ID}/runs" \
+              --paginate \
+              --jq '[.workflow_runs[] | {id: .id, created_at: .created_at}]' \
+              | jq -s 'add // []' \
+              | jq 'sort_by(.created_at) | reverse')
+
+            TOTAL=$(echo "$RUNS_JSON" | jq 'length')
+            echo "   Total runs: ${TOTAL}"
+
+            if [ "$TOTAL" -eq 0 ]; then
+              echo "   No runs found, skipping."
+              continue
+            fi
+
+            DELETED=0
+            INDEX=0
+
+            while IFS= read -r line; do
+              RUN_ID=$(echo "$line" | jq -r '.id')
+              CREATED_AT=$(echo "$line" | jq -r '.created_at')
+
+              # Convert ISO 8601 to epoch (compatible with both GNU and BSD date).
+              CREATED_EPOCH=$(date -u -d "${CREATED_AT}" +%s 2>/dev/null \
+                || date -u -jf '%Y-%m-%dT%H:%M:%SZ' "${CREATED_AT}" +%s)
+
+              # Keep the run if it satisfies EITHER retention rule.
+              KEEP_BY_COUNT=false
+              KEEP_BY_AGE=false
+
+              if [ "$KEEP_COUNT" -gt 0 ] && [ "$INDEX" -lt "$KEEP_COUNT" ]; then
+                KEEP_BY_COUNT=true
+              fi
+              if [ "$KEEP_HOURS" -gt 0 ] && [ "$CREATED_EPOCH" -ge "$CUTOFF_EPOCH" ]; then
+                KEEP_BY_AGE=true
+              fi
+
+              if $KEEP_BY_COUNT || $KEEP_BY_AGE; then
+                echo "   Keeping run ${RUN_ID} (created ${CREATED_AT})"
+              else
+                echo "   Deleting run ${RUN_ID} (created ${CREATED_AT})"
+                gh api -X DELETE "repos/${REPO}/actions/runs/${RUN_ID}" || \
+                  echo "   WARNING: failed to delete run ${RUN_ID}, skipping."
+                DELETED=$(( DELETED + 1 ))
+              fi
+
+              INDEX=$(( INDEX + 1 ))
+            done < <(echo "$RUNS_JSON" | jq -c '.[]')
+
+            echo "   Deleted ${DELETED} run(s) from '${WF_NAME}'."
+          done
+
+          echo ""
+          echo "Cleanup complete."
