@@ -7,6 +7,7 @@ Welcome to the Kompakt documentation hub. This index provides easy access to all
 ## 📚 Guides & References
 
 - [API Endpoints](api-endpoints.md): HTTP and WebSocket API reference for kompakt.
+- [Architecture Deep-Dive](architecture-deep-dive.md): Internal design and core logic of server and agent.
 - [Playbook Model](playbook-model.md): Workflow structure, environment injection, secrets, and artifact usage.
 - [Example Playbook](../examples/playbook.yml): Sample deployment workflow.
 - [Daemon Configuration](../examples/config.yml): Daemon config example.
@@ -18,6 +19,7 @@ Welcome to the Kompakt documentation hub. This index provides easy access to all
 
 ## 🚀 Onboarding & Quick Start
 
+- [Onboarding Guide](onboarding.md): Project structure and directory layout for new contributors.
 - [Quick Start in README](../README.md#quick-start): Step-by-step setup for new users.
 - [Operator Guide](../README.md#platform-overview): Overview of Kompakt components and their roles.
 - [Dashboard UI](../README.md#quick-start): Access real-time status and deployment logs.
