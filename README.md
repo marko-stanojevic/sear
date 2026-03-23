@@ -2,124 +2,88 @@
 
 [![CI](https://github.com/marko-stanojevic/kompakt/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/marko-stanojevic/kompakt/actions/workflows/ci.yml)
 [![Release](https://github.com/marko-stanojevic/kompakt/actions/workflows/release.yml/badge.svg)](https://github.com/marko-stanojevic/kompakt/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/marko-stanojevic/kompakt)](https://github.com/marko-stanojevic/kompakt/releases/latest)
 [![Coverage](https://codecov.io/gh/marko-stanojevic/kompakt/graph/badge.svg?branch=main)](https://codecov.io/gh/marko-stanojevic/kompakt)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/marko-stanojevic/kompakt)](https://github.com/marko-stanojevic/kompakt/blob/main/go.mod)
-[![Latest Release](https://img.shields.io/github/v/release/marko-stanojevic/kompakt)](https://github.com/marko-stanojevic/kompakt/releases)
 [![Go Report Card](https://goreportcard.com/badge/github.com/marko-stanojevic/kompakt)](https://goreportcard.com/report/github.com/marko-stanojevic/kompakt)
+[![Status](https://img.shields.io/badge/status-alpha-orange)](https://github.com/marko-stanojevic/kompakt)
 [![License](https://img.shields.io/github/license/marko-stanojevic/kompakt)](LICENSE)
 
 **Deploy to any node. Survive any reboot.**
 
-Kompakt is an agent-based deployment automation tool built for on-premises, bare-metal, and edge environments. A central daemon manages playbooks, secrets, and artifacts. Lightweight agents on each node execute those playbooks step-by-step, stream logs in real time, and resume exactly where they left off after a reboot or crash — no cloud dependency, no orchestrator required.
+Kompakt is a resilient, agent-based deployment automation tool designed for on-premises, bare-metal, and edge environments. It ensures that complex multi-step deployments complete reliably, even across hardware reboots and network outages.
 
-## Overview
+---
 
-| Component | Role |
-| --- | --- |
-| `kompakt` | Central command plane — HTTP API, web dashboard, artifact store, durable deployment state |
-| `kompakt-agent` | Execution agent — registers with the daemon, runs playbooks, streams logs, survives reboots |
+## Why Kompakt?
 
-## Use cases
+Traditional orchestration struggles at the “last mile.” Kompakt changes that:
 
-**Bootstrapping bare-metal nodes**
-Provision fresh hardware from zero: install OS packages, write config files, place binaries, and reboot mid-playbook without losing your place. Kompakt resumes from the last confirmed step.
+- **No more KVM headaches**: Skip slow consoles and manual passwords.
+- **Edge-ready**: Deploy anywhere, even without PXE, vaults, or artifact stores.
+- **Multi-Stage Provisioning**: Orchestrate complex workflows across reboots, preserving state at every step.
+- **Secrets handled securely**: Inject passwords and keys at runtime, never in the OS image.
+- **Configurable playbooks & ISOs**: The right recipe for every hardware and OS.
 
-**Deploying applications to on-prem fleets**
-Push a new version of your service to dozens of nodes in a controlled sequence. Track progress per node in the dashboard, inspect per-step logs, and re-run failed deployments from a single UI.
+Kompakt brings the full stack to the edge, turning tedious tasks into fast, repeatable processes.
 
-**Managing edge datacenter infrastructure**
-Nodes at remote sites phone home over WebSocket. The daemon queues work; agents pull and execute when connected. No VPN tunnels or inbound firewall rules required on the node side.
+---
 
-**Distributing versioned artifacts**
-Upload binaries or configuration archives once to the daemon. Reference them in a playbook step — agents download them at execution time with access-policy enforcement (public, authenticated, or restricted to specific clients).
+## Architecture
 
-**Secrets-aware automation**
-Store credentials and tokens centrally. Inject them into any playbook step with `${{ secrets.NAME }}` — values never touch disk on the agent and are not logged.
+```mermaid
+sequenceDiagram
+    participant Agent as kompakt Agent
+    participant Server as kompakt Server
 
-## Features
+    Note over Agent, Server: Phase 1: Registration
+    Agent->>Server: Register (Hostname, HW ID, Secret)
+    Server->>Agent: Issue Opaque Token & Identity
 
-- **Reboot-safe execution** — a persistent resume index means a node reboot mid-playbook is handled automatically, not an error condition.
-- **Real-time telemetry** — step start/complete events and stdout/stderr stream to the daemon over WebSocket and appear live in the dashboard.
-- **Centralized artifact distribution** — upload once, reference in any playbook; access policies control which clients can download.
-- **Secret injection** — secrets resolved server-side at dispatch time; agents receive values in environment, never in plaintext config.
-- **Structured playbooks** — ordered jobs and steps with shell execution, artifact operations, and reboot actions in a single YAML definition.
-- **Audit trail** — all deployment logs persisted per deployment; queryable via API and viewable in the UI.
-- **Zero external dependencies** — single static Go binary per component, no container runtime, no orchestrator, no database.
-- **Opaque agent tokens** — agents authenticate with `kpkt_`-prefixed opaque bearer tokens; only a SHA-256 hash is stored, enabling instant per-agent revocation and zero-downtime rotation. UI sessions use separate short-lived JWTs. TLS termination is built-in.
+    Note over Agent, Server: Phase 2: Live Connection
+    Agent->>Server: Establish Outbound WebSocket (Secure)
+    Server-->>Agent: Connection Idle (Heartbeat)
 
-## Quick start
+    Note over Agent, Server: Phase 3: Deployment Execution
+    Server->>Agent: Push Workload (Playbook + Encrypted Secrets)
+    Agent->>Server: Step Start Notification
+    Agent->>Server: Stream real-time logs (STDOUT/STDERR)
+    Agent->>Server: Step Complete / Progress Sync
 
-### 1. Download binaries
-
-Download prebuilt archives from [GitHub Releases](https://github.com/marko-stanojevic/kompakt/releases) and extract the `kompakt` and `kompakt-agent` binaries for your OS and architecture.
-
-### 2. Start the daemon
-
-```bash
-./kompakt -config config.yml -secrets secrets.yml
+    Note over Agent, Server: Phase 4: Resilience
+    Agent->>Server: Reboot Signal (Current State Persisted)
+    Note over Agent: Hardware Reboot Cycle
+    Agent->>Server: Reconnect (Opaque Auth)
+    Server->>Agent: Resume Playbook from Last Step
 ```
 
-On first run the daemon generates a root password and registration secret, prints them, and writes them to the secrets file. See [`examples/config.yml`](examples/config.yml) and [`examples/secrets.yml`](examples/secrets.yml) for full configuration reference.
+---
 
-### 3. Register a node
+## Core Features
 
-Copy `kompakt-agent` to the target node and run:
+| Feature | Description |
+| :--- | :--- |
+| **Tiered Multi-Stage Deployments** | Orchestrate complex workflows from Live CD installation to final OS configuration on first boot or multiple reboots. |
+| **Integrated Credential Vault** | Securely manage and inject secrets via `${{ secrets.NAME }}` without ever touching the agent's disk. |
+| **Centralized Artifact Storage** | Efficiently distribute binaries and blobs with granular, agent-specific access policies. |
+| **Live Remote Command Execution** | Execute ad-hoc commands with real-time feedback for rapid troubleshooting and development. |
+| **Centralized Audit Logs** | Stream and store all agent execution logs centrally for a complete, immutable audit trail. |
+| **Automated ISO Builder** | Create custom bootable Linux or WinPE media with the Kompakt Agent pre-integrated. |
+| **Resilient Reboot Lifecycle** | Survive power cycles and intentional restarts with synchronized state on both server and agent. |
+| **Zero External Dependencies** | Statically linked Go binaries with no requirement for Docker, Python, or external runtimes. |
 
-```bash
-./kompakt-agent -config client.config.yml
-```
+---
 
-The agent registers with the daemon, establishes a persistent WebSocket connection, and waits for work. See [`examples/client.config.yml`](examples/client.config.yml).
+## Project Resources
 
-### 4. Deploy a playbook
+- [Architecture Deep Dive](docs/architecture-deep-dive.md)
+- [API Documentation](docs/api-endpoints.md)
+- [Playbook Model & Step Types](docs/playbook-model.md)
+- [Agent Authentication & Security](docs/agent-authentication.md)
+- [Onboarding Guide](docs/onboarding.md)
+- [General Documentation](docs/documentation.md)
 
-Open the dashboard at `http://<daemon-host>:8080/ui`, navigate to **Playbooks**, upload a playbook YAML, then assign it to a connected client. Deployment starts immediately and logs stream in real time under **Deployments**.
+---
 
-A minimal playbook looks like:
-
-```yaml
-name: hello
-jobs:
-  - name: verify
-    steps:
-      - name: print hostname
-        shell: bash
-        run: hostname && uname -a
-```
-
-See [`examples/playbook.yml`](examples/playbook.yml) for a full multi-phase example with reboots and artifact distribution.
-
-## Dashboard
-
-| Page | Path | Purpose |
-| --- | --- | --- |
-| Home | `/ui` | Fleet summary — clients, deployments, playbooks, artifacts at a glance |
-| Clients | `/ui/clients` | Live connection status, platform info, and last activity per node |
-| Playbooks | `/ui/playbooks` | Upload, edit, and assign playbooks to clients |
-| Deployments | `/ui/deployments` | Execution history, per-step logs, and status for every deployment |
-| Artifacts | `/ui/artifacts` | Upload binaries and files; manage access policies |
-| Vault | `/ui/vault` | Store and rotate credentials used in playbook steps |
-
-## Documentation
-
-- [API endpoints](docs/api-endpoints.md) — full HTTP and WebSocket API reference
-- [Playbook model](docs/playbook-model.md) — step types, secret injection, reboot handling, and best practices
-- [Agent authentication](docs/agent-authentication.md) — opaque token design, lifecycle, rotation, and security rationale
-- [Project docs](docs/documentation.md) — FAQ and architecture overview
-
-## Troubleshooting
-
-| Symptom | Check |
-| --- | --- |
-| Agent fails to register | `registration_secret` in agent config must match a value in the daemon secrets file |
-| Agent token rejected | Token may be revoked or expired; re-register the agent to obtain a fresh token |
-| Artifact download fails | Verify the artifact access policy; confirm the client ID is in the allowed list for restricted artifacts |
-| Deployment stuck after reboot | Agent resumes automatically on reconnect — check agent logs for connection errors |
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and contribution guidelines.
-
-## License
-
+### License
 Kompakt is licensed under the [MIT License](LICENSE).
