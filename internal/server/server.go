@@ -49,6 +49,7 @@ func NewServer(env *handlers.Handler) http.Handler {
 	mux.Handle("/ui/deployments", http.HandlerFunc(env.HandleDeploymentsUI))
 	mux.Handle("/ui/artifacts", http.HandlerFunc(env.HandleArtifactsUI))
 	mux.Handle("/ui/artifacts/", http.HandlerFunc(env.HandleArtifactsUI))
+	mux.Handle("/ui/iso", http.HandlerFunc(env.HandleISOUI))
 
 	mux.Handle("/api/v1/playbooks", root(http.HandlerFunc(env.HandleRootPlaybooks)))
 	mux.Handle("/api/v1/playbooks/", root(http.HandlerFunc(env.HandleRootPlaybooks)))
@@ -66,6 +67,9 @@ func NewServer(env *handlers.Handler) http.Handler {
 
 	mux.Handle("/api/v1/secrets", root(http.HandlerFunc(env.HandleSecrets)))
 	mux.Handle("/api/v1/secrets/", root(http.HandlerFunc(env.HandleSecrets)))
+
+	mux.Handle("/api/v1/iso/build", root(http.HandlerFunc(env.HandleISOBuild)))
+	mux.Handle("/api/v1/iso/build/", root(http.HandlerFunc(env.HandleISOBuild)))
 
 	// ── HTMX partials (root auth required) ───────────────────────────────────
 	mux.Handle("/ui/partials/home-stats", root(http.HandlerFunc(env.HandlePartialHomeStats)))

@@ -12,6 +12,7 @@ import (
 	_ "modernc.org/sqlite" // SQLite driver
 
 	"github.com/marko-stanojevic/kompakt/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/iso"
 )
 
 // PlaybookRecord wraps a Playbook with server-side metadata.
@@ -107,6 +108,17 @@ CREATE TABLE IF NOT EXISTS agent_tokens (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_tokens_hash     ON agent_tokens (token_hash);
 CREATE INDEX IF NOT EXISTS idx_agent_tokens_agent_id ON agent_tokens (agent_id);
+
+CREATE TABLE IF NOT EXISTS iso_builds (
+    id          TEXT PRIMARY KEY,
+    secret_name TEXT NOT NULL DEFAULT '',
+    server_url  TEXT NOT NULL DEFAULT '',
+    status      TEXT NOT NULL DEFAULT '',
+    started_at  TEXT NOT NULL DEFAULT '',
+    finished_at TEXT,
+    error_msg   TEXT NOT NULL DEFAULT '',
+    iso_path    TEXT NOT NULL DEFAULT ''
+);
 `
 
 // New opens (or creates) the SQLite store at dir/kompakt.db.
@@ -135,7 +147,9 @@ func New(dir string, _ string) (*Store, error) {
 	}
 	// Additive migrations: ignore errors when column already exists.
 	for _, m := range []string{
-		`ALTER TABLE agents ADD COLUMN shells_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE agents     ADD COLUMN shells_json  TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE iso_builds ADD COLUMN logs_json    TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE iso_builds ADD COLUMN custom_name  TEXT NOT NULL DEFAULT ''`,
 	} {
 		_, _ = db.Exec(m)
 	}
@@ -754,4 +768,55 @@ func (s *Store) RevokeAllAgentTokens(agentID string) error {
 		`UPDATE agent_tokens SET revoked_at = ? WHERE agent_id = ? AND revoked_at IS NULL`,
 		encodeTime(time.Now()), agentID)
 	return err
+}
+
+// ── ISO Builds ────────────────────────────────────────────────────────────────
+
+func (s *Store) SaveIsoBuild(r iso.IsoBuildRecord) error {
+	logsJSON, err := json.Marshal(r.Logs)
+	if err != nil {
+		return fmt.Errorf("marshalling iso build logs: %w", err)
+	}
+	_, err = s.db.Exec(`
+		INSERT INTO iso_builds (id, custom_name, secret_name, server_url, status, started_at, finished_at, error_msg, iso_path, logs_json)
+		VALUES (?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(id) DO UPDATE SET
+		    status=excluded.status, finished_at=excluded.finished_at,
+		    error_msg=excluded.error_msg, iso_path=excluded.iso_path, logs_json=excluded.logs_json`,
+		r.ID, r.CustomName, r.SecretName, r.ServerURL, string(r.Status),
+		encodeTime(r.StartedAt), encodeTimePtr(r.FinishedAt),
+		r.ErrMsg, r.ISOPath, string(logsJSON),
+	)
+	return err
+}
+
+func (s *Store) DeleteIsoBuild(id string) error {
+	_, err := s.db.Exec(`DELETE FROM iso_builds WHERE id = ?`, id)
+	return err
+}
+
+func (s *Store) ListIsoBuilds() ([]iso.IsoBuildRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT id, custom_name, secret_name, server_url, status, started_at, finished_at, error_msg, iso_path, logs_json
+		FROM iso_builds ORDER BY started_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []iso.IsoBuildRecord
+	for rows.Next() {
+		var r iso.IsoBuildRecord
+		var status, startedAt, logsJSON string
+		var finishedAt sql.NullString
+		if err := rows.Scan(&r.ID, &r.CustomName, &r.SecretName, &r.ServerURL, &status,
+			&startedAt, &finishedAt, &r.ErrMsg, &r.ISOPath, &logsJSON); err != nil {
+			return nil, err
+		}
+		r.Status = iso.BuildStatus(status)
+		r.StartedAt = decodeTime(startedAt)
+		r.FinishedAt = decodeTimePtr(finishedAt)
+		_ = json.Unmarshal([]byte(logsJSON), &r.Logs)
+		out = append(out, r)
+	}
+	return out, nil
 }

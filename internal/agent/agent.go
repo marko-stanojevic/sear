@@ -4,7 +4,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,16 +55,16 @@ func New(cfg *common.AgentConfig) (*Agent, error) {
 	if cfg.WorkDir == "" {
 		cfg.WorkDir = defaultWorkDir()
 	}
-	// Set up HTTP client with optional TLS verification skip
+	// Set up HTTP client with optional TLS configuration.
+	tlsCfg, err := buildTLSConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("TLS config: %w", err)
+	}
 	var httpClient *http.Client
-	if cfg.DisableTLSVerification {
-		// #nosec G402 -- This is only enabled for trusted/dev environments
+	if tlsCfg != nil {
 		httpClient = &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				//nolint:gosec // This is only enabled for trusted/dev environments
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			},
+			Timeout:   30 * time.Second,
+			Transport: &http.Transport{TLSClientConfig: tlsCfg},
 		}
 	} else {
 		httpClient = &http.Client{Timeout: 30 * time.Second}

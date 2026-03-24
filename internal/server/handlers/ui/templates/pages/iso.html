@@ -1,0 +1,302 @@
+{{template "layout" .}}
+{{define "content"}}
+<div class="container">
+  <div class="meta">
+    <span id="counts-bar">ISO Builds</span>
+    <span class="spacer"></span>
+    <button class="btn-add" onclick="openNewBuild()">+ New Build</button>
+    <button onclick="refreshBuilds()">Refresh</button>
+  </div>
+  <div id="table-root">
+    <div class="spinner"></div>
+  </div>
+</div>
+
+<!-- New Build modal -->
+<div id="modal-new-build" class="modal-bg">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-head">
+      <h2>New ISO Build</h2>
+      <button class="btn-icon" onclick="closeNewBuild()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>ISO Name <span class="sub">(optional — used in filename)</span></label>
+        <input id="iso-custom-name" type="text" placeholder="my-project-agent">
+      </div>
+      <div class="form-group">
+        <label>Server URL <span class="sub">(agents will connect here)</span></label>
+        <input id="iso-server-url" type="text"
+               placeholder="https://your-server:8080"
+               value="{{if .ServerURL}}http://{{.ServerURL}}{{end}}">
+      </div>
+      <div class="form-group">
+        <label>Registration Secret</label>
+        <select id="iso-secret-name">
+          {{range .SecretNames}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select>
+      </div>
+      <div class="form-group" style="flex-direction:row;align-items:center;gap:8px">
+        <input id="iso-tls-skip" type="checkbox" style="width:auto">
+        <label for="iso-tls-skip" style="margin-bottom:0">Skip TLS certificate verification</label>
+      </div>
+      <div class="form-group">
+        <label>Extra Dockerfile Instructions <span class="sub">(optional — appended to agent layer)</span></label>
+        <textarea id="iso-extra-dockerfile" rows="5"
+                  style="font-family:monospace;font-size:12px;resize:vertical"
+                  placeholder="RUN apt-get update &amp;&amp; apt-get install -y openssh-server&#10;RUN useradd -m operator"></textarea>
+      </div>
+    </div>
+    <div class="modal-err" id="build-err"></div>
+    <div class="modal-actions">
+      <button class="btn-muted" onclick="closeNewBuild()">Cancel</button>
+      <button class="btn-add" onclick="startBuild()">Build ISO</button>
+    </div>
+  </div>
+</div>
+
+<!-- Log viewer modal -->
+<div id="modal-log" class="modal-bg">
+  <div class="modal" style="max-width:860px;width:90vw">
+    <div class="modal-head">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <strong id="log-status-label">Building…</strong>
+        <span id="log-build-id" class="sub mono" style="font-size:11px"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button id="btn-download" class="btn-add" style="display:none" onclick="downloadCurrentISO()">⬇ Download ISO</button>
+        <button class="btn-icon" onclick="closeLogModal()">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" style="padding:0">
+      <div id="build-log"
+           style="background:#0d1117;padding:12px 16px;height:420px;overflow-y:auto;
+                  font-family:monospace;font-size:12px;line-height:1.6;color:#c9d1d9;
+                  white-space:pre-wrap;word-break:break-all">
+      </div>
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+var currentBuildID = null;
+var pollTimer = null;
+var logOffset = 0;
+
+// ── New Build modal ────────────────────────────────────────────────────────────
+
+function openNewBuild() {
+  document.getElementById('build-err').textContent = '';
+  document.getElementById('build-err').style.display = 'none';
+  document.getElementById('modal-new-build').classList.add('show');
+}
+function closeNewBuild() {
+  document.getElementById('modal-new-build').classList.remove('show');
+}
+
+function startBuild() {
+  var url    = document.getElementById('iso-server-url').value.trim();
+  var secret = document.getElementById('iso-secret-name').value;
+  var skip   = document.getElementById('iso-tls-skip').checked;
+  var name   = document.getElementById('iso-custom-name').value.trim();
+  var extra  = document.getElementById('iso-extra-dockerfile').value;
+  var errEl  = document.getElementById('build-err');
+
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+  if (!url) { errEl.textContent = 'Server URL is required'; errEl.style.display = ''; return; }
+
+  fetch('/api/v1/iso/build', {
+    method: 'POST',
+    headers: Object.assign({'Content-Type':'application/json'}, headersAuth()),
+    body: JSON.stringify({server_url: url, secret_name: secret, tls_skip_verify: skip,
+                          custom_name: name, extra_dockerfile_instructions: extra})
+  }).then(function(r) {
+    if (r.status === 401) { showLogin('Session expired'); return; }
+    return r.json().then(function(d) {
+      if (!r.ok) { errEl.textContent = d.error || 'Build failed to start'; errEl.style.display = ''; return; }
+      closeNewBuild();
+      refreshBuilds();
+      openLogModal(d.build_id, 0);
+    });
+  }).catch(function(e) { errEl.textContent = 'Network error: ' + e.message; errEl.style.display = ''; });
+}
+
+// ── Log viewer modal ───────────────────────────────────────────────────────────
+
+function openLogModal(buildID, fromOffset) {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+
+  currentBuildID = buildID;
+  logOffset = fromOffset || 0;
+
+  document.getElementById('log-build-id').textContent = buildID;
+  document.getElementById('build-log').textContent = '';
+  document.getElementById('btn-download').style.display = 'none';
+  setStatusLabel('pending', '');
+
+  document.getElementById('modal-log').classList.add('show');
+
+  pollTimer = setInterval(poll, 2000);
+  poll();
+}
+
+function closeLogModal() {
+  document.getElementById('modal-log').classList.remove('show');
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  currentBuildID = null;
+  refreshBuilds();
+}
+
+function poll() {
+  if (!currentBuildID) return;
+  fetch('/api/v1/iso/build/' + currentBuildID + '?offset=' + logOffset, {headers: headersAuth()})
+    .then(function(r) {
+      if (r.status === 401) { showLogin('Session expired'); return; }
+      return r.json();
+    })
+    .then(function(d) {
+      if (!d) return;
+      if (d.logs && d.logs.length) {
+        var logEl = document.getElementById('build-log');
+        var atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 20;
+        d.logs.forEach(function(line) { logEl.textContent += line + '\n'; });
+        if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+        logOffset += d.logs.length;
+      }
+      setStatusLabel(d.status, d.error);
+      if (d.status === 'completed' || d.status === 'failed') {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        if (d.status === 'completed') {
+          document.getElementById('btn-download').style.display = '';
+        }
+        refreshBuilds();
+      }
+    })
+    .catch(function() {});
+}
+
+function setStatusLabel(status, errMsg) {
+  var el = document.getElementById('log-status-label');
+  var labels = {pending:'Pending…', running:'Building…', completed:'Completed ✓', failed:'Failed ✗'};
+  el.textContent = labels[status] || status;
+  if (errMsg) el.textContent += ' — ' + errMsg;
+}
+
+function downloadCurrentISO() {
+  if (currentBuildID) triggerDownload('/api/v1/iso/build/' + currentBuildID + '/download');
+}
+
+function triggerDownload(url) {
+  var a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.click();
+}
+
+// ── Builds list ────────────────────────────────────────────────────────────────
+
+function refreshBuilds() {
+  fetch('/api/v1/iso/build', {headers: headersAuth()})
+    .then(function(r) { return r.json(); })
+    .then(function(builds) {
+      var root = document.getElementById('table-root');
+      var bar  = document.getElementById('counts-bar');
+
+      if (!builds || !builds.length) {
+        bar.textContent = 'ISO Builds';
+        root.innerHTML = '<div class="empty">No builds yet.</div>';
+        return;
+      }
+
+      builds.sort(function(a,b) { return new Date(b.started_at) - new Date(a.started_at); });
+      bar.textContent = 'ISO Builds: ' + builds.length;
+
+      var html = '<div class="table-wrap"><div class="list list-iso">'
+        + '<div class="list-head">'
+        + '<div>Name / ID</div><div>Secret</div><div>Server URL</div><div>Status</div><div>Started</div><div></div>'
+        + '</div>';
+
+      builds.forEach(function(b) {
+        var isActive = b.id === currentBuildID;
+        var menuItems = '';
+
+        var viewLabel = (b.status === 'running' || b.status === 'pending') ? 'View Progress' : 'View Logs';
+        menuItems += '<button class="menu-item" onclick="openLogModal(\'' + b.id + '\',0)">'
+          + '<i class="m-icon" data-lucide="terminal"></i> ' + viewLabel + '</button>';
+
+        if (b.status === 'completed') {
+          menuItems += '<button class="menu-item" onclick="triggerDownload(\'/api/v1/iso/build/' + b.id + '/download\')">'
+            + '<i class="m-icon" data-lucide="download"></i> Download</button>';
+        }
+
+        menuItems += '<button class="menu-item danger" onclick="deleteBuild(\'' + b.id + '\')">'
+          + '<i class="m-icon" data-lucide="trash-2"></i> Delete</button>';
+
+        html += '<div class="list-row' + (isActive ? ' row-active' : '') + '">'
+          + '<div class="cell-main">'
+          + (b.custom_name ? '<div class="name">' + esc(b.custom_name) + '</div>' : '<div class="name mono" style="font-size:12px">' + b.id.slice(0,8) + '…</div>')
+          + '<div class="sub mono" style="font-size:11px">' + b.id + '</div></div>'
+          + '<div>' + esc(b.secret_name) + '</div>'
+          + '<div class="mono" style="font-size:12px">' + esc(b.server_url) + '</div>'
+          + '<div><span class="badge badge-' + statusClass(b.status) + '">' + b.status + '</span></div>'
+          + '<div>' + new Date(b.started_at).toLocaleString() + '</div>'
+          + '<div class="card-top-right"><div class="card-menu">'
+          + '<button class="menu-btn" title="Actions">⋮</button>'
+          + '<div class="menu-dropdown">' + menuItems + '</div>'
+          + '</div></div>'
+          + '</div>';
+      });
+
+      html += '</div></div>';
+      root.innerHTML = html;
+      if (window.lucide) window.lucide.createIcons();
+    })
+    .catch(function() {});
+}
+
+function statusClass(s) {
+  if (s === 'completed') return 'success';
+  if (s === 'failed')    return 'danger';
+  if (s === 'running')   return 'info';
+  return 'muted';
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function deleteBuild(id) {
+  showConfirm('Delete Build', 'Delete this build and its ISO file? This cannot be undone.', function() {
+    fetch('/api/v1/iso/build/' + id, {method: 'DELETE', headers: headersAuth()})
+      .then(function(r) {
+        if (r.status === 401) { showLogin('Session expired'); return; }
+        if (r.ok) {
+          if (currentBuildID === id) closeLogModal();
+          refreshBuilds();
+        }
+      })
+      .catch(function() {});
+  });
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+
+document.getElementById('modal-new-build').addEventListener('click', function(e) { if (e.target === this) closeNewBuild(); });
+document.getElementById('modal-log').addEventListener('click', function(e) { if (e.target === this) closeLogModal(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeNewBuild(); closeLogModal(); } });
+
+// Load list; auto-resume any running build.
+refreshBuilds();
+fetch('/api/v1/iso/build', {headers: headersAuth()})
+  .then(function(r) { return r.json(); })
+  .then(function(builds) {
+    if (!builds) return;
+    builds.sort(function(a,b) { return new Date(b.started_at) - new Date(a.started_at); });
+    var running = builds.find(function(b) { return b.status === 'running' || b.status === 'pending'; });
+    if (running) openLogModal(running.id, running.log_count || 0);
+  })
+  .catch(function() {});
+</script>
+{{end}}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/marko-stanojevic/kompakt/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/iso"
 	"github.com/marko-stanojevic/kompakt/internal/server/ports"
 	"github.com/marko-stanojevic/kompakt/internal/server/service"
 )
@@ -27,6 +28,7 @@ type Handler struct {
 	Hub                 *Hub
 	Service             *service.Manager
 	Commands            *CommandStore
+	ISOBuilds *iso.BuildStore // in-memory ISO build sessions
 }
 
 // ── WebSocket Hub ─────────────────────────────────────────────────────────────

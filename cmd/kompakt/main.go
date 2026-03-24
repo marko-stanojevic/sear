@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/marko-stanojevic/kompakt/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/iso"
 	"github.com/marko-stanojevic/kompakt/internal/server"
 	"github.com/marko-stanojevic/kompakt/internal/server/handlers"
 	"github.com/marko-stanojevic/kompakt/internal/server/service"
@@ -111,7 +112,8 @@ func main() {
 	}
 
 	// ── Ensure directories ────────────────────────────────────────────────────
-	for _, dir := range []string{cfg.ArtifactsDir, cfg.LogsDir} {
+	isoOutputDir := filepath.Join(cfg.DataDir, "iso")
+	for _, dir := range []string{cfg.ArtifactsDir, cfg.LogsDir, isoOutputDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			slog.Error("mkdir failed", "path", dir, "error", err)
 			os.Exit(1)
@@ -134,7 +136,14 @@ func main() {
 
 	// ── Handler environment ───────────────────────────────────────────────────
 	hub := handlers.NewHub()
-	svc := &service.Manager{Store: st, Hub: hub, ServerURL: serverURL(cfg)}
+	isoBuilds := iso.NewBuildStore(st)
+	svc := &service.Manager{
+		Store:        st,
+		Hub:          hub,
+		ServerURL:    serverURL(cfg),
+		ISOBuilds:    isoBuilds,
+		ISOOutputDir: isoOutputDir,
+	}
 	env := &handlers.Handler{
 		Store:               st,
 		UserJWTSecret:       []byte(cfg.UserJWTSecret),
@@ -146,6 +155,7 @@ func main() {
 		Hub:                 hub,
 		Service:             svc,
 		Commands:            handlers.NewCommandStore(),
+		ISOBuilds:           isoBuilds,
 	}
 
 	// ── HTTP server ───────────────────────────────────────────────────────────
