@@ -150,6 +150,7 @@ func New(dir string, _ string) (*Store, error) {
 		`ALTER TABLE agents     ADD COLUMN shells_json  TEXT NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE iso_builds ADD COLUMN logs_json    TEXT NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE iso_builds ADD COLUMN custom_name  TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE iso_builds ADD COLUMN platform     TEXT NOT NULL DEFAULT 'linux'`,
 	} {
 		_, _ = db.Exec(m)
 	}
@@ -778,12 +779,12 @@ func (s *Store) SaveIsoBuild(r iso.IsoBuildRecord) error {
 		return fmt.Errorf("marshalling iso build logs: %w", err)
 	}
 	_, err = s.db.Exec(`
-		INSERT INTO iso_builds (id, custom_name, secret_name, server_url, status, started_at, finished_at, error_msg, iso_path, logs_json)
-		VALUES (?,?,?,?,?,?,?,?,?,?)
+		INSERT INTO iso_builds (id, custom_name, secret_name, server_url, platform, status, started_at, finished_at, error_msg, iso_path, logs_json)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET
 		    status=excluded.status, finished_at=excluded.finished_at,
 		    error_msg=excluded.error_msg, iso_path=excluded.iso_path, logs_json=excluded.logs_json`,
-		r.ID, r.CustomName, r.SecretName, r.ServerURL, string(r.Status),
+		r.ID, r.CustomName, r.SecretName, r.ServerURL, r.Platform, string(r.Status),
 		encodeTime(r.StartedAt), encodeTimePtr(r.FinishedAt),
 		r.ErrMsg, r.ISOPath, string(logsJSON),
 	)
@@ -797,7 +798,7 @@ func (s *Store) DeleteIsoBuild(id string) error {
 
 func (s *Store) ListIsoBuilds() ([]iso.IsoBuildRecord, error) {
 	rows, err := s.db.Query(`
-		SELECT id, custom_name, secret_name, server_url, status, started_at, finished_at, error_msg, iso_path, logs_json
+		SELECT id, custom_name, secret_name, server_url, COALESCE(platform,'linux'), status, started_at, finished_at, error_msg, iso_path, logs_json
 		FROM iso_builds ORDER BY started_at DESC`)
 	if err != nil {
 		return nil, err
@@ -808,7 +809,7 @@ func (s *Store) ListIsoBuilds() ([]iso.IsoBuildRecord, error) {
 		var r iso.IsoBuildRecord
 		var status, startedAt, logsJSON string
 		var finishedAt sql.NullString
-		if err := rows.Scan(&r.ID, &r.CustomName, &r.SecretName, &r.ServerURL, &status,
+		if err := rows.Scan(&r.ID, &r.CustomName, &r.SecretName, &r.ServerURL, &r.Platform, &status,
 			&startedAt, &finishedAt, &r.ErrMsg, &r.ISOPath, &logsJSON); err != nil {
 			return nil, err
 		}

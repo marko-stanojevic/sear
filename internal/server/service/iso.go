@@ -10,18 +10,31 @@ import (
 
 // StartISOBuild creates a new ISO build job and starts it in the background.
 // The caller is responsible for resolving secretValue from secretName.
-func (m *Manager) StartISOBuild(serverURL, secretName, secretValue, customName, extraInstructions string, tlsSkipVerify bool) (*iso.Build, error) {
-	agentBin, err := iso.FindAgentBinary()
+// platform must be "linux" (default) or "winpe".
+func (m *Manager) StartISOBuild(serverURL, secretName, secretValue, customName, platform, extraInstructions string, tlsSkipVerify bool) (*iso.Build, error) {
+	if platform == "" {
+		platform = "linux"
+	}
+
+	var agentBin string
+	var err error
+	switch platform {
+	case "winpe":
+		agentBin, err = iso.FindWindowsAgentBinary()
+	default:
+		agentBin, err = iso.FindAgentBinary()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("finding agent binary: %w", err)
 	}
 
 	buildID := common.NewID()
-	build := m.ISOBuilds.Create(buildID, secretName, serverURL, customName)
+	build := m.ISOBuilds.Create(buildID, secretName, serverURL, customName, platform)
 
 	req := iso.BuildRequest{
 		ID:                          buildID,
 		CustomName:                  customName,
+		Platform:                    platform,
 		ServerURL:                   serverURL,
 		SecretName:                  secretName,
 		SecretValue:                 secretValue,

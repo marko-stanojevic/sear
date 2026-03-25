@@ -49,6 +49,7 @@ func (e *Handler) startISOBuild(w http.ResponseWriter, r *http.Request) {
 		SecretName                  string `json:"secret_name"`
 		TLSSkipVerify               bool   `json:"tls_skip_verify"`
 		CustomName                  string `json:"custom_name"`
+		Platform                    string `json:"platform"`
 		ExtraDockerfileInstructions string `json:"extra_dockerfile_instructions"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -63,6 +64,13 @@ func (e *Handler) startISOBuild(w http.ResponseWriter, r *http.Request) {
 	if body.SecretName == "" {
 		body.SecretName = "default"
 	}
+	if body.Platform == "" {
+		body.Platform = "linux"
+	}
+	if body.Platform != "linux" && body.Platform != "winpe" {
+		writeError(w, http.StatusBadRequest, "platform must be \"linux\" or \"winpe\"")
+		return
+	}
 
 	secretValue, ok := e.RegistrationSecrets[body.SecretName]
 	if !ok {
@@ -70,7 +78,7 @@ func (e *Handler) startISOBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	build, err := e.Service.StartISOBuild(body.ServerURL, body.SecretName, secretValue, body.CustomName, body.ExtraDockerfileInstructions, body.TLSSkipVerify)
+	build, err := e.Service.StartISOBuild(body.ServerURL, body.SecretName, secretValue, body.CustomName, body.Platform, body.ExtraDockerfileInstructions, body.TLSSkipVerify)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
 		return

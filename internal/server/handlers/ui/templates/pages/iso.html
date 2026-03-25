@@ -41,6 +41,13 @@
         <label for="iso-tls-skip" style="margin-bottom:0">Skip TLS certificate verification</label>
       </div>
       <div class="form-group">
+        <label>Platform</label>
+        <select id="iso-platform">
+          <option value="linux">Linux Live ISO (Debian)</option>
+          <option value="winpe">Windows PE (WinPE) — requires Windows Containers mode</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>Extra Dockerfile Instructions <span class="sub">(optional — appended to agent layer)</span></label>
         <textarea id="iso-extra-dockerfile" rows="5"
                   style="font-family:monospace;font-size:12px;resize:vertical"
@@ -102,6 +109,7 @@ function startBuild() {
   var skip   = document.getElementById('iso-tls-skip').checked;
   var name   = document.getElementById('iso-custom-name').value.trim();
   var extra  = document.getElementById('iso-extra-dockerfile').value;
+  var platform = document.getElementById('iso-platform').value;
   var errEl  = document.getElementById('build-err');
 
   errEl.style.display = 'none';
@@ -112,7 +120,7 @@ function startBuild() {
     method: 'POST',
     headers: Object.assign({'Content-Type':'application/json'}, headersAuth()),
     body: JSON.stringify({server_url: url, secret_name: secret, tls_skip_verify: skip,
-                          custom_name: name, extra_dockerfile_instructions: extra})
+                          custom_name: name, platform: platform, extra_dockerfile_instructions: extra})
   }).then(function(r) {
     if (r.status === 401) { showLogin('Session expired'); return; }
     return r.json().then(function(d) {
@@ -215,7 +223,7 @@ function refreshBuilds() {
 
       var html = '<div class="table-wrap"><div class="list list-iso">'
         + '<div class="list-head">'
-        + '<div>Name / ID</div><div>Secret</div><div>Server URL</div><div>Status</div><div>Started</div><div></div>'
+        + '<div>Name / ID</div><div>Platform</div><div>Secret</div><div>Server URL</div><div>Status</div><div>Started</div><div></div>'
         + '</div>';
 
       builds.forEach(function(b) {
@@ -238,6 +246,7 @@ function refreshBuilds() {
           + '<div class="cell-main">'
           + (b.custom_name ? '<div class="name">' + esc(b.custom_name) + '</div>' : '<div class="name mono" style="font-size:12px">' + b.id.slice(0,8) + '…</div>')
           + '<div class="sub mono" style="font-size:11px">' + b.id + '</div></div>'
+          + '<div><span class="badge badge-' + (b.platform === 'winpe' ? 'info' : 'muted') + '">' + (b.platform || 'linux') + '</span></div>'
           + '<div>' + esc(b.secret_name) + '</div>'
           + '<div class="mono" style="font-size:12px">' + esc(b.server_url) + '</div>'
           + '<div><span class="badge badge-' + statusClass(b.status) + '">' + b.status + '</span></div>'

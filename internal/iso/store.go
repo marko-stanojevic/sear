@@ -14,6 +14,7 @@ type IsoBuildRecord struct {
 	CustomName string
 	SecretName string
 	ServerURL  string
+	Platform   string
 	Status     BuildStatus
 	StartedAt  time.Time
 	FinishedAt *time.Time
@@ -45,6 +46,7 @@ type Build struct {
 	CustomName string
 	SecretName string
 	ServerURL  string
+	Platform   string
 	StartedAt  time.Time
 
 	mu         sync.RWMutex
@@ -61,6 +63,7 @@ type BuildSnapshot struct {
 	CustomName string      `json:"custom_name,omitempty"`
 	SecretName string      `json:"secret_name"`
 	ServerURL  string      `json:"server_url"`
+	Platform   string      `json:"platform"`
 	Status     BuildStatus `json:"status"`
 	Logs       []string    `json:"logs"`
 	LogCount   int         `json:"log_count"`
@@ -81,6 +84,7 @@ func (b *Build) Snapshot() BuildSnapshot {
 		CustomName: b.CustomName,
 		SecretName: b.SecretName,
 		ServerURL:  b.ServerURL,
+		Platform:   b.Platform,
 		Status:     b.status,
 		Logs:       logs,
 		LogCount:   len(b.logs),
@@ -114,6 +118,7 @@ func (b *Build) toRecordLocked() IsoBuildRecord {
 		CustomName: b.CustomName,
 		SecretName: b.SecretName,
 		ServerURL:  b.ServerURL,
+		Platform:   b.Platform,
 		Status:     b.status,
 		StartedAt:  b.StartedAt,
 		FinishedAt: b.finishedAt,
@@ -187,6 +192,7 @@ func NewBuildStore(db BuildPersistence) *BuildStore {
 			CustomName: r.CustomName,
 			SecretName: r.SecretName,
 			ServerURL:  r.ServerURL,
+			Platform:   r.Platform,
 			StartedAt:  r.StartedAt,
 			status:     r.Status,
 			isoPath:    r.ISOPath,
@@ -211,12 +217,16 @@ func NewBuildStore(db BuildPersistence) *BuildStore {
 }
 
 // Create registers a new build job, persists it, and returns it.
-func (s *BuildStore) Create(id, secretName, serverURL, customName string) *Build {
+func (s *BuildStore) Create(id, secretName, serverURL, customName, platform string) *Build {
+	if platform == "" {
+		platform = "linux"
+	}
 	b := &Build{
 		ID:         id,
 		CustomName: customName,
 		SecretName: secretName,
 		ServerURL:  serverURL,
+		Platform:   platform,
 		status:     BuildStatusPending,
 		StartedAt:  time.Now(),
 	}

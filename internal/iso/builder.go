@@ -41,6 +41,7 @@ const (
 type BuildRequest struct {
 	ID                          string
 	CustomName                  string // optional; used in the output filename
+	Platform                    string // "linux" (default) or "winpe"
 	ServerURL                   string
 	SecretName                  string
 	SecretValue                 string
@@ -50,7 +51,7 @@ type BuildRequest struct {
 	ExtraDockerfileInstructions string // optional; appended to the agent layer Dockerfile
 }
 
-// RunBuild executes the Docker-based ISO build. Intended to be called in a goroutine.
+// RunBuild executes the ISO build. Intended to be called in a goroutine.
 // The caller is responsible for applying a timeout to ctx (e.g. BuildTimeout).
 func RunBuild(ctx context.Context, store *BuildStore, build *Build, req BuildRequest) {
 	build.setRunning(store)
@@ -63,7 +64,18 @@ func RunBuild(ctx context.Context, store *BuildStore, build *Build, req BuildReq
 	build.setCompleted(isoPath, store)
 }
 
+// runBuild dispatches to the correct platform pipeline.
 func runBuild(ctx context.Context, req BuildRequest, onLog func(string)) (string, error) {
+	switch req.Platform {
+	case "winpe":
+		return runWinPEBuild(ctx, req, onLog)
+	default: // "linux" or empty
+		return runLinuxBuild(ctx, req, onLog)
+	}
+}
+
+// runLinuxBuild runs the Docker-based Debian Live ISO build.
+func runLinuxBuild(ctx context.Context, req BuildRequest, onLog func(string)) (string, error) {
 	absOutputDir, err := filepath.Abs(req.OutputDir)
 	if err != nil {
 		return "", fmt.Errorf("resolving output dir: %w", err)
