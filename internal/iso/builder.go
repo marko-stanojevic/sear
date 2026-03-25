@@ -147,12 +147,7 @@ func runBuild(ctx context.Context, req BuildRequest, onLog func(string)) (string
 // ensureImage checks whether tag exists locally and, if not, builds it from
 // dockerfileName (a path inside the embedded docker/ directory).
 func ensureImage(ctx context.Context, tag, dockerfileName string, onLog func(string)) error {
-	out, err := exec.CommandContext(ctx, "docker", "images", "-q", tag).Output()
-	if err == nil && strings.TrimSpace(string(out)) != "" {
-		return nil // already present
-	}
-
-	onLog("Building image " + tag + " (one-time, results are cached by Docker)…")
+	onLog("Checking image " + tag + "…")
 	ctxDir, err := os.MkdirTemp("", "kompakt-img-ctx-*")
 	if err != nil {
 		return fmt.Errorf("creating context dir: %w", err)
@@ -344,7 +339,7 @@ func writeGrubConfig(grubDir string) error {
 set default=0
 
 menuentry "Kompakt Agent Live" {
-    linux /boot/vmlinuz boot=live components quiet
+    linux /boot/vmlinuz boot=live components username=root autologin quiet
     initrd /boot/initrd.img
 }
 `

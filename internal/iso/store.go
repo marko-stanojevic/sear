@@ -259,7 +259,9 @@ func (s *BuildStore) Delete(id string) bool {
 	s.mu.Unlock()
 
 	if isoPath := b.GetISOPath(); isoPath != "" {
-		_ = os.Remove(isoPath)
+		if err := os.Remove(isoPath); err != nil {
+			slog.Error("iso: failed to remove file", "path", isoPath, "error", err)
+		}
 	}
 	if s.db != nil {
 		_ = s.db.DeleteIsoBuild(id)

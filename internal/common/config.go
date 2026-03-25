@@ -2,7 +2,9 @@
 package common
 
 import (
+	"bytes"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -132,10 +134,22 @@ func loadYAML[T any](path string) (*T, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
+
+	// Lax decode to extract the data.
 	var v T
 	if err := yaml.Unmarshal(data, &v); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
+
+	// Strict decode pass only to check for unknown fields.
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	var dummy T
+	if err := dec.Decode(&dummy); err != nil {
+		// Log a warning for unknown fields to help users catch typos.
+		slog.Warn("ignoring unknown configuration key", "path", path, "error", err)
+	}
+
 	return &v, nil
 }
 

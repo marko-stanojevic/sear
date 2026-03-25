@@ -204,7 +204,7 @@ func main() {
 
 func applyConfigDefaults(cfg *common.ServerConfig) {
 	if cfg.ListenAddress == "" {
-		cfg.ListenAddress = "localhost:8080"
+		cfg.ListenAddress = ":8080"
 	}
 	//
 	if cfg.DataDir == "" {

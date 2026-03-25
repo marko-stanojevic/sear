@@ -4,11 +4,18 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         live-boot \
+        live-config \
+        live-config-systemd \
         linux-image-amd64 \
         systemd \
         systemd-sysv \
         ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
+        nano \
+        vim-tiny \
+        curl \
+        iputils-ping \
+        net-tools \
+        && rm -rf /var/lib/apt/lists/* \
     && update-initramfs -u -k all
 
 # Networking: systemd-networkd with DHCP on any Ethernet interface (en*/eth*).
@@ -21,6 +28,10 @@ RUN mkdir -p /etc/systemd/network \
               /etc/systemd/system/multi-user.target.wants/systemd-networkd.service \
     && ln -sf /lib/systemd/system/systemd-networkd-wait-online.service \
               /etc/systemd/system/network-online.target.wants/systemd-networkd-wait-online.service
+
+# Root account preparation (autologin is handled by live-config via kernel params).
+RUN passwd -d root \
+    && chsh -s /bin/bash root
 
 # kompakt agent startup.
 COPY files/kompakt-start /usr/local/bin/kompakt-start
