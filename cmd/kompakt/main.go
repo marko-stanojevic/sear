@@ -155,7 +155,6 @@ func main() {
 		Hub:                 hub,
 		Service:             svc,
 		Commands:            handlers.NewCommandStore(),
-		ISOBuilds:           isoBuilds,
 	}
 
 	// ── HTTP server ───────────────────────────────────────────────────────────
@@ -204,7 +203,7 @@ func main() {
 
 func applyConfigDefaults(cfg *common.ServerConfig) {
 	if cfg.ListenAddress == "" {
-		cfg.ListenAddress = ":8080"
+		cfg.ListenAddress = "localhost:8080"
 	}
 	//
 	if cfg.DataDir == "" {

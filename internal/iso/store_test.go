@@ -92,7 +92,7 @@ func TestBuildStateTransitions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			db := newMemDB()
 			s := NewBuildStore(db)
-			b := s.Create("id-1", "default", "https://example.com", "")
+			b := s.Create("id-1", "default", "https://example.com", "", "")
 
 			tc.transition(s, b)
 
@@ -128,7 +128,7 @@ func TestBuildStateTransitions(t *testing.T) {
 
 func TestBuildAppendLog(t *testing.T) {
 	s := NewBuildStore(nil)
-	b := s.Create("id-log", "default", "https://example.com", "")
+	b := s.Create("id-log", "default", "https://example.com", "", "")
 	lines := []string{"line one", "line two", "line three"}
 	for _, l := range lines {
 		b.AppendLog(l)
@@ -160,7 +160,7 @@ func TestLogOffsetSlicing(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			s := NewBuildStore(nil)
-			b := s.Create("id-offset", "s", "u", "")
+			b := s.Create("id-offset", "s", "u", "", "")
 			for i := 0; i < tc.total; i++ {
 				b.AppendLog("line")
 			}
@@ -183,7 +183,7 @@ func TestLogOffsetSlicing(t *testing.T) {
 func TestBuildStoreGetList(t *testing.T) {
 	t.Run("Get returns build by id", func(t *testing.T) {
 		s := NewBuildStore(nil)
-		s.Create("a", "s1", "url1", "")
+		s.Create("a", "s1", "url1", "", "")
 		if _, ok := s.Get("a"); !ok {
 			t.Fatal("Get(a): not found")
 		}
@@ -198,8 +198,8 @@ func TestBuildStoreGetList(t *testing.T) {
 
 	t.Run("List returns all builds", func(t *testing.T) {
 		s := NewBuildStore(nil)
-		s.Create("a", "s1", "url1", "")
-		s.Create("b", "s2", "url2", "")
+		s.Create("a", "s1", "url1", "", "")
+		s.Create("b", "s2", "url2", "", "")
 		if got := len(s.List()); got != 2 {
 			t.Fatalf("List len = %d; want 2", got)
 		}
@@ -210,7 +210,7 @@ func TestBuildStoreDelete(t *testing.T) {
 	t.Run("deletes from memory and db", func(t *testing.T) {
 		db := newMemDB()
 		s := NewBuildStore(db)
-		b := s.Create("del-1", "default", "https://example.com", "")
+		b := s.Create("del-1", "default", "https://example.com", "", "")
 		// ISO file doesn't exist on disk — Delete must not error.
 		b.setCompleted("/tmp/nonexistent.iso", s)
 
@@ -227,7 +227,7 @@ func TestBuildStoreDelete(t *testing.T) {
 
 	t.Run("second delete returns false", func(t *testing.T) {
 		s := NewBuildStore(nil)
-		s.Create("del-2", "s", "u", "")
+		s.Create("del-2", "s", "u", "", "")
 		s.Delete("del-2")
 		if s.Delete("del-2") {
 			t.Fatal("second Delete returned true; want false")

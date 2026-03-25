@@ -52,3 +52,36 @@ func (m *Manager) StartISOBuild(serverURL, secretName, secretValue, customName, 
 
 	return build, nil
 }
+
+// ListISOBuilds returns snapshots of all known ISO builds.
+func (m *Manager) ListISOBuilds() []iso.BuildSnapshot {
+	builds := m.ISOBuilds.List()
+	snapshots := make([]iso.BuildSnapshot, len(builds))
+	for i, b := range builds {
+		snapshots[i] = b.Snapshot()
+	}
+	return snapshots
+}
+
+// GetISOBuild returns a snapshot of a single build by ID.
+func (m *Manager) GetISOBuild(id string) (iso.BuildSnapshot, bool) {
+	b, ok := m.ISOBuilds.Get(id)
+	if !ok {
+		return iso.BuildSnapshot{}, false
+	}
+	return b.Snapshot(), true
+}
+
+// GetISOPath returns the filesystem path of a completed ISO, or "" if not ready.
+func (m *Manager) GetISOPath(id string) (string, bool) {
+	b, ok := m.ISOBuilds.Get(id)
+	if !ok {
+		return "", false
+	}
+	return b.GetISOPath(), true
+}
+
+// DeleteISOBuild removes a build and its ISO file. Returns false if not found.
+func (m *Manager) DeleteISOBuild(id string) bool {
+	return m.ISOBuilds.Delete(id)
+}

@@ -67,10 +67,6 @@ type AgentConfig struct {
 	// ServerURL is the base URL of the kompakt server (e.g. "http://kompakt:8080").
 	ServerURL string `yaml:"server_url"`
 
-	// Optional: Set to true to skip TLS certificate verification (for self-signed/dev only).
-	// If omitted or false, TLS verification is enabled (recommended for production).
-	DisableTLSVerification bool `yaml:"disable_tls_verification"`
-
 	// RegistrationSecret must match one of the server's registration_secrets values.
 	RegistrationSecret string `yaml:"registration_secret"`
 

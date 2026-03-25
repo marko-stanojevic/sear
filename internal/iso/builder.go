@@ -203,7 +203,7 @@ func buildAgentImage(ctx context.Context, tag string, req BuildRequest, onLog fu
 	// Embed the server URL and secret as a static config so the ISO works
 	// out-of-the-box without needing kernel command-line parameters.
 	staticCfg := fmt.Sprintf(
-		"server_url: %q\nregistration_secret: %q\ndisable_tls_verification: %s\n"+
+		"server_url: %q\nregistration_secret: %q\ntls_skip_verify: %s\n"+
 			"state_file: /var/lib/kompakt/state.json\nwork_dir: /var/lib/kompakt/work\n"+
 			"reconnect_interval_seconds: 10\n",
 		req.ServerURL, req.SecretValue, tlsStr,

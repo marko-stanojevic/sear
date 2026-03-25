@@ -3,6 +3,7 @@ package iso
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,7 +52,7 @@ func runWinPEBuild(ctx context.Context, req BuildRequest, onLog func(string)) (s
 	}
 	defer func() {
 		if err := exec.Command("docker", "rmi", "-f", agentTag).Run(); err != nil {
-			// non-fatal
+			slog.Debug("iso: failed to remove transient WinPE agent image", "tag", agentTag, "error", err)
 		}
 	}()
 
@@ -123,7 +124,7 @@ func buildWinPEAgentImage(ctx context.Context, tag string, req BuildRequest, onL
 		tlsStr = "true"
 	}
 	staticCfg := fmt.Sprintf(
-		"server_url: %q\nregistration_secret: %q\ndisable_tls_verification: %s\n"+
+		"server_url: %q\nregistration_secret: %q\ntls_skip_verify: %s\n"+
 			"state_file: X:\\kompakt\\state.json\nwork_dir: X:\\kompakt\\work\n"+
 			"reconnect_interval_seconds: 10\n",
 		req.ServerURL, req.SecretValue, tlsStr,

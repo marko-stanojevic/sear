@@ -71,6 +71,10 @@ func (e *Handler) startISOBuild(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "platform must be \"linux\" or \"winpe\"")
 		return
 	}
+	if len(body.ExtraDockerfileInstructions) > 4096 {
+		writeError(w, http.StatusBadRequest, "extra_dockerfile_instructions exceeds 4096-byte limit")
+		return
+	}
 
 	secretValue, ok := e.RegistrationSecrets[body.SecretName]
 	if !ok {
@@ -87,22 +91,16 @@ func (e *Handler) startISOBuild(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"build_id": build.ID})
 }
 
-func (e *Handler) listISOBuilds(w http.ResponseWriter, r *http.Request) {
-	builds := e.ISOBuilds.List()
-	snapshots := make([]iso.BuildSnapshot, len(builds))
-	for i, b := range builds {
-		snapshots[i] = b.Snapshot()
-	}
-	writeJSON(w, http.StatusOK, snapshots)
+func (e *Handler) listISOBuilds(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, e.Service.ListISOBuilds())
 }
 
 func (e *Handler) pollISOBuild(w http.ResponseWriter, r *http.Request, buildID string) {
-	build, ok := e.ISOBuilds.Get(buildID)
+	snap, ok := e.Service.GetISOBuild(buildID)
 	if !ok {
 		writeError(w, http.StatusNotFound, "build not found")
 		return
 	}
-	snap := build.Snapshot()
 	// offset allows the client to fetch only new log lines
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	if offset > 0 && offset < len(snap.Logs) {
@@ -114,18 +112,17 @@ func (e *Handler) pollISOBuild(w http.ResponseWriter, r *http.Request, buildID s
 }
 
 func (e *Handler) downloadISO(w http.ResponseWriter, r *http.Request, buildID string) {
-	build, ok := e.ISOBuilds.Get(buildID)
+	snap, ok := e.Service.GetISOBuild(buildID)
 	if !ok {
 		writeError(w, http.StatusNotFound, "build not found")
 		return
 	}
-	snap := build.Snapshot()
 	if snap.Status != iso.BuildStatusCompleted || !snap.HasISO {
 		writeError(w, http.StatusConflict, "ISO is not ready yet")
 		return
 	}
-	isoPath := build.GetISOPath()
-	if isoPath == "" {
+	isoPath, ok := e.Service.GetISOPath(buildID)
+	if !ok || isoPath == "" {
 		writeError(w, http.StatusInternalServerError, "ISO path missing")
 		return
 	}
@@ -135,7 +132,7 @@ func (e *Handler) downloadISO(w http.ResponseWriter, r *http.Request, buildID st
 }
 
 func (e *Handler) deleteIsoBuild(w http.ResponseWriter, _ *http.Request, buildID string) {
-	if !e.ISOBuilds.Delete(buildID) {
+	if !e.Service.DeleteISOBuild(buildID) {
 		writeError(w, http.StatusNotFound, "build not found")
 		return
 	}
