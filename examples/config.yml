@@ -9,7 +9,7 @@
 
 
 # Required: Address to bind the kompakt server (HTTP or HTTPS)
-listen_address: "localhost:8080"
+listen_address: "10.15.231.17:8080"
 
 # Optional: Directory where the server stores its state and database.
 # Default: kompakt-data (relative to working directory)

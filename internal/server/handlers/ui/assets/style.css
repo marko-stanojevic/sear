@@ -47,6 +47,8 @@ nav a.active{color:#e6edf3;border-bottom-color:#f78166}
 .list-agents .list-head, .list-agents .list-row { display: grid; grid-template-columns: 1.2fr 1fr 1.1fr .8fr .8fr 1fr 46px; gap: 10px; align-items: center; padding: 10px 12px; }
 .list-agents .list-head { position: sticky; top: 0; z-index: 2; }
 .list-agents .cell-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.list-iso .list-head, .list-iso .list-row { display: grid; grid-template-columns: 1.2fr .8fr 1fr 1.8fr .7fr 1.1fr 46px; gap: 12px; align-items: center; padding: 10px 14px; }
+.list-iso .cell-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .card-top-right { display: flex; align-items: flex-start; gap: 8px; }
 .card-menu { position: relative; }
 .menu-btn { background: transparent; border: none; color: #8b949e; padding: 2px 7px; border-radius: 4px; cursor: pointer; font-size: 1.1rem; line-height: 1; }

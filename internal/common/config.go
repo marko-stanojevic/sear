@@ -2,7 +2,9 @@
 package common
 
 import (
+	"bytes"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -64,10 +66,6 @@ type ServerSecrets struct {
 type AgentConfig struct {
 	// ServerURL is the base URL of the kompakt server (e.g. "http://kompakt:8080").
 	ServerURL string `yaml:"server_url"`
-
-	// Optional: Set to true to skip TLS certificate verification (for self-signed/dev only).
-	// If omitted or false, TLS verification is enabled (recommended for production).
-	DisableTLSVerification bool `yaml:"disable_tls_verification"`
 
 	// RegistrationSecret must match one of the server's registration_secrets values.
 	RegistrationSecret string `yaml:"registration_secret"`
@@ -132,10 +130,22 @@ func loadYAML[T any](path string) (*T, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
+
+	// Lax decode to extract the data.
 	var v T
 	if err := yaml.Unmarshal(data, &v); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
+
+	// Strict decode pass only to check for unknown fields.
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	var dummy T
+	if err := dec.Decode(&dummy); err != nil {
+		// Log a warning for unknown fields to help users catch typos.
+		slog.Warn("ignoring unknown configuration key", "path", path, "error", err)
+	}
+
 	return &v, nil
 }
 

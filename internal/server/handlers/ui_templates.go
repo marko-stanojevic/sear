@@ -30,6 +30,7 @@ func buildNav(active string) []navItem {
 		{"Playbooks", "/ui/playbooks", active == "Playbooks"},
 		{"Deployments", "/ui/deployments", active == "Deployments"},
 		{"Artifacts", "/ui/artifacts", active == "Artifacts"},
+		{"ISO Builder", "/ui/iso", active == "ISO Builder"},
 	}
 }
 
@@ -291,6 +292,25 @@ func (e *Handler) HandleDeploymentsUI(w http.ResponseWriter, r *http.Request) {
 
 func (e *Handler) HandleVaultUI(w http.ResponseWriter, r *http.Request) {
 	renderPage(w, "vault", newPage("Vault", "Vault", ""))
+}
+
+// isoPageData carries server-side data for the ISO Builder UI page.
+type isoPageData struct {
+	pageData
+	SecretNames []string
+	ServerURL   string
+}
+
+func (e *Handler) HandleISOUI(w http.ResponseWriter, r *http.Request) {
+	names := make([]string, 0, len(e.RegistrationSecrets))
+	for name := range e.RegistrationSecrets {
+		names = append(names, name)
+	}
+	renderPage(w, "iso", isoPageData{
+		pageData:    newPage("ISO Builder", "ISO Builder", ""),
+		SecretNames: names,
+		ServerURL:   e.ServerURL,
+	})
 }
 
 // ── Partial handlers (all behind RequireRootAuth) ─────────────────────────────

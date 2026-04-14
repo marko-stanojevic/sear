@@ -1,0 +1,50 @@
+#!/bin/bash
+# kompakt-start — startup wrapper for the kompakt-agent service.
+#
+# Reads kernel command-line parameters and generates a runtime config before
+# executing kompakt-agent.  Supported parameters:
+#
+#   kompakt.url=<url>             Base URL of the kompakt server (required)
+#   kompakt.secret=<secret>       Registration secret (required)
+#   kompakt.tls_skip_verify=true  Skip TLS certificate verification (optional)
+#
+# If neither kompakt.url nor kompakt.secret are present on the kernel cmdline,
+# the static config at /etc/kompakt/agent.config.yml is used instead.
+set -euo pipefail
+
+RUNTIME_CONFIG="/run/kompakt/agent.config.yml"
+STATIC_CONFIG="/etc/kompakt/agent.config.yml"
+STATE_DIR="/var/lib/kompakt"
+WORK_DIR="/var/lib/kompakt/work"
+
+mkdir -p /run/kompakt "$STATE_DIR" "$WORK_DIR"
+
+# Parse /proc/cmdline for kompakt.* parameters.
+KOMPAKT_URL=""
+KOMPAKT_SECRET=""
+KOMPAKT_TLS_SKIP_VERIFY="false"
+
+for param in $(cat /proc/cmdline); do
+    case "$param" in
+        kompakt.url=*)            KOMPAKT_URL="${param#kompakt.url=}" ;;
+        kompakt.secret=*)         KOMPAKT_SECRET="${param#kompakt.secret=}" ;;
+        kompakt.tls_skip_verify=true) KOMPAKT_TLS_SKIP_VERIFY="true" ;;
+    esac
+done
+
+if [[ -n "$KOMPAKT_URL" && -n "$KOMPAKT_SECRET" ]]; then
+    cat > "$RUNTIME_CONFIG" <<EOF
+server_url: "${KOMPAKT_URL}"
+registration_secret: "${KOMPAKT_SECRET}"
+disable_tls_verification: ${KOMPAKT_TLS_SKIP_VERIFY}
+state_file: ${STATE_DIR}/state.json
+work_dir: ${WORK_DIR}
+reconnect_interval_seconds: 10
+EOF
+    echo "kompakt-start: config from kernel cmdline (url=${KOMPAKT_URL})"
+    exec /usr/local/bin/kompakt-agent -config "$RUNTIME_CONFIG"
+else
+    echo "kompakt-start: no kompakt.url/kompakt.secret on kernel cmdline"
+    echo "  falling back to static config: $STATIC_CONFIG"
+    exec /usr/local/bin/kompakt-agent -config "$STATIC_CONFIG"
+fi

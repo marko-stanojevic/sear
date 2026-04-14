@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/marko-stanojevic/kompakt/internal/common"
+	"github.com/marko-stanojevic/kompakt/internal/iso"
 	"github.com/marko-stanojevic/kompakt/internal/server/ports"
 )
 
@@ -20,9 +21,11 @@ var (
 
 // Manager hosts server application-level orchestration logic.
 type Manager struct {
-	Store     ports.Store
-	Hub       ports.Hub
-	ServerURL string
+	Store        ports.Store
+	Hub          ports.Hub
+	ServerURL    string
+	ISOBuilds    *iso.BuildStore
+	ISOOutputDir string
 }
 
 func (m *Manager) StatusSnapshot() ([]*common.Agent, []*common.DeploymentState) {
